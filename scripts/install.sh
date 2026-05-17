@@ -326,10 +326,14 @@ setup_mysql() {
         systemctl stop mysql
         sleep 2
 
+        # Ensure socket directory exists
+        mkdir -p /var/run/mysqld
+        chown mysql:mysql /var/run/mysqld
+
         # Start with skip-grant-tables in background
         mysqld_safe --skip-grant-tables --skip-networking --user=mysql &
         local mysqld_pid=$!
-        sleep 5
+        sleep 6
 
         mysql -u root <<RESETEOF 2>/dev/null || true
 FLUSH PRIVILEGES;
