@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `CLAUDE.md` — development guidance for Claude Code with commands and architecture overview
 - `README.md` — full documentation with architecture diagram, installation guide, API reference, security notes
+- `README.md`: one-run installer section with step-by-step table, requirements table, and access URLs
 - `CHANGELOG.md` — Keep a Changelog format with v1.0.0 entries and Unreleased roadmap
 - `LICENSE` — MIT License
 

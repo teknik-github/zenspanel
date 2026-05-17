@@ -96,26 +96,59 @@ Two Go binaries communicate via Unix socket (JSON-RPC 2.0). The API never runs a
 
 ## Installation
 
+ZensPanel uses a **one-run installer** — a single command installs and configures everything from scratch. No manual steps required after the script finishes.
+
 ```bash
 git clone https://github.com/teknik-github/zenspanel.git
 cd zenspanel
 sudo bash scripts/install.sh
 ```
 
-The installer will:
-1. Check system requirements
-2. Prompt for configuration (domain, MySQL password, admin credentials)
-3. Install all dependencies (Nginx, MySQL, Redis, PHP 8.1/8.2/8.3, certbot, phpMyAdmin)
-4. Install Go 1.22 and Node.js 20
-5. Build binaries and frontend from source
-6. Run database migrations
-7. Create admin user
-8. Configure systemd services, Nginx, and firewall
+The installer will prompt you for:
+- Panel domain or IP address
+- Panel port (default: `8888`)
+- MySQL root password (or auto-generate)
+- Admin username, email, and password
+- Let's Encrypt email for SSL certificates
 
-After installation, access the panel at:
-- **User Panel:** `http://your-server:8888`
-- **Admin Panel:** `http://your-server:8888/admin`
-- **phpMyAdmin:** `http://your-server:8888/phpmyadmin`
+Then it runs fully automated — no further input needed:
+
+| Step | What happens |
+|------|-------------|
+| 1 | Pre-flight checks — OS, RAM, disk, port availability |
+| 2 | Install Nginx, MySQL, Redis, PHP 8.1/8.2/8.3, certbot, phpMyAdmin |
+| 3 | Install Go 1.22 and Node.js 20 |
+| 4 | Build `zenspanel-api` and `zenspanel-agent` from source |
+| 5 | Build Admin Panel and User Panel frontend |
+| 6 | Configure MySQL — create database, panel user |
+| 7 | Write `/etc/zenspanel/config.yaml` |
+| 8 | Run database migrations (10 tables) |
+| 9 | Create admin user with bcrypt password |
+| 10 | Register and start `zenspanel-api` + `zenspanel-agent` as systemd services |
+| 11 | Configure Nginx reverse proxy on selected port |
+| 12 | Configure UFW firewall rules |
+| 13 | Setup cgroups v2 for resource isolation |
+| 14 | Configure log rotation |
+
+When the script finishes, the panel is immediately accessible:
+
+| URL | Description |
+|-----|-------------|
+| `http://your-server:8888` | User Panel |
+| `http://your-server:8888/admin` | Admin Panel |
+| `http://your-server:8888/phpmyadmin` | phpMyAdmin |
+
+Credentials and all generated passwords are saved to `/etc/zenspanel/install.info` (readable by root only).
+
+### Requirements
+
+| | Minimum | Recommended |
+|-|---------|-------------|
+| OS | Ubuntu 22.04 LTS | Ubuntu 22.04 LTS |
+| CPU | 1 core | 2+ cores |
+| RAM | 1 GB | 2 GB |
+| Disk | 5 GB free | 20 GB+ SSD |
+| Access | Root | Root |
 
 ---
 
