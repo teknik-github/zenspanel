@@ -1,0 +1,5 @@
+config.yaml
+*.sock
+/bin/
+/tmp/
+.air.toml.tmp
