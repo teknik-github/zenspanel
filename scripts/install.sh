@@ -285,9 +285,9 @@ build_zenspanel() {
     # Build frontend
     log_info "Building frontend (this may take a few minutes)..."
     (cd "$src/frontend" && \
-        pnpm install --silent 2>/dev/null && \
+        pnpm install 2>&1 | grep -v "^Progress" && \
         pnpm approve-builds --yes 2>/dev/null || true && \
-        pnpm -r build --silent) || die "Failed to build frontend"
+        pnpm -r build 2>&1) || die "Failed to build frontend"
 
     cp -r "$src/frontend/apps/admin/dist" "$ZENSPANEL_DIR/frontend/admin"
     cp -r "$src/frontend/apps/user/dist"  "$ZENSPANEL_DIR/frontend/user"

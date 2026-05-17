@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installer: `pnpm approve-builds --yes` added before frontend build to unblock esbuild/vue-demi
 - Installer: `go mod tidy` now runs before build to resolve missing dependencies (fixes build failure on fresh clone)
 - `go.sum` committed with complete dependency checksums to prevent missing module errors on fresh install
+- Installer: removed `--silent` flag from `pnpm -r build` — Vite 5.4+ does not support this flag (fixes frontend build failure)
 
 ### Added
 - `CLAUDE.md` — development guidance for Claude Code with commands and architecture overview
