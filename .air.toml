@@ -1,0 +1,18 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/zenspanel-api ./cmd/api"
+  bin = "./tmp/zenspanel-api"
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "vendor", "frontend", "docs"]
+  delay = 1000
+
+[log]
+  time = true
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
