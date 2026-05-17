@@ -4,7 +4,7 @@ set -euo pipefail
 # =============================================================================
 # ZensPanel Installer
 # Supports: Ubuntu 22.04 / 24.04
-# Usage: bash install.sh
+# Usage: sudo bash install.sh
 # =============================================================================
 
 ZENSPANEL_VERSION="1.0.0"
@@ -12,7 +12,7 @@ ZENSPANEL_DIR="/opt/zenspanel"
 ZENSPANEL_DATA="/var/lib/zenspanel"
 ZENSPANEL_LOG="/var/log/zenspanel"
 ZENSPANEL_CONF="/etc/zenspanel"
-ZENSPANEL_REPO="https://github.com/zenspanel/zenspanel"
+ZENSPANEL_REPO="https://github.com/teknik-github/zenspanel"
 PANEL_PORT="8888"
 GO_VERSION="1.22.3"
 GO_ARCH="amd64"
@@ -36,15 +36,11 @@ die()         { log_error "$*"; exit 1; }
 preflight_checks() {
     log_section "Pre-flight checks"
 
-    # Root check
     [[ $EUID -eq 0 ]] || die "This installer must be run as root. Use: sudo bash install.sh"
 
-    # OS check
     if [[ -f /etc/os-release ]]; then
         . /etc/os-release
-        if [[ "$ID" != "ubuntu" ]]; then
-            die "Unsupported OS: $ID. ZensPanel requires Ubuntu 22.04 or 24.04."
-        fi
+        [[ "$ID" == "ubuntu" ]] || die "Unsupported OS: $ID. ZensPanel requires Ubuntu 22.04 or 24.04."
         if [[ "$VERSION_ID" != "22.04" && "$VERSION_ID" != "24.04" ]]; then
             log_warn "Untested Ubuntu version: $VERSION_ID. Proceeding anyway..."
         fi
@@ -53,30 +49,21 @@ preflight_checks() {
         die "Cannot detect OS. /etc/os-release not found."
     fi
 
-    # RAM check (minimum 1GB)
     local ram_mb
     ram_mb=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
-    if [[ $ram_mb -lt 1024 ]]; then
-        log_warn "Low RAM: ${ram_mb}MB detected. Minimum recommended is 1024MB."
-    else
-        log_info "RAM: ${ram_mb}MB ✓"
-    fi
+    [[ $ram_mb -ge 1024 ]] || log_warn "Low RAM: ${ram_mb}MB. Minimum recommended is 1024MB."
+    log_info "RAM: ${ram_mb}MB ✓"
 
-    # Disk check (minimum 5GB free)
     local disk_gb
     disk_gb=$(df -BG / | awk 'NR==2 {print int($4)}')
-    if [[ $disk_gb -lt 5 ]]; then
-        die "Insufficient disk space: ${disk_gb}GB free. Minimum required is 5GB."
-    fi
+    [[ $disk_gb -ge 5 ]] || die "Insufficient disk space: ${disk_gb}GB free. Minimum required is 5GB."
     log_info "Disk: ${disk_gb}GB free ✓"
 
-    # Port check
-    if ss -tlnp | grep -q ":${PANEL_PORT} "; then
-        die "Port ${PANEL_PORT} is already in use. Please free it before installing."
+    if ss -tlnp 2>/dev/null | grep -q ":${PANEL_PORT} "; then
+        die "Port ${PANEL_PORT} is already in use."
     fi
     log_info "Port ${PANEL_PORT}: available ✓"
 
-    # Check for existing installation
     if [[ -d "$ZENSPANEL_DIR" ]]; then
         log_warn "Existing ZensPanel installation found at $ZENSPANEL_DIR"
         read -rp "Reinstall? This will overwrite existing files. [y/N]: " confirm
@@ -90,21 +77,18 @@ preflight_checks() {
 collect_config() {
     log_section "Configuration"
 
-    echo ""
-    echo -e "${BOLD}ZensPanel Configuration${NC}"
-    echo "────────────────────────────────────────"
-
-    # Panel domain/IP
     local default_ip
     default_ip=$(hostname -I | awk '{print $1}')
+
+    echo ""
+    echo -e "${BOLD}Panel Configuration${NC}"
+    echo "────────────────────────────────────────"
     read -rp "Panel domain or IP [${default_ip}]: " PANEL_HOST
     PANEL_HOST="${PANEL_HOST:-$default_ip}"
 
-    # Panel port
     read -rp "Panel port [${PANEL_PORT}]: " input_port
     PANEL_PORT="${input_port:-$PANEL_PORT}"
 
-    # MySQL config
     echo ""
     echo -e "${BOLD}MySQL Configuration${NC}"
     read -rp "MySQL root password (leave blank to auto-generate): " MYSQL_ROOT_PASS
@@ -112,11 +96,9 @@ collect_config() {
         MYSQL_ROOT_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
         log_info "Generated MySQL root password: ${MYSQL_ROOT_PASS}"
     fi
-
     MYSQL_PANEL_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
     JWT_SECRET=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
 
-    # Admin user
     echo ""
     echo -e "${BOLD}Admin Account${NC}"
     read -rp "Admin username [admin]: " ADMIN_USER
@@ -136,12 +118,10 @@ collect_config() {
         log_warn "Passwords do not match. Try again."
     done
 
-    # Let's Encrypt
     echo ""
-    read -rp "Let's Encrypt email for SSL certificates: " LE_EMAIL
+    read -rp "Let's Encrypt email [${ADMIN_EMAIL}]: " LE_EMAIL
     LE_EMAIL="${LE_EMAIL:-$ADMIN_EMAIL}"
 
-    echo ""
     log_info "Configuration collected ✓"
 }
 
@@ -164,54 +144,36 @@ install_dependencies() {
         apt-transport-https \
         ca-certificates \
         gnupg lsb-release \
-        ufw \
-        quota \
-        acl \
-        openssl \
-        jq \
-        bc
+        ufw quota acl openssl jq bc \
+        iproute2
 
-    # Nginx
     log_info "Installing Nginx..."
     apt-get install -y -qq nginx
 
-    # MySQL
     log_info "Installing MySQL..."
     debconf-set-selections <<< "mysql-server mysql-server/root_password password ${MYSQL_ROOT_PASS}"
     debconf-set-selections <<< "mysql-server mysql-server/root_password_again password ${MYSQL_ROOT_PASS}"
     apt-get install -y -qq mysql-server
 
-    # Redis
     log_info "Installing Redis..."
     apt-get install -y -qq redis-server
 
-    # PHP versions
-    log_info "Adding PHP repository (ondrej/php)..."
+    log_info "Adding PHP repository..."
     add-apt-repository -y ppa:ondrej/php > /dev/null 2>&1
     apt-get update -qq
 
     log_info "Installing PHP 8.3, 8.2, 8.1..."
     for ver in 8.3 8.2 8.1; do
         apt-get install -y -qq \
-            php${ver}-fpm \
-            php${ver}-cli \
-            php${ver}-mysql \
-            php${ver}-curl \
-            php${ver}-gd \
-            php${ver}-mbstring \
-            php${ver}-xml \
-            php${ver}-zip \
-            php${ver}-bcmath \
-            php${ver}-intl \
-            php${ver}-redis \
-            php${ver}-imagick 2>/dev/null || log_warn "Some PHP ${ver} extensions not available, skipping..."
+            php${ver}-fpm php${ver}-cli php${ver}-mysql \
+            php${ver}-curl php${ver}-gd php${ver}-mbstring \
+            php${ver}-xml php${ver}-zip php${ver}-bcmath \
+            php${ver}-intl 2>/dev/null || log_warn "Some PHP ${ver} extensions unavailable, skipping..."
     done
 
-    # Certbot
     log_info "Installing Certbot..."
     apt-get install -y -qq certbot python3-certbot-nginx
 
-    # phpMyAdmin (non-interactive)
     log_info "Installing phpMyAdmin..."
     debconf-set-selections <<< "phpmyadmin phpmyadmin/dbconfig-install boolean true"
     debconf-set-selections <<< "phpmyadmin phpmyadmin/app-password-confirm password ${MYSQL_ROOT_PASS}"
@@ -229,28 +191,22 @@ install_dependencies() {
 install_go() {
     log_section "Installing Go ${GO_VERSION}"
 
+    export PATH=$PATH:/usr/local/go/bin
+
     if command -v go &>/dev/null; then
-        local current_ver
-        current_ver=$(go version | awk '{print $3}' | sed 's/go//')
-        log_info "Go ${current_ver} already installed, skipping..."
+        log_info "Go $(go version | awk '{print $3}') already installed ✓"
         return
     fi
 
     local go_tar="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
-    local go_url="https://go.dev/dl/${go_tar}"
-
     log_info "Downloading Go ${GO_VERSION}..."
-    wget -q "$go_url" -O "/tmp/${go_tar}"
+    wget -q "https://go.dev/dl/${go_tar}" -O "/tmp/${go_tar}"
 
-    log_info "Installing Go..."
     rm -rf /usr/local/go
     tar -C /usr/local -xzf "/tmp/${go_tar}"
     rm "/tmp/${go_tar}"
 
-    # Add to PATH
-    if ! grep -q '/usr/local/go/bin' /etc/profile.d/go.sh 2>/dev/null; then
-        echo 'export PATH=$PATH:/usr/local/go/bin' > /etc/profile.d/go.sh
-    fi
+    echo 'export PATH=$PATH:/usr/local/go/bin' > /etc/profile.d/go.sh
     export PATH=$PATH:/usr/local/go/bin
 
     log_info "Go $(go version) installed ✓"
@@ -262,9 +218,7 @@ install_go() {
 install_node() {
     log_section "Installing Node.js"
 
-    if command -v node &>/dev/null; then
-        log_info "Node.js $(node --version) already installed, skipping..."
-    else
+    if ! command -v node &>/dev/null; then
         log_info "Installing Node.js 20 LTS..."
         curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > /dev/null 2>&1
         apt-get install -y -qq nodejs
@@ -282,51 +236,54 @@ install_node() {
 build_zenspanel() {
     log_section "Building ZensPanel"
 
-    # Create directories
     mkdir -p "$ZENSPANEL_DIR"/{bin,frontend}
-    mkdir -p "$ZENSPANEL_DATA"/{home,backups,nginx,ssl,php}
+    mkdir -p "$ZENSPANEL_DATA"/{home,backups}
     mkdir -p "$ZENSPANEL_LOG"
     mkdir -p "$ZENSPANEL_CONF"
+    mkdir -p /etc/nginx/zenspanel
+    mkdir -p /etc/nginx/ssl/zenspanel
 
-    # Clone source
-    if [[ -d "$ZENSPANEL_DIR/src" ]]; then
-        log_info "Updating existing source..."
-        git -C "$ZENSPANEL_DIR/src" pull --quiet
+    local src="$ZENSPANEL_DIR/src"
+
+    # Use local source if running from repo, otherwise clone
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local repo_root
+    repo_root="$(dirname "$script_dir")"
+
+    if [[ -f "$repo_root/go.mod" ]] && grep -q "zenspanel" "$repo_root/go.mod" 2>/dev/null; then
+        log_info "Using local source at $repo_root..."
+        if [[ "$repo_root" != "$src" ]]; then
+            rm -rf "$src"
+            cp -r "$repo_root" "$src"
+        fi
     else
-        log_info "Cloning ZensPanel source..."
-        # For local install from current directory
-        if [[ -f "$(pwd)/go.mod" ]] && grep -q "zenspanel" "$(pwd)/go.mod" 2>/dev/null; then
-            log_info "Using local source at $(pwd)..."
-            cp -r "$(pwd)" "$ZENSPANEL_DIR/src"
+        if [[ -d "$src/.git" ]]; then
+            log_info "Updating existing source..."
+            git -C "$src" pull --quiet
         else
-            git clone --quiet "$ZENSPANEL_REPO" "$ZENSPANEL_DIR/src" || \
+            log_info "Cloning ZensPanel from GitHub..."
+            git clone --quiet "$ZENSPANEL_REPO" "$src" || \
                 die "Failed to clone repository. Check your internet connection."
         fi
     fi
 
-    local src="$ZENSPANEL_DIR/src"
-
     # Build Go binaries
     log_info "Building zenspanel-api..."
-    (cd "$src" && go build -o "$ZENSPANEL_DIR/bin/zenspanel-api" ./cmd/api) || \
+    (cd "$src" && /usr/local/go/bin/go build -o "$ZENSPANEL_DIR/bin/zenspanel-api" ./cmd/api) || \
         die "Failed to build zenspanel-api"
 
     log_info "Building zenspanel-agent..."
-    (cd "$src" && go build -o "$ZENSPANEL_DIR/bin/zenspanel-agent" ./cmd/agent) || \
+    (cd "$src" && /usr/local/go/bin/go build -o "$ZENSPANEL_DIR/bin/zenspanel-agent" ./cmd/agent) || \
         die "Failed to build zenspanel-agent"
 
     # Build frontend
-    log_info "Building Admin Panel frontend..."
-    (cd "$src/frontend" && pnpm install --silent && \
-        pnpm --filter @zenspanel/admin build --silent) || \
-        die "Failed to build admin frontend"
-
-    log_info "Building User Panel frontend..."
+    log_info "Building frontend (this may take a few minutes)..."
     (cd "$src/frontend" && \
-        pnpm --filter @zenspanel/user build --silent) || \
-        die "Failed to build user frontend"
+        pnpm install --silent 2>/dev/null && \
+        pnpm approve-builds --yes 2>/dev/null || true && \
+        pnpm -r build --silent) || die "Failed to build frontend"
 
-    # Copy frontend dist
     cp -r "$src/frontend/apps/admin/dist" "$ZENSPANEL_DIR/frontend/admin"
     cp -r "$src/frontend/apps/user/dist"  "$ZENSPANEL_DIR/frontend/user"
 
@@ -339,16 +296,19 @@ build_zenspanel() {
 setup_mysql() {
     log_section "Setting up MySQL"
 
-    # Start MySQL
     systemctl start mysql
     systemctl enable mysql --quiet
 
-    # Secure MySQL and create panel database
-    mysql -u root -p"${MYSQL_ROOT_PASS}" <<EOF 2>/dev/null || \
-    mysql -u root <<EOF
+    # Try with password first, fallback to socket auth
+    mysql_exec() {
+        mysql -u root -p"${MYSQL_ROOT_PASS}" "$@" 2>/dev/null || \
+        mysql -u root "$@" 2>/dev/null
+    }
+
+    mysql_exec <<EOF
 ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASS}';
 DELETE FROM mysql.user WHERE User='';
-DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost','127.0.0.1','::1');
 DROP DATABASE IF EXISTS test;
 DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
 CREATE DATABASE IF NOT EXISTS zenspanel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -399,9 +359,8 @@ EOF
 
     chmod 600 "$ZENSPANEL_CONF/config.yaml"
 
-    # Create nginx conf directory
-    mkdir -p /etc/nginx/zenspanel
-    mkdir -p /etc/nginx/ssl/zenspanel
+    # Symlink config into src dir so API finds it at startup
+    ln -sf "$ZENSPANEL_CONF/config.yaml" "$ZENSPANEL_DIR/src/config.yaml"
 
     log_info "Configuration written ✓"
 }
@@ -412,16 +371,22 @@ EOF
 run_migrations() {
     log_section "Running database migrations"
 
-    local src="$ZENSPANEL_DIR/src"
-    (cd "$src" && \
-        ZENSPANEL_CONFIG="$ZENSPANEL_CONF/config.yaml" \
-        "$ZENSPANEL_DIR/bin/zenspanel-api" migrate 2>/dev/null) || \
-    # Fallback: run API briefly to trigger auto-migration
-    (cd "$src" && \
-        cp "$ZENSPANEL_CONF/config.yaml" config.yaml && \
-        timeout 10 "$ZENSPANEL_DIR/bin/zenspanel-api" || true)
+    # Run API briefly — it auto-migrates on startup then we kill it
+    log_info "Running migrations via API startup..."
+    (cd "$ZENSPANEL_DIR/src" && \
+        timeout 30 "$ZENSPANEL_DIR/bin/zenspanel-api" 2>&1 | grep -E "migration|starting|error" || true)
 
-    log_info "Migrations completed ✓"
+    # Verify tables exist
+    local table_count
+    table_count=$(mysql -u zenspanel -p"${MYSQL_PANEL_PASS}" zenspanel \
+        -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='zenspanel';" \
+        -s -N 2>/dev/null || echo "0")
+
+    if [[ "$table_count" -ge 10 ]]; then
+        log_info "Migrations completed — ${table_count} tables created ✓"
+    else
+        log_warn "Expected 10+ tables, found ${table_count}. Check logs at ${ZENSPANEL_LOG}/api.log"
+    fi
 }
 
 # =============================================================================
@@ -430,15 +395,18 @@ run_migrations() {
 create_admin_user() {
     log_section "Creating admin user"
 
+    # Hash password using PHP (always available since we installed PHP)
     local pass_hash
-    pass_hash=$(python3 -c "import bcrypt; print(bcrypt.hashpw('${ADMIN_PASS}'.encode(), bcrypt.gensalt()).decode())" 2>/dev/null) || \
-    pass_hash=$(php -r "echo password_hash('${ADMIN_PASS}', PASSWORD_BCRYPT);" 2>/dev/null) || \
-    pass_hash=$(openssl passwd -6 "${ADMIN_PASS}")
+    pass_hash=$(php -r "echo password_hash('${ADMIN_PASS}', PASSWORD_BCRYPT);")
 
-    mysql -u zenspanel -p"${MYSQL_PANEL_PASS}" zenspanel <<EOF
+    mysql -u zenspanel -p"${MYSQL_PANEL_PASS}" zenspanel 2>/dev/null <<EOF
 INSERT INTO users (username, email, password_hash, role, linux_uid, status, terminal_enabled, backup_enabled)
 VALUES ('${ADMIN_USER}', '${ADMIN_EMAIL}', '${pass_hash}', 'admin', 9000, 'active', TRUE, TRUE)
-ON DUPLICATE KEY UPDATE email='${ADMIN_EMAIL}', password_hash='${pass_hash}';
+ON DUPLICATE KEY UPDATE
+    email=VALUES(email),
+    password_hash=VALUES(password_hash),
+    role='admin',
+    status='active';
 EOF
 
     log_info "Admin user '${ADMIN_USER}' created ✓"
@@ -453,16 +421,22 @@ setup_services() {
     # Create zenspanel system user
     id zenspanel &>/dev/null || useradd -r -s /bin/false -d "$ZENSPANEL_DIR" zenspanel
 
-    # Create socket directory
+    # Socket directory
     mkdir -p /run/zenspanel
     chown root:zenspanel /run/zenspanel
     chmod 750 /run/zenspanel
 
-    # zenspanel-agent service (runs as root)
+    # Persist socket dir across reboots
+    cat > /etc/tmpfiles.d/zenspanel.conf <<EOF
+d /run/zenspanel 0750 root zenspanel -
+EOF
+
+    # zenspanel-agent (root)
     cat > /etc/systemd/system/zenspanel-agent.service <<EOF
 [Unit]
 Description=ZensPanel Agent
 After=network.target mysql.service
+Wants=mysql.service
 
 [Service]
 Type=simple
@@ -478,11 +452,12 @@ StandardError=append:${ZENSPANEL_LOG}/agent-error.log
 WantedBy=multi-user.target
 EOF
 
-    # zenspanel-api service (runs as zenspanel user)
+    # zenspanel-api (non-root)
     cat > /etc/systemd/system/zenspanel-api.service <<EOF
 [Unit]
 Description=ZensPanel API
 After=network.target mysql.service zenspanel-agent.service
+Wants=mysql.service zenspanel-agent.service
 
 [Service]
 Type=simple
@@ -499,20 +474,37 @@ StandardError=append:${ZENSPANEL_LOG}/api-error.log
 WantedBy=multi-user.target
 EOF
 
-    # Set permissions
+    # Permissions
     chown -R zenspanel:zenspanel "$ZENSPANEL_DIR/bin"
     chown -R zenspanel:zenspanel "$ZENSPANEL_LOG"
     chown zenspanel:zenspanel "$ZENSPANEL_CONF/config.yaml"
+    # Agent needs to read config too
+    chmod 640 "$ZENSPANEL_CONF/config.yaml"
+    chown root:zenspanel "$ZENSPANEL_CONF/config.yaml"
 
     systemctl daemon-reload
     systemctl enable zenspanel-agent zenspanel-api --quiet
+
+    log_info "Starting zenspanel-agent..."
     systemctl start zenspanel-agent
+    sleep 3
 
-    sleep 2
-
+    log_info "Starting zenspanel-api..."
     systemctl start zenspanel-api
+    sleep 3
 
-    log_info "Services started ✓"
+    # Verify both services are running
+    if systemctl is-active --quiet zenspanel-agent; then
+        log_info "zenspanel-agent: running ✓"
+    else
+        log_warn "zenspanel-agent failed to start. Check: journalctl -u zenspanel-agent"
+    fi
+
+    if systemctl is-active --quiet zenspanel-api; then
+        log_info "zenspanel-api: running ✓"
+    else
+        log_warn "zenspanel-api failed to start. Check: journalctl -u zenspanel-api"
+    fi
 }
 
 # =============================================================================
@@ -521,22 +513,25 @@ EOF
 setup_nginx() {
     log_section "Setting up Nginx"
 
-    # Main panel nginx config
     cat > /etc/nginx/sites-available/zenspanel <<EOF
 server {
     listen ${PANEL_PORT};
     server_name ${PANEL_HOST};
 
+    client_max_body_size 100M;
+
     # Admin Panel
     location /admin {
         alias ${ZENSPANEL_DIR}/frontend/admin;
         try_files \$uri \$uri/ /admin/index.html;
+        index index.html;
     }
 
     # User Panel (default)
     location / {
         root ${ZENSPANEL_DIR}/frontend/user;
         try_files \$uri \$uri/ /index.html;
+        index index.html;
     }
 
     # API proxy
@@ -547,6 +542,7 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_read_timeout 300;
+        proxy_connect_timeout 10;
     }
 
     # WebSocket terminal
@@ -563,11 +559,15 @@ server {
     location /phpmyadmin {
         alias /usr/share/phpmyadmin;
         index index.php;
-        location ~ \.php$ {
+        location ~ ^/phpmyadmin(.+\.php)$ {
+            alias /usr/share/phpmyadmin\$1;
             fastcgi_pass unix:/run/php/php8.3-fpm.sock;
             fastcgi_index index.php;
             include fastcgi_params;
-            fastcgi_param SCRIPT_FILENAME \$request_filename;
+            fastcgi_param SCRIPT_FILENAME /usr/share/phpmyadmin\$1;
+        }
+        location ~* ^/phpmyadmin(.+\.(jpg|jpeg|gif|css|png|js|ico|html|xml|txt))$ {
+            alias /usr/share/phpmyadmin\$1;
         }
     }
 
@@ -576,7 +576,7 @@ server {
 }
 EOF
 
-    # Include zenspanel vhosts
+    # Include zenspanel user vhosts in main nginx config
     if ! grep -q "zenspanel" /etc/nginx/nginx.conf; then
         sed -i '/http {/a\\tinclude /etc/nginx/zenspanel/*.conf;' /etc/nginx/nginx.conf
     fi
@@ -584,7 +584,8 @@ EOF
     ln -sf /etc/nginx/sites-available/zenspanel /etc/nginx/sites-enabled/zenspanel
     rm -f /etc/nginx/sites-enabled/default
 
-    nginx -t && systemctl reload nginx
+    nginx -t 2>/dev/null && systemctl reload nginx
+    systemctl enable nginx --quiet
 
     log_info "Nginx configured ✓"
 }
@@ -613,18 +614,11 @@ setup_firewall() {
 setup_cgroups() {
     log_section "Setting up cgroups v2"
 
-    # Check if cgroups v2 is available
     if [[ -f /sys/fs/cgroup/cgroup.controllers ]]; then
-        log_info "cgroups v2 available ✓"
         mkdir -p /sys/fs/cgroup/zenspanel
+        log_info "cgroups v2 available ✓"
     else
-        log_warn "cgroups v2 not available. Resource isolation will be limited."
-        log_warn "To enable: add 'systemd.unified_cgroup_hierarchy=1' to GRUB_CMDLINE_LINUX in /etc/default/grub"
-    fi
-
-    # Enable disk quota on root filesystem
-    if ! grep -q "usrquota" /etc/fstab; then
-        log_warn "Disk quota not enabled in /etc/fstab. Add 'usrquota,grpquota' to your root mount options."
+        log_warn "cgroups v2 not available. Add 'systemd.unified_cgroup_hierarchy=1' to GRUB_CMDLINE_LINUX and reboot."
     fi
 }
 
@@ -672,6 +666,10 @@ EOF
 # Print summary
 # =============================================================================
 print_summary() {
+    local api_status agent_status
+    api_status=$(systemctl is-active zenspanel-api 2>/dev/null || echo "unknown")
+    agent_status=$(systemctl is-active zenspanel-agent 2>/dev/null || echo "unknown")
+
     echo ""
     echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}${BOLD}║        ZensPanel Installation Complete!          ║${NC}"
@@ -689,16 +687,17 @@ print_summary() {
     echo -e "${BOLD}MySQL:${NC}"
     echo -e "  Root password: ${YELLOW}${MYSQL_ROOT_PASS}${NC}"
     echo ""
-    echo -e "${BOLD}Services:${NC}"
+    echo -e "${BOLD}Service Status:${NC}"
+    echo -e "  zenspanel-api:   ${api_status}"
+    echo -e "  zenspanel-agent: ${agent_status}"
+    echo ""
+    echo -e "${BOLD}Useful Commands:${NC}"
     echo -e "  systemctl status zenspanel-api"
     echo -e "  systemctl status zenspanel-agent"
+    echo -e "  tail -f ${ZENSPANEL_LOG}/api.log"
+    echo -e "  tail -f ${ZENSPANEL_LOG}/agent.log"
     echo ""
-    echo -e "${BOLD}Logs:${NC}"
-    echo -e "  ${ZENSPANEL_LOG}/api.log"
-    echo -e "  ${ZENSPANEL_LOG}/agent.log"
-    echo ""
-    echo -e "${YELLOW}Credentials saved to: ${ZENSPANEL_CONF}/install.info${NC}"
-    echo -e "${YELLOW}Keep this file secure!${NC}"
+    echo -e "${YELLOW}All credentials saved to: ${ZENSPANEL_CONF}/install.info${NC}"
     echo ""
 }
 
@@ -708,12 +707,14 @@ print_summary() {
 main() {
     clear
     echo -e "${BLUE}${BOLD}"
-    echo "  ______          ______                    _ "
-    echo " |___  /         (_____ \                  | |"
-    echo "    / / ___ ____  _____) )____ ____   ____ | |"
-    echo "   / / / _ \|  _ \|  ____/ _  |  _ \ / _  )| |"
-    echo "  / /_|  __/| | | | |   ( ( | | | | ( (/ / | |"
-    echo " /_____\___)|_| |_|_|    \_||_|_| |_|\____)|_|"
+    cat << 'BANNER'
+  ______          ______                    _
+ |___  /         (_____ \                  | |
+    / / ___ ____  _____) )____ ____   ____ | |
+   / / / _ \|  _ \|  ____/ _  |  _ \ / _  )| |
+  / /_|  __/| | | | |   ( ( | | | | ( (/ / | |
+ /_____\___)|_| |_|_|    \_||_|_| |_|\____)|_|
+BANNER
     echo -e "${NC}"
     echo -e "  ${BOLD}Version ${ZENSPANEL_VERSION} Installer${NC}"
     echo ""
