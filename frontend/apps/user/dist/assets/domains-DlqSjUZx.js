@@ -1,1 +1,0 @@
-import{l as n,r as t}from"./index-CYQCgnAL.js";import{d as r}from"./domains-CYw-h3C7.js";const f=n("domains",()=>{const s=t([]),a=t(!1);async function o(){a.value=!0;try{const e=await r.list();s.value=e.data.data||[]}finally{a.value=!1}}return{domains:s,loading:a,fetch:o}});export{f as u};

@@ -1,1 +1,0 @@
-import{c as o}from"./index-CYQCgnAL.js";const t={list:()=>o.get("/domains"),create:(e,s)=>o.post("/domains",{domain:e,php_version:s}),delete:e=>o.delete(`/domains/${e}`),updatePHPVersion:(e,s)=>o.put(`/domains/${e}`,{php_version:s})};export{t as d};
