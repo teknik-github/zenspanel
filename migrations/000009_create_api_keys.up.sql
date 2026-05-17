@@ -1,0 +1,12 @@
+CREATE TABLE api_keys (
+  id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name         VARCHAR(100) NOT NULL,
+  key_hash     VARCHAR(255) NOT NULL UNIQUE,
+  key_prefix   VARCHAR(8) NOT NULL,
+  permissions  JSON NOT NULL,
+  last_used_at TIMESTAMP NULL,
+  expires_at   TIMESTAMP NULL,
+  created_by   BIGINT UNSIGNED NOT NULL,
+  created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

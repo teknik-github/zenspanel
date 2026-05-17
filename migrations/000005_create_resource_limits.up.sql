@@ -1,0 +1,11 @@
+CREATE TABLE resource_limits (
+  id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id        BIGINT UNSIGNED NOT NULL UNIQUE,
+  cpu_quota      INT NOT NULL,
+  memory_limit   BIGINT NOT NULL,
+  disk_quota     BIGINT NOT NULL,
+  max_domains    INT NOT NULL,
+  max_databases  INT NOT NULL,
+  updated_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
