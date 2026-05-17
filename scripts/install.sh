@@ -323,7 +323,12 @@ setup_mysql() {
     else
         # All methods failed — reset root password via skip-grant-tables
         log_warn "Cannot connect to MySQL root. Resetting root password..."
-        systemctl stop mysql
+        systemctl stop mysql 2>/dev/null || true
+        sleep 2
+
+        # Kill any remaining MySQL processes
+        pkill -f mysqld_safe 2>/dev/null || true
+        pkill -f mysqld 2>/dev/null || true
         sleep 2
 
         # Ensure socket directory exists
@@ -331,18 +336,27 @@ setup_mysql() {
         chown mysql:mysql /var/run/mysqld
 
         # Start with skip-grant-tables in background
-        mysqld_safe --skip-grant-tables --skip-networking --user=mysql &
+        mysqld_safe --skip-grant-tables --skip-networking --user=mysql > /dev/null 2>&1 &
         local mysqld_pid=$!
-        sleep 6
+        sleep 8
 
+        # Reset password
         mysql -u root <<RESETEOF 2>/dev/null || true
 FLUSH PRIVILEGES;
 ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASS}';
 FLUSH PRIVILEGES;
 RESETEOF
 
+        # Kill mysqld_safe and all child mysqld processes cleanly
         kill $mysqld_pid 2>/dev/null || true
-        sleep 3
+        pkill -f mysqld_safe 2>/dev/null || true
+        pkill -f mysqld 2>/dev/null || true
+        sleep 5
+
+        # Remove stale socket/pid files
+        rm -f /var/run/mysqld/mysqld.sock /var/run/mysqld/mysqld.pid 2>/dev/null || true
+
+        # Restart MySQL normally
         systemctl start mysql
         sleep 3
 

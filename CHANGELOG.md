@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installer: MySQL connection now tries all auth methods (no password, password, unix socket) with `mysqladmin ping` readiness check before connecting
 - Installer: auto-reset MySQL root password via `skip-grant-tables` when all connection methods fail (handles reinstall scenario)
 - Installer: create `/var/run/mysqld` with correct ownership before starting `mysqld_safe` — fixes "directory don't exists" error during password reset
+- Installer: kill all mysqld processes and remove stale socket/pid files before restarting MySQL after password reset — fixes "Job for mysql.service failed" error
 
 ### Added
 - `CLAUDE.md` — development guidance for Claude Code with commands and architecture overview
