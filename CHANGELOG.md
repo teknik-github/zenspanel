@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installer: removed `--silent` flag from `pnpm -r build` — Vite 5.4+ does not support this flag (fixes frontend build failure)
 - Installer: MySQL setup now uses `sudo mysql` for initial connection — Ubuntu 22.04/24.04 fresh install uses `auth_socket` plugin, not password auth (fixes silent exit at MySQL setup step)
 - Installer: MySQL connection now tries all auth methods (no password, password, unix socket) with `mysqladmin ping` readiness check before connecting
+- Installer: auto-reset MySQL root password via `skip-grant-tables` when all connection methods fail (handles reinstall scenario)
 
 ### Added
 - `CLAUDE.md` — development guidance for Claude Code with commands and architecture overview

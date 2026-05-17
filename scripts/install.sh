@@ -312,19 +312,41 @@ setup_mysql() {
         sleep 2
     done
 
-    # Ubuntu 22.04/24.04: fresh MySQL uses auth_socket for root
-    # Running as root (installer requires sudo), so direct mysql works
+    # Detect working connection method
     local mysql_cmd=""
     if mysql -u root -e "SELECT 1;" > /dev/null 2>&1; then
         mysql_cmd="mysql -u root"
     elif mysql -u root -p"${MYSQL_ROOT_PASS}" -e "SELECT 1;" > /dev/null 2>&1; then
         mysql_cmd="mysql -u root -p${MYSQL_ROOT_PASS}"
+    elif mysql -u root --socket=/var/run/mysqld/mysqld.sock -e "SELECT 1;" > /dev/null 2>&1; then
+        mysql_cmd="mysql -u root --socket=/var/run/mysqld/mysqld.sock"
     else
-        # Try via unix socket explicitly
-        if mysql -u root --socket=/var/run/mysqld/mysqld.sock -e "SELECT 1;" > /dev/null 2>&1; then
-            mysql_cmd="mysql -u root --socket=/var/run/mysqld/mysqld.sock"
+        # All methods failed — reset root password via skip-grant-tables
+        log_warn "Cannot connect to MySQL root. Resetting root password..."
+        systemctl stop mysql
+        sleep 2
+
+        # Start with skip-grant-tables in background
+        mysqld_safe --skip-grant-tables --skip-networking --user=mysql &
+        local mysqld_pid=$!
+        sleep 5
+
+        mysql -u root <<RESETEOF 2>/dev/null || true
+FLUSH PRIVILEGES;
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASS}';
+FLUSH PRIVILEGES;
+RESETEOF
+
+        kill $mysqld_pid 2>/dev/null || true
+        sleep 3
+        systemctl start mysql
+        sleep 3
+
+        if mysql -u root -p"${MYSQL_ROOT_PASS}" -e "SELECT 1;" > /dev/null 2>&1; then
+            mysql_cmd="mysql -u root -p${MYSQL_ROOT_PASS}"
+            log_info "MySQL root password reset ✓"
         else
-            die "Cannot connect to MySQL. Check: systemctl status mysql"
+            die "Failed to reset MySQL root password. Please reset manually and re-run."
         fi
     fi
 
