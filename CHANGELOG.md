@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installer: auto-reset MySQL root password via `skip-grant-tables` when all connection methods fail (handles reinstall scenario)
 - Installer: create `/var/run/mysqld` with correct ownership before starting `mysqld_safe` — fixes "directory don't exists" error during password reset
 - Installer: kill all mysqld processes and remove stale socket/pid files before restarting MySQL after password reset — fixes "Job for mysql.service failed" error
+- Installer: fix nginx config for Admin Panel SPA — use `location ^~ /admin/` with `alias` + trailing slash, add `include mime.types`, redirect `/admin` → `/admin/` — fixes MIME type error for JS module scripts
 
 ### Added
 - `CLAUDE.md` — development guidance for Claude Code with commands and architecture overview

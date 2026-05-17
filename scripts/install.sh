@@ -585,21 +585,21 @@ server {
 
     client_max_body_size 100M;
 
-    # Admin Panel
-    location /admin {
-        alias ${ZENSPANEL_DIR}/frontend/admin;
+    # Redirect /admin to /admin/
+    location = /admin {
+        return 301 /admin/;
+    }
+
+    # Admin Panel SPA — alias with trailing slash fixes MIME type issues
+    location ^~ /admin/ {
+        alias ${ZENSPANEL_DIR}/frontend/admin/;
+        index index.html;
         try_files \$uri \$uri/ /admin/index.html;
-        index index.html;
+        # Ensure correct MIME types for JS modules
+        include /etc/nginx/mime.types;
     }
 
-    # User Panel (default)
-    location / {
-        root ${ZENSPANEL_DIR}/frontend/user;
-        try_files \$uri \$uri/ /index.html;
-        index index.html;
-    }
-
-    # API proxy
+    # API proxy — before / to take priority
     location /api/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
@@ -634,6 +634,14 @@ server {
         location ~* ^/phpmyadmin(.+\.(jpg|jpeg|gif|css|png|js|ico|html|xml|txt))$ {
             alias /usr/share/phpmyadmin\$1;
         }
+    }
+
+    # User Panel SPA — must be last
+    location / {
+        root ${ZENSPANEL_DIR}/frontend/user;
+        index index.html;
+        try_files \$uri \$uri/ /index.html;
+        include /etc/nginx/mime.types;
     }
 
     access_log ${ZENSPANEL_LOG}/nginx-access.log;
