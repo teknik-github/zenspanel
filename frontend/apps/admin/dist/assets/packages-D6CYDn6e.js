@@ -1,0 +1,1 @@
+import{c as a}from"./index-BBR07FjU.js";const s={list:()=>a.get("/packages"),get:e=>a.get(`/packages/${e}`),create:e=>a.post("/packages",e),update:(e,t)=>a.put(`/packages/${e}`,t),delete:e=>a.delete(`/packages/${e}`)};export{s as p};

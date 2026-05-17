@@ -1,0 +1,8 @@
+{
+  "name": "zenspanel-frontend",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}
