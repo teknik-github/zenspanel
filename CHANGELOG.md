@@ -1,0 +1,142 @@
+# Changelog
+
+All notable changes to ZensPanel will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [Unreleased]
+
+### Planned
+- File Manager with Monaco Editor integration
+- Admin: Domains detail page
+- Admin: Databases detail page
+- Admin: Resource Monitor with real-time charts
+- Admin: Backups management page
+- Multi-server support (agent-per-node)
+- Two-factor authentication (TOTP)
+- Per-user Redis isolation
+- DNS management
+- Email hosting (Postfix/Dovecot)
+- GitHub Actions CI/CD pipeline
+- Pre-built binary releases
+
+---
+
+## [1.0.0] - 2026-05-17
+
+### Added
+
+#### Core Architecture
+- Monolith + Agent Sidecar architecture — two Go binaries communicating via JSON-RPC 2.0 over Unix socket
+- `zenspanel-api` — REST API server running as non-root (`www-data`)
+- `zenspanel-agent` — privileged sidecar running as root for system operations
+- Configuration loading via Viper from `/etc/zenspanel/config.yaml` with env var overrides
+- MySQL/MariaDB as panel database with golang-migrate for schema management
+
+#### Database Schema
+- `packages` — hosting package templates with resource limits
+- `users` — panel users with Linux UID mapping
+- `domains` — per-user domains with per-site PHP version
+- `databases` — MySQL databases per user
+- `resource_limits` — per-user cgroups resource limits
+- `php_versions` — available PHP versions with enable/disable toggle
+- `ssl_certificates` — SSL certificate tracking with auto-renew flag
+- `backups` — backup job tracking
+- `api_keys` — external API keys with granular permissions
+- `audit_logs` — full audit trail of all user actions
+
+#### Agent Sidecar
+- Unix socket JSON-RPC 2.0 server (`/run/zenspanel/agent.sock`)
+- Nginx vhost management — create, delete, suspend (503), reload
+- PHP-FPM pool management — per-user pool config, multi-version support
+- cgroups v2 resource isolation — CPU quota, RAM limit, swap limit per user
+- SSL management — Let's Encrypt via certbot, custom PEM upload
+- Terminal PTY — isolated rbash sessions via creack/pty
+- MySQL management — create/drop databases and users
+- Linux user management — useradd/userdel with home directory
+
+#### REST API
+- JWT authentication (24h access token, 30d refresh token)
+- API key authentication with granular permissions (create_user, read_user, suspend_user, etc.)
+- RBAC — admin, user, api_key roles
+- User endpoints — CRUD, suspend/unsuspend, package assignment, resource usage
+- Package endpoints — CRUD
+- Domain endpoints — CRUD, SSL management
+- Database endpoints — CRUD, phpMyAdmin SSO token
+- PHP version endpoints — list, enable/disable
+- API key endpoints — create (shown once), list, revoke
+- Audit log endpoints — list with filters
+- WebSocket terminal proxy — one-time token, PTY I/O bridge
+
+#### Admin Panel (Vue 3)
+- Wide sidebar layout (200px) with section grouping
+- Global search bar (⌘K)
+- Dashboard — stats cards (users, domains, CPU, RAM), recent users table, server status
+- Users — searchable/filterable list, suspend/unsuspend, delete
+- User Detail — edit info, change package, toggle terminal/backup
+- Packages — CRUD with resource limit configuration, terminal/backup toggles
+- PHP Versions — list with enable/disable toggle per version
+- API Keys — create with permission checkboxes, show full key once, revoke
+- Audit Logs — filterable by user, action, date range
+- Light mode only, SVG inline icons (Lucide stroke style), TailwindCSS 3
+
+#### User Panel (Vue 3)
+- Wide sidebar with conditional menu items (Terminal/Backups hidden when disabled)
+- Dashboard — resource usage bars (domains, databases, disk, RAM), domain table, quick actions
+- Domains — add/delete, inline PHP version selector
+- SSL Manager — issue Let's Encrypt, upload custom cert, expiry warning badge
+- PHP Settings — per-domain PHP version management
+- Databases — create with auto-generated password, phpMyAdmin link, delete
+- Terminal — xterm.js over WebSocket, reconnect button, disabled state
+- Backups — create (full/db/files), download, restore, delete, auto-poll for pending jobs
+- Light mode only, SVG inline icons, TailwindCSS 3
+
+#### Resource Isolation
+- Linux cgroups v2 slice per user (`/sys/fs/cgroup/zenspanel/<username>/`)
+- CPU quota via `cpu.max`
+- Memory limit via `memory.max` and `memory.swap.max`
+- Disk quota via Linux quota tools
+- PHP-FPM pool runs as Linux user (no shared www-data pool)
+- Isolated terminal — rbash, home dir only, no sudo, no network tools
+
+#### Installer
+- `scripts/install.sh` — single bash installer for Ubuntu 22.04/24.04
+- Pre-flight checks — OS, RAM, disk, port availability
+- Interactive configuration — domain, MySQL password, admin credentials, Let's Encrypt email
+- Installs: Nginx, MySQL, Redis, PHP 8.1/8.2/8.3, certbot, phpMyAdmin, Go 1.22, Node.js 20
+- Builds binaries and frontend from source
+- Runs database migrations automatically
+- Creates admin user with bcrypt password
+- Configures systemd services, Nginx reverse proxy, UFW firewall
+- Saves credentials to `/etc/zenspanel/install.info` (chmod 600)
+
+#### Security
+- Agent socket permissions `0600` — only `www-data` can connect
+- All agent RPC inputs validated before execution
+- No shell string interpolation — `exec.Command` with argument arrays only
+- JWT secrets in config file (chmod 600)
+- API keys stored as bcrypt hash, full key shown only once
+- Rate limiting on login endpoint (10 attempts/minute/IP)
+- All actions logged to audit_logs
+
+### Technical Details
+- Go 1.22+, Gin v1.12, sqlx v1.4, golang-migrate v4.19, gorilla/websocket v1.5
+- Vue 3.4, Vite 5.2, Pinia 2.1, Vue Router 4.3, TailwindCSS 3.4
+- xterm.js 5.3 + xterm-addon-fit 0.8 for terminal
+- pnpm workspace monorepo for frontend
+
+---
+
+## Version History
+
+| Version | Date | Description |
+|---------|------|-------------|
+| 1.0.0 | 2026-05-17 | Initial release |
+
+---
+
+[Unreleased]: https://github.com/teknik-github/zenspanel/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/teknik-github/zenspanel/releases/tag/v1.0.0
