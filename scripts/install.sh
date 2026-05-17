@@ -304,16 +304,31 @@ setup_mysql() {
     systemctl start mysql
     systemctl enable mysql --quiet
 
-    # Ubuntu 22.04/24.04 fresh MySQL uses auth_socket — must use sudo mysql
-    # Try socket auth first, then password auth
-    local mysql_cmd
-    if sudo mysql -u root -e "SELECT 1;" > /dev/null 2>&1; then
-        mysql_cmd="sudo mysql -u root"
+    # Wait for MySQL to be ready
+    local retries=10
+    while ! mysqladmin ping --silent 2>/dev/null; do
+        retries=$((retries - 1))
+        [[ $retries -eq 0 ]] && die "MySQL did not start in time"
+        sleep 2
+    done
+
+    # Ubuntu 22.04/24.04: fresh MySQL uses auth_socket for root
+    # Running as root (installer requires sudo), so direct mysql works
+    local mysql_cmd=""
+    if mysql -u root -e "SELECT 1;" > /dev/null 2>&1; then
+        mysql_cmd="mysql -u root"
     elif mysql -u root -p"${MYSQL_ROOT_PASS}" -e "SELECT 1;" > /dev/null 2>&1; then
         mysql_cmd="mysql -u root -p${MYSQL_ROOT_PASS}"
     else
-        die "Cannot connect to MySQL. Check that MySQL is running: systemctl status mysql"
+        # Try via unix socket explicitly
+        if mysql -u root --socket=/var/run/mysqld/mysqld.sock -e "SELECT 1;" > /dev/null 2>&1; then
+            mysql_cmd="mysql -u root --socket=/var/run/mysqld/mysqld.sock"
+        else
+            die "Cannot connect to MySQL. Check: systemctl status mysql"
+        fi
     fi
+
+    log_info "Connected to MySQL ✓"
 
     $mysql_cmd <<EOF
 ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${MYSQL_ROOT_PASS}';
