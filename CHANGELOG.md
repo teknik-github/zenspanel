@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Installer: migrations now run reliably by starting API binary briefly (timeout 30s) and verifying table count
+- Installer: admin password hash uses `php -r "password_hash(...)"` instead of python3-bcrypt which may not be installed
+- Installer: config symlink created at `ZENSPANEL_DIR/src/config.yaml` so API finds config on startup
+- Installer: local source detection uses `dirname "${BASH_SOURCE[0]}"` for reliable path resolution
+- Installer: socket directory `/run/zenspanel` persisted across reboots via `/etc/tmpfiles.d/zenspanel.conf`
+- Installer: phpMyAdmin nginx location block fixed to correctly serve PHP files
+- Installer: `pnpm approve-builds --yes` added before frontend build to unblock esbuild/vue-demi
+
+### Added
+- `CLAUDE.md` — development guidance for Claude Code with commands and architecture overview
+- `README.md` — full documentation with architecture diagram, installation guide, API reference, security notes
+- `CHANGELOG.md` — Keep a Changelog format with v1.0.0 entries and Unreleased roadmap
+- `LICENSE` — MIT License
+
 ### Planned
 - File Manager with Monaco Editor integration
 - Admin: Domains detail page
