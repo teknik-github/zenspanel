@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installer: socket directory `/run/zenspanel` persisted across reboots via `/etc/tmpfiles.d/zenspanel.conf`
 - Installer: phpMyAdmin nginx location block fixed to correctly serve PHP files
 - Installer: `pnpm approve-builds --yes` added before frontend build to unblock esbuild/vue-demi
+- Installer: `go mod tidy` now runs before build to resolve missing dependencies (fixes build failure on fresh clone)
+- `go.sum` committed with complete dependency checksums to prevent missing module errors on fresh install
 
 ### Added
 - `CLAUDE.md` — development guidance for Claude Code with commands and architecture overview

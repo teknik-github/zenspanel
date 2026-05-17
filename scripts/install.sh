@@ -268,6 +268,11 @@ build_zenspanel() {
         fi
     fi
 
+    # Ensure all Go dependencies are present
+    log_info "Resolving Go dependencies..."
+    (cd "$src" && /usr/local/go/bin/go mod tidy) || \
+        die "Failed to resolve Go dependencies"
+
     # Build Go binaries
     log_info "Building zenspanel-api..."
     (cd "$src" && /usr/local/go/bin/go build -o "$ZENSPANEL_DIR/bin/zenspanel-api" ./cmd/api) || \
