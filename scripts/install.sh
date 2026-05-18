@@ -422,6 +422,8 @@ database:
 
 redis:
   addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
 
 jwt:
   secret: "${JWT_SECRET}"

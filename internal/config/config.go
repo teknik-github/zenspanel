@@ -24,7 +24,9 @@ type DatabaseConfig struct {
 }
 
 type RedisConfig struct {
-	Addr string
+	Addr     string
+	Password string
+	DB       int
 }
 
 type JWTConfig struct {
@@ -61,6 +63,8 @@ func Load() (*Config, error) {
 	viper.SetDefault("server.host", "127.0.0.1")
 	viper.SetDefault("server.port", 8080)
 	viper.SetDefault("redis.addr", "127.0.0.1:6379")
+	viper.SetDefault("redis.password", "")
+	viper.SetDefault("redis.db", 0)
 	viper.SetDefault("agent.socket", "/run/zenspanel/agent.sock")
 	viper.SetDefault("agent.socket_group", "zenspanel")
 	viper.SetDefault("paths.home_base", "/home/zenspanel")

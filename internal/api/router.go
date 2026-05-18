@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+
 	"github.com/zenspanel/zenspanel/internal/api/handlers"
 	"github.com/zenspanel/zenspanel/internal/api/middleware"
 	"github.com/zenspanel/zenspanel/internal/auth"
@@ -24,6 +26,7 @@ type Router struct {
 	system        *handlers.SystemHandler
 	apiKeyStore   *store.APIKeyStore
 	auditLogStore *store.AuditLogStore
+	redis         *redis.Client // nil → fall back to in-memory rate limiter
 	jwtSecret     string
 }
 
@@ -42,6 +45,7 @@ func NewRouter(
 	systemH *handlers.SystemHandler,
 	apiKeyStore *store.APIKeyStore,
 	auditLogStore *store.AuditLogStore,
+	rdb *redis.Client,
 	jwtSecret string,
 ) *Router {
 	return &Router{
@@ -59,6 +63,7 @@ func NewRouter(
 		system:        systemH,
 		apiKeyStore:   apiKeyStore,
 		auditLogStore: auditLogStore,
+		redis:         rdb,
 		jwtSecret:     jwtSecret,
 	}
 }
@@ -69,11 +74,17 @@ func (r *Router) Setup() *gin.Engine {
 	e.Use(gin.Logger(), gin.Recovery())
 
 	// public routes
-	// Login is rate-limited per IP to make brute-forcing usernames painful
-	// without locking out legitimate users on shared NATs (10/min is enough
-	// headroom for a typo-prone admin and well below what any sensible
-	// attacker needs to make progress).
-	e.POST("/api/v1/auth/login", middleware.RateLimit(10, time.Minute), r.auth.Login)
+	// Login is rate-limited per IP. Prefer the Redis-backed limiter when
+	// Redis is available so the counter is shared across every API instance
+	// behind a load balancer; fall back to the in-memory limiter for
+	// single-server deployments.
+	var loginLimiter gin.HandlerFunc
+	if r.redis != nil {
+		loginLimiter = middleware.RateLimitRedis(r.redis, 10, time.Minute)
+	} else {
+		loginLimiter = middleware.RateLimit(10, time.Minute)
+	}
+	e.POST("/api/v1/auth/login", loginLimiter, r.auth.Login)
 
 	// audit middleware records mutating requests on both protected and
 	// external groups so the audit_logs table covers admin actions and

@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/zenspanel/zenspanel/internal/api"
 	"github.com/zenspanel/zenspanel/internal/api/handlers"
@@ -24,6 +28,27 @@ func main() {
 
 	if err := store.RunMigrations(db, "migrations"); err != nil {
 		log.Fatalf("failed to run migrations: %v", err)
+	}
+
+	// Try Redis. We fall back to the in-memory rate limiter if it isn't
+	// available — locking out every login during a Redis outage would be a
+	// worse failure mode than briefly relaxing rate limiting.
+	var rdb *redis.Client
+	if cfg.Redis.Addr != "" {
+		client := redis.NewClient(&redis.Options{
+			Addr:     cfg.Redis.Addr,
+			Password: cfg.Redis.Password,
+			DB:       cfg.Redis.DB,
+		})
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := client.Ping(ctx).Err(); err != nil {
+			log.Printf("WARN: Redis unavailable (%v) — using in-memory rate limiter", err)
+			_ = client.Close()
+		} else {
+			rdb = client
+			log.Printf("Redis connected: %s (db %d)", cfg.Redis.Addr, cfg.Redis.DB)
+		}
+		cancel()
 	}
 
 	// stores
@@ -55,6 +80,7 @@ func main() {
 		authH, usersH, packagesH, domainsH, databasesH,
 		phpVersionsH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH,
 		apiKeyStore, auditLogStore,
+		rdb,
 		cfg.JWT.Secret,
 	)
 	engine := router.Setup()
