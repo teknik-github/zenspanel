@@ -3,22 +3,24 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/zenspanel/zenspanel/internal/api/handlers"
+	"github.com/zenspanel/zenspanel/internal/api/middleware"
 	"github.com/zenspanel/zenspanel/internal/auth"
 	"github.com/zenspanel/zenspanel/internal/store"
 )
 
 type Router struct {
-	auth         *handlers.AuthHandler
-	users        *handlers.UserHandler
-	packages     *handlers.PackageHandler
-	domains      *handlers.DomainHandler
-	databases    *handlers.DatabaseHandler
-	phpVersions  *handlers.PHPVersionHandler
-	apiKeys      *handlers.APIKeyHandler
-	auditLogs    *handlers.AuditLogHandler
-	ssl          *handlers.SSLHandler
-	apiKeyStore  *store.APIKeyStore
-	jwtSecret    string
+	auth          *handlers.AuthHandler
+	users         *handlers.UserHandler
+	packages      *handlers.PackageHandler
+	domains       *handlers.DomainHandler
+	databases     *handlers.DatabaseHandler
+	phpVersions   *handlers.PHPVersionHandler
+	apiKeys       *handlers.APIKeyHandler
+	auditLogs     *handlers.AuditLogHandler
+	ssl           *handlers.SSLHandler
+	apiKeyStore   *store.APIKeyStore
+	auditLogStore *store.AuditLogStore
+	jwtSecret     string
 }
 
 func NewRouter(
@@ -32,20 +34,22 @@ func NewRouter(
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
 	apiKeyStore *store.APIKeyStore,
+	auditLogStore *store.AuditLogStore,
 	jwtSecret string,
 ) *Router {
 	return &Router{
-		auth:        authH,
-		users:       usersH,
-		packages:    packagesH,
-		domains:     domainsH,
-		databases:   databasesH,
-		phpVersions: phpVersionsH,
-		apiKeys:     apiKeysH,
-		auditLogs:   auditLogsH,
-		ssl:         sslH,
-		apiKeyStore: apiKeyStore,
-		jwtSecret:   jwtSecret,
+		auth:          authH,
+		users:         usersH,
+		packages:      packagesH,
+		domains:       domainsH,
+		databases:     databasesH,
+		phpVersions:   phpVersionsH,
+		apiKeys:       apiKeysH,
+		auditLogs:     auditLogsH,
+		ssl:           sslH,
+		apiKeyStore:   apiKeyStore,
+		auditLogStore: auditLogStore,
+		jwtSecret:     jwtSecret,
 	}
 }
 
@@ -57,8 +61,13 @@ func (r *Router) Setup() *gin.Engine {
 	// public routes
 	e.POST("/api/v1/auth/login", r.auth.Login)
 
+	// audit middleware records mutating requests on both protected and
+	// external groups so the audit_logs table covers admin actions and
+	// billing-system actions alike
+	audit := middleware.Audit(r.auditLogStore)
+
 	// protected routes
-	api := e.Group("/api/v1", auth.JWTMiddleware(r.jwtSecret))
+	api := e.Group("/api/v1", auth.JWTMiddleware(r.jwtSecret), audit)
 	{
 		api.GET("/auth/me", r.auth.Me)
 
@@ -118,7 +127,7 @@ func (r *Router) Setup() *gin.Engine {
 	// requires the matching permission string on the API key, so an
 	// integration that only needs read access can be issued a key without
 	// suspend/create rights.
-	ext := e.Group("/api/v1/external", auth.APIKeyMiddleware(r.apiKeyStore))
+	ext := e.Group("/api/v1/external", auth.APIKeyMiddleware(r.apiKeyStore), audit)
 	{
 		ext.GET("/users", auth.RequirePermission("read_user"), r.users.List)
 		ext.GET("/users/:id", auth.RequirePermission("read_user"), r.users.Get)
