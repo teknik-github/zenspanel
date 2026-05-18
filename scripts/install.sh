@@ -409,6 +409,7 @@ jwt:
 
 agent:
   socket: "/run/zenspanel/agent.sock"
+  socket_group: "zenspanel"
 
 paths:
   home_base: "${ZENSPANEL_DATA}/home"

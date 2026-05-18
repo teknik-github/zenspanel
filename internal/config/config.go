@@ -34,7 +34,8 @@ type JWTConfig struct {
 }
 
 type AgentConfig struct {
-	Socket string
+	Socket      string
+	SocketGroup string `mapstructure:"socket_group"`
 }
 
 type PathsConfig struct {
@@ -60,6 +61,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("server.port", 8080)
 	viper.SetDefault("redis.addr", "127.0.0.1:6379")
 	viper.SetDefault("agent.socket", "/run/zenspanel/agent.sock")
+	viper.SetDefault("agent.socket_group", "zenspanel")
 	viper.SetDefault("paths.home_base", "/home/zenspanel")
 	viper.SetDefault("paths.nginx_conf", "/etc/nginx/zenspanel")
 	viper.SetDefault("paths.ssl_base", "/etc/nginx/ssl/zenspanel")

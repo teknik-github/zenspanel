@@ -22,6 +22,7 @@ func main() {
 	}
 
 	srv := agent.NewServer(cfg.Agent.Socket)
+	srv.SetSocketGroup(cfg.Agent.SocketGroup)
 
 	// nginx
 	srv.Register("nginx.create_vhost", func(params json.RawMessage) (interface{}, error) {

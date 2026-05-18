@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/user"
+	"strconv"
 )
 
 type Request struct {
@@ -30,8 +32,9 @@ type RPCError struct {
 type HandlerFunc func(params json.RawMessage) (interface{}, error)
 
 type Server struct {
-	socketPath string
-	handlers   map[string]HandlerFunc
+	socketPath  string
+	socketGroup string
+	handlers    map[string]HandlerFunc
 }
 
 func NewServer(socketPath string) *Server {
@@ -39,6 +42,14 @@ func NewServer(socketPath string) *Server {
 		socketPath: socketPath,
 		handlers:   make(map[string]HandlerFunc),
 	}
+}
+
+// SetSocketGroup configures the unix group that should own the socket along
+// with root. The agent runs as root; the API runs as a non-root account
+// (typically www-data). With group ownership and mode 0660, the API can
+// connect while no other unprivileged account can.
+func (s *Server) SetSocketGroup(group string) {
+	s.socketGroup = group
 }
 
 func (s *Server) Register(method string, handler HandlerFunc) {
@@ -56,11 +67,26 @@ func (s *Server) Listen() error {
 	}
 	defer ln.Close()
 
-	if err := os.Chmod(s.socketPath, 0600); err != nil {
+	mode := os.FileMode(0600)
+	if s.socketGroup != "" {
+		g, err := user.LookupGroup(s.socketGroup)
+		if err != nil {
+			return fmt.Errorf("lookup socket group %q: %w", s.socketGroup, err)
+		}
+		gid, err := strconv.Atoi(g.Gid)
+		if err != nil {
+			return fmt.Errorf("parse gid for %q: %w", s.socketGroup, err)
+		}
+		if err := os.Chown(s.socketPath, 0, gid); err != nil {
+			return fmt.Errorf("chown socket to root:%s: %w", s.socketGroup, err)
+		}
+		mode = 0660
+	}
+	if err := os.Chmod(s.socketPath, mode); err != nil {
 		return fmt.Errorf("chmod socket: %w", err)
 	}
 
-	log.Printf("Agent listening on %s", s.socketPath)
+	log.Printf("Agent listening on %s (mode %#o, group %q)", s.socketPath, mode, s.socketGroup)
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
