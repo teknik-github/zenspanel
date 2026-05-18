@@ -158,3 +158,19 @@ func (s *UserStore) GetMaxLinuxUID() (int, error) {
 	err := s.db.Get(&maxUID, "SELECT COALESCE(MAX(linux_uid), 9999) FROM users")
 	return maxUID, err
 }
+
+// CountDomains returns the number of domain rows owned by the user. Used by
+// GetUsage to populate the User Panel Dashboard cards.
+func (s *UserStore) CountDomains(userID uint64) (int, error) {
+	var n int
+	err := s.db.Get(&n, "SELECT COUNT(*) FROM domains WHERE user_id = ?", userID)
+	return n, err
+}
+
+// CountDatabases returns the number of database rows owned by the user. The
+// `databases` table is backtick-quoted because it's a MySQL reserved word.
+func (s *UserStore) CountDatabases(userID uint64) (int, error) {
+	var n int
+	err := s.db.Get(&n, "SELECT COUNT(*) FROM `databases` WHERE user_id = ?", userID)
+	return n, err
+}

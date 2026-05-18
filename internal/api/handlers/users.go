@@ -299,10 +299,35 @@ func (h *UserHandler) ChangePackage(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "package updated"})
 }
 
+// GetUsage returns the resource usage for a user in the {used, max} shape
+// the User Panel Dashboard expects. The actual numbers are placeholders for
+// now (see CONTRIBUTING.md §8 — real cgroup metrics not yet implemented),
+// but the shape MUST stay stable so the UI doesn't crash on undefined
+// fields when we wire up real metrics later.
 func (h *UserHandler) GetUsage(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+
+	domainsUsed, _ := h.users.CountDomains(id)
+	databasesUsed, _ := h.users.CountDatabases(id)
+
+	maxDomains, maxDatabases := 0, 0
+	maxDisk, maxRAM := int64(0), int64(0)
+	if user, err := h.users.GetByID(id); err == nil && user.PackageID.Valid {
+		if pkg, err := h.packages.GetByID(uint64(user.PackageID.Int64)); err == nil {
+			maxDomains = pkg.MaxDomains
+			maxDatabases = pkg.MaxDatabases
+			maxDisk = pkg.DiskQuota
+			maxRAM = pkg.MemoryLimit
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"user_id": id,
-		"usage":   gin.H{"domains": 0, "databases": 0, "disk_bytes": 0, "memory_bytes": 0},
+		"usage": gin.H{
+			"domains":   gin.H{"used": domainsUsed, "max": maxDomains},
+			"databases": gin.H{"used": databasesUsed, "max": maxDatabases},
+			"disk":      gin.H{"used": 0, "max": maxDisk},
+			"ram":       gin.H{"used": 0, "max": maxRAM},
+		},
 	})
 }
