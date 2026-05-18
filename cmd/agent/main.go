@@ -208,7 +208,11 @@ func main() {
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		return nil, agentuser.Create(p.Username, p.UID, cfg.Paths.HomeBase)
+		chosen, err := agentuser.Create(p.Username, p.UID, cfg.Paths.HomeBase)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"uid": chosen}, nil
 	})
 
 	srv.Register("user.delete", func(params json.RawMessage) (interface{}, error) {

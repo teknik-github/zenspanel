@@ -175,15 +175,25 @@ func (h *UserHandler) Create(c *gin.Context) {
 
 	// Provision system resources via the agent. If the Linux user creation
 	// fails the panel row is rolled back so the next attempt with the same
-	// username is not blocked by the unique constraint.
+	// username is not blocked by the unique constraint. The agent picks a
+	// free UID (it's the authoritative source — /etc/passwd may have UIDs
+	// the DB doesn't know about), so we update the row to match what was
+	// actually created.
 	agentClient := agent.NewClient(h.agentSock)
+	var createResp struct {
+		UID int `json:"uid"`
+	}
 	if err := agentClient.Call("user.create", map[string]interface{}{
 		"username": user.Username,
 		"uid":      user.LinuxUID,
-	}, nil); err != nil {
+	}, &createResp); err != nil {
 		_ = h.users.Delete(user.ID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "provision linux user: " + err.Error()})
 		return
+	}
+	if createResp.UID > 0 && createResp.UID != user.LinuxUID {
+		_ = h.users.UpdateLinuxUID(user.ID, createResp.UID)
+		user.LinuxUID = createResp.UID
 	}
 
 	// Cgroup slice and PHP-FPM pool only make sense once a package picks the

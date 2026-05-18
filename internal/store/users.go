@@ -135,6 +135,15 @@ func (s *UserStore) Delete(id uint64) error {
 	return err
 }
 
+// UpdateLinuxUID is a typed setter used by the API handler when the agent
+// provisions a different UID than originally proposed (e.g. /etc/passwd
+// already had the requested UID). Kept separate from the dynamic Update
+// path — linux_uid is intentionally excluded from the user-facing allowlist.
+func (s *UserStore) UpdateLinuxUID(id uint64, uid int) error {
+	_, err := s.db.Exec("UPDATE users SET linux_uid = ? WHERE id = ?", uid, id)
+	return err
+}
+
 func (s *UserStore) CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
