@@ -71,10 +71,15 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// KeyPrefix is the first 8 chars of the random portion (not the literal
+	// "zp_live_" tag). Storing the literal tag would mean every key collides
+	// on the same prefix, forcing ValidateKey to bcrypt every key in the
+	// table on every request — O(n) per validation and a CPU footgun once
+	// the table grows.
 	key := &store.APIKey{
 		Name:        req.Name,
 		KeyHash:     hash,
-		KeyPrefix:   fullKey[:8],
+		KeyPrefix:   fullKey[8:16],
 		Permissions: req.Permissions,
 		CreatedBy:   auth.GetUserID(c),
 	}

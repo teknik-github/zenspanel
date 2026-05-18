@@ -4,19 +4,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/zenspanel/zenspanel/internal/api/handlers"
 	"github.com/zenspanel/zenspanel/internal/auth"
+	"github.com/zenspanel/zenspanel/internal/store"
 )
 
 type Router struct {
-	auth        *handlers.AuthHandler
-	users       *handlers.UserHandler
-	packages    *handlers.PackageHandler
-	domains     *handlers.DomainHandler
-	databases   *handlers.DatabaseHandler
-	phpVersions *handlers.PHPVersionHandler
-	apiKeys     *handlers.APIKeyHandler
-	auditLogs   *handlers.AuditLogHandler
-	ssl         *handlers.SSLHandler
-	jwtSecret   string
+	auth         *handlers.AuthHandler
+	users        *handlers.UserHandler
+	packages     *handlers.PackageHandler
+	domains      *handlers.DomainHandler
+	databases    *handlers.DatabaseHandler
+	phpVersions  *handlers.PHPVersionHandler
+	apiKeys      *handlers.APIKeyHandler
+	auditLogs    *handlers.AuditLogHandler
+	ssl          *handlers.SSLHandler
+	apiKeyStore  *store.APIKeyStore
+	jwtSecret    string
 }
 
 func NewRouter(
@@ -29,6 +31,7 @@ func NewRouter(
 	apiKeysH *handlers.APIKeyHandler,
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
+	apiKeyStore *store.APIKeyStore,
 	jwtSecret string,
 ) *Router {
 	return &Router{
@@ -41,6 +44,7 @@ func NewRouter(
 		apiKeys:     apiKeysH,
 		auditLogs:   auditLogsH,
 		ssl:         sslH,
+		apiKeyStore: apiKeyStore,
 		jwtSecret:   jwtSecret,
 	}
 }
@@ -106,6 +110,26 @@ func (r *Router) Setup() *gin.Engine {
 
 		// audit logs
 		api.GET("/audit-logs", auth.RequireRole("admin"), r.auditLogs.List)
+	}
+
+	// External API — authenticated via X-API-Key header. The endpoints
+	// here are the subset a billing system (WHMCS, FOSSBilling, custom)
+	// would call to provision and manage hosting accounts. Each route
+	// requires the matching permission string on the API key, so an
+	// integration that only needs read access can be issued a key without
+	// suspend/create rights.
+	ext := e.Group("/api/v1/external", auth.APIKeyMiddleware(r.apiKeyStore))
+	{
+		ext.GET("/users", auth.RequirePermission("read_user"), r.users.List)
+		ext.GET("/users/:id", auth.RequirePermission("read_user"), r.users.Get)
+		ext.POST("/users", auth.RequirePermission("create_user"), r.users.Create)
+		ext.PUT("/users/:id/suspend", auth.RequirePermission("suspend_user"), r.users.Suspend)
+		ext.PUT("/users/:id/unsuspend", auth.RequirePermission("suspend_user"), r.users.Unsuspend)
+		ext.PUT("/users/:id/package", auth.RequirePermission("change_package"), r.users.ChangePackage)
+		ext.GET("/users/:id/usage", auth.RequirePermission("read_user"), r.users.GetUsage)
+
+		ext.GET("/packages", auth.RequirePermission("read_package"), r.packages.List)
+		ext.GET("/packages/:id", auth.RequirePermission("read_package"), r.packages.Get)
 	}
 
 	return e

@@ -42,8 +42,13 @@ func (s *APIKeyStore) Delete(id uint64) error {
 }
 
 func (s *APIKeyStore) ValidateKey(rawKey string) (*APIKey, error) {
+	if len(rawKey) < 16 {
+		return nil, fmt.Errorf("invalid api key")
+	}
+	// Match what handlers/api_keys.go records on Create: the prefix is the
+	// 8 hex chars immediately after "zp_live_", not the literal tag.
+	prefix := rawKey[8:16]
 	var keys []APIKey
-	prefix := rawKey[:8]
 	if err := s.db.Select(&keys, "SELECT * FROM api_keys WHERE key_prefix = ?", prefix); err != nil {
 		return nil, fmt.Errorf("lookup api key: %w", err)
 	}

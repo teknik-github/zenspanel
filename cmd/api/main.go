@@ -50,6 +50,7 @@ func main() {
 	router := api.NewRouter(
 		authH, usersH, packagesH, domainsH, databasesH,
 		phpVersionsH, apiKeysH, auditLogsH, sslH,
+		apiKeyStore,
 		cfg.JWT.Secret,
 	)
 	engine := router.Setup()
