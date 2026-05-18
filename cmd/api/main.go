@@ -47,11 +47,12 @@ func main() {
 	auditLogsH := handlers.NewAuditLogHandler(auditLogStore)
 	sslH := handlers.NewSSLHandler(domainStore, cfg.Agent.Socket, cfg.LetsEncrypt.Email, cfg.LetsEncrypt.Staging)
 	backupsH := handlers.NewBackupHandler(backupStore, userStore, databaseStore, cfg.Paths.HomeBase, cfg.Paths.BackupBase)
+	filesH := handlers.NewFileManagerHandler(userStore, cfg.Agent.Socket)
 
 	// router
 	router := api.NewRouter(
 		authH, usersH, packagesH, domainsH, databasesH,
-		phpVersionsH, apiKeysH, auditLogsH, sslH, backupsH,
+		phpVersionsH, apiKeysH, auditLogsH, sslH, backupsH, filesH,
 		apiKeyStore, auditLogStore,
 		cfg.JWT.Secret,
 	)

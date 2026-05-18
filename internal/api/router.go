@@ -20,6 +20,7 @@ type Router struct {
 	auditLogs     *handlers.AuditLogHandler
 	ssl           *handlers.SSLHandler
 	backups       *handlers.BackupHandler
+	files         *handlers.FileManagerHandler
 	apiKeyStore   *store.APIKeyStore
 	auditLogStore *store.AuditLogStore
 	jwtSecret     string
@@ -36,6 +37,7 @@ func NewRouter(
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
 	backupsH *handlers.BackupHandler,
+	filesH *handlers.FileManagerHandler,
 	apiKeyStore *store.APIKeyStore,
 	auditLogStore *store.AuditLogStore,
 	jwtSecret string,
@@ -51,6 +53,7 @@ func NewRouter(
 		auditLogs:     auditLogsH,
 		ssl:           sslH,
 		backups:       backupsH,
+		files:         filesH,
 		apiKeyStore:   apiKeyStore,
 		auditLogStore: auditLogStore,
 		jwtSecret:     jwtSecret,
@@ -134,6 +137,14 @@ func (r *Router) Setup() *gin.Engine {
 		api.GET("/backups/:id/download", r.backups.Download)
 		api.POST("/backups/:id/restore", r.backups.Restore)
 		api.DELETE("/backups/:id", r.backups.Delete)
+
+		// file manager (per-user, scoped to caller's home directory)
+		api.GET("/files", r.files.List)
+		api.GET("/files/content", r.files.Read)
+		api.POST("/files/content", r.files.Write)
+		api.POST("/files/mkdir", r.files.Mkdir)
+		api.PUT("/files/rename", r.files.Rename)
+		api.DELETE("/files", r.files.Delete)
 	}
 
 	// External API — authenticated via X-API-Key header. The endpoints

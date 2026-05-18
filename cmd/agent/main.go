@@ -6,6 +6,7 @@ import (
 
 	"github.com/zenspanel/zenspanel/agent"
 	agentcgroups "github.com/zenspanel/zenspanel/agent/cgroups"
+	agentfilemanager "github.com/zenspanel/zenspanel/agent/filemanager"
 	agentmysql "github.com/zenspanel/zenspanel/agent/mysql"
 	agentnginx "github.com/zenspanel/zenspanel/agent/nginx"
 	agentphpfpm "github.com/zenspanel/zenspanel/agent/phpfpm"
@@ -260,6 +261,83 @@ func main() {
 			return nil, err
 		}
 		return nil, agentuser.Delete(p.Username)
+	})
+
+	// filemanager
+	srv.Register("filemanager.list", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+			Path     string `json:"path"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		entries, err := agentfilemanager.List(p.Username, cfg.Paths.HomeBase, p.Path)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"entries": entries}, nil
+	})
+
+	srv.Register("filemanager.read", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+			Path     string `json:"path"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		content, err := agentfilemanager.Read(p.Username, cfg.Paths.HomeBase, p.Path)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"content": content}, nil
+	})
+
+	srv.Register("filemanager.write", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+			Path     string `json:"path"`
+			Content  string `json:"content"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfilemanager.Write(p.Username, cfg.Paths.HomeBase, p.Path, p.Content)
+	})
+
+	srv.Register("filemanager.mkdir", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+			Path     string `json:"path"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfilemanager.Mkdir(p.Username, cfg.Paths.HomeBase, p.Path)
+	})
+
+	srv.Register("filemanager.rename", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+			OldPath  string `json:"old_path"`
+			NewPath  string `json:"new_path"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfilemanager.Rename(p.Username, cfg.Paths.HomeBase, p.OldPath, p.NewPath)
+	})
+
+	srv.Register("filemanager.delete", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+			Path     string `json:"path"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfilemanager.Delete(p.Username, cfg.Paths.HomeBase, p.Path)
 	})
 
 	log.Printf("ZensPanel Agent starting, socket: %s", cfg.Agent.Socket)
