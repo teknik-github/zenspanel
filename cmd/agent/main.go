@@ -139,13 +139,14 @@ func main() {
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		ram, disk, err := agentcgroups.ReadMetrics(p.Username, cfg.Paths.HomeBase)
+		ram, disk, cpu, err := agentcgroups.ReadMetrics(p.Username, cfg.Paths.HomeBase)
 		if err != nil {
 			return nil, err
 		}
 		return map[string]interface{}{
 			"ram_used":  ram,
 			"disk_used": disk,
+			"cpu_pct":   cpu,
 		}, nil
 	})
 

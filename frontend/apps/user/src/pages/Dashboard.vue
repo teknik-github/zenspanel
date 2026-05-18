@@ -27,7 +27,7 @@ const usage = usageStore.usage
     <h1 class="text-lg font-semibold text-gray-800">Dashboard</h1>
 
     <!-- Resource usage -->
-    <div class="grid grid-cols-4 gap-4">
+    <div class="grid grid-cols-5 gap-4">
       <div class="bg-white border border-gray-200 rounded-lg p-4">
         <div class="text-xs text-gray-400 uppercase tracking-wide">Domains</div>
         <div class="text-xl font-bold text-gray-800 mt-1">
@@ -48,6 +48,16 @@ const usage = usageStore.usage
         <div class="mt-2 bg-gray-100 rounded-full h-1.5">
           <div class="bg-indigo-500 h-1.5 rounded-full transition-all"
             :style="{ width: usageStore.usage.databases.max ? (usageStore.usage.databases.used / usageStore.usage.databases.max * 100) + '%' : '0%' }"></div>
+        </div>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-lg p-4">
+        <div class="text-xs text-gray-400 uppercase tracking-wide">CPU Usage</div>
+        <div class="text-xl font-bold text-gray-800 mt-1">
+          {{ usageStore.usage.cpu.used.toFixed(1) }}<span class="text-sm font-normal text-gray-400">%</span>
+        </div>
+        <div class="mt-2 bg-gray-100 rounded-full h-1.5">
+          <div class="bg-purple-500 h-1.5 rounded-full transition-all"
+            :style="{ width: Math.min(usageStore.usage.cpu.used, 100) + '%' }"></div>
         </div>
       </div>
       <div class="bg-white border border-gray-200 rounded-lg p-4">

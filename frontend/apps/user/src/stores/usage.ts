@@ -9,6 +9,7 @@ type Usage = {
   databases: Quota
   disk: Quota
   ram: Quota
+  cpu: Quota
 }
 
 const emptyUsage = (): Usage => ({
@@ -16,6 +17,7 @@ const emptyUsage = (): Usage => ({
   databases: { used: 0, max: 0 },
   disk: { used: 0, max: 0 },
   ram: { used: 0, max: 0 },
+  cpu: { used: 0, max: 100 },
 })
 
 export const useUsageStore = defineStore('usage', () => {
@@ -31,7 +33,7 @@ export const useUsageStore = defineStore('usage', () => {
         // Merge field by field so a missing key falls back to {used:0,max:0}
         // instead of leaving the slot undefined and crashing the Dashboard.
         const next = emptyUsage()
-        for (const k of ['domains', 'databases', 'disk', 'ram'] as const) {
+        for (const k of ['domains', 'databases', 'disk', 'ram', 'cpu'] as const) {
           const v = incoming[k]
           if (v && typeof v === 'object') {
             next[k] = { used: Number(v.used) || 0, max: Number(v.max) || 0 }

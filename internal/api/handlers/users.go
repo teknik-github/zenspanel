@@ -328,8 +328,9 @@ func (h *UserHandler) GetUsage(c *gin.Context) {
 	}
 
 	var metrics struct {
-		RAMUsed  int64 `json:"ram_used"`
-		DiskUsed int64 `json:"disk_used"`
+		RAMUsed  int64   `json:"ram_used"`
+		DiskUsed int64   `json:"disk_used"`
+		CPUPct   float64 `json:"cpu_pct"`
 	}
 	agentClient := agent.NewClient(h.agentSock)
 	_ = agentClient.Call("cgroups.read_metrics", map[string]interface{}{
@@ -343,6 +344,7 @@ func (h *UserHandler) GetUsage(c *gin.Context) {
 			"databases": gin.H{"used": databasesUsed, "max": maxDatabases},
 			"disk":      gin.H{"used": metrics.DiskUsed, "max": maxDisk},
 			"ram":       gin.H{"used": metrics.RAMUsed, "max": maxRAM},
+			"cpu":       gin.H{"used": metrics.CPUPct, "max": 100},
 		},
 	})
 }

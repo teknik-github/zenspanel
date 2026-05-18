@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zenspanel/zenspanel/agent/safe"
@@ -127,18 +128,23 @@ func AddPID(username string, pid int) error {
 	return os.WriteFile(path, []byte(strconv.Itoa(pid)), 0644)
 }
 
-// ReadMetrics returns the current RAM and disk usage for a user, in bytes.
-// RAM comes from the cgroup v2 memory.current pseudo-file. Disk is `du -sb`
-// over the user's home directory — there's no per-user cgroup disk metric,
-// only quota tooling, and quotas may not be enabled. We cap du to 5s to
-// avoid pinning the API on a giant home tree.
+// ReadMetrics returns the current RAM, disk, and CPU usage for a user.
+// RAM comes from the cgroup v2 memory.current pseudo-file (bytes). Disk
+// is `du -sb` over the user's home directory (bytes) — there's no
+// per-user cgroup disk metric, only quota tooling, and quotas may not be
+// enabled. We cap du to 5s to avoid pinning the API on a giant home tree.
+// CPU is a percentage (0-100+) computed from the delta of cpu.stat's
+// usage_usec between this call and the previous one cached per user.
 //
 // A missing slice or home dir is not an error here — it just means the
 // user hasn't been provisioned yet (or was just deleted), so we return 0
 // for whichever one is missing rather than failing the whole call.
-func ReadMetrics(username, homeBase string) (ramUsed, diskUsed int64, err error) {
+//
+// First call per user returns 0 for CPU because there's no previous
+// sample to compare against. Subsequent calls return a real percentage.
+func ReadMetrics(username, homeBase string) (ramUsed, diskUsed int64, cpuPct float64, err error) {
 	if err := safe.Username(username); err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 
 	if data, readErr := os.ReadFile(filepath.Join(slicePath(username), "memory.current")); readErr == nil {
@@ -158,5 +164,65 @@ func ReadMetrics(username, homeBase string) (ramUsed, diskUsed int64, err error)
 		}
 	}
 
-	return ramUsed, diskUsed, nil
+	cpuPct = cpuPercent(username)
+	return ramUsed, diskUsed, cpuPct, nil
+}
+
+// cpuSample caches the previous cpu.stat reading per user so we can turn
+// the monotonic usage_usec counter into a rate. Without this we'd either
+// have to sleep inside the agent (adding latency to every dashboard
+// refresh) or push the math onto the frontend (which would have to track
+// previous values across HTTP polls).
+type cpuSample struct {
+	usec int64
+	at   time.Time
+}
+
+var cpuCache sync.Map // map[string]*cpuSample
+
+// readCPUUsageUsec parses the first line of cpu.stat ("usage_usec <N>").
+// Returns 0 with no error if the file is missing — that just means the
+// slice hasn't been created yet, which is fine for a freshly provisioned
+// user. Genuine read errors after Stat passes propagate up.
+func readCPUUsageUsec(username string) (int64, error) {
+	data, err := os.ReadFile(filepath.Join(slicePath(username), "cpu.stat"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == "usage_usec" {
+			n, _ := strconv.ParseInt(fields[1], 10, 64)
+			return n, nil
+		}
+	}
+	return 0, nil
+}
+
+// cpuPercent returns the CPU usage of the user's cgroup since the last
+// time it was sampled, as a percentage of one CPU core. Values >100 are
+// possible on multi-core systems where the user has multi-core quota and
+// is hitting more than one core at once. The percentage is capped at the
+// caller layer if the UI needs it bounded.
+func cpuPercent(username string) float64 {
+	now := time.Now()
+	usec, err := readCPUUsageUsec(username)
+	if err != nil || usec == 0 {
+		return 0
+	}
+	stored, loaded := cpuCache.Swap(username, &cpuSample{usec: usec, at: now})
+	if !loaded {
+		// First sample — no delta yet.
+		return 0
+	}
+	prev := stored.(*cpuSample)
+	deltaUsec := usec - prev.usec
+	deltaTime := now.Sub(prev.at).Microseconds()
+	if deltaTime <= 0 || deltaUsec < 0 {
+		return 0
+	}
+	return float64(deltaUsec) / float64(deltaTime) * 100
 }
