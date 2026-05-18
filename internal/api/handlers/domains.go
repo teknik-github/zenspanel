@@ -61,6 +61,11 @@ func (h *DomainHandler) Create(c *gin.Context) {
 		return
 	}
 
+	if err := ValidateDomain(req.Domain); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	userID := auth.GetUserID(c)
 	if auth.GetRole(c) == "admin" && req.UserID > 0 {
 		userID = req.UserID

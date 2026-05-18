@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/zenspanel/zenspanel/agent/safe"
 )
 
 const cgroupBase = "/sys/fs/cgroup/zenspanel"
@@ -14,6 +16,9 @@ func slicePath(username string) string {
 }
 
 func CreateSlice(username string, cpuQuota int, memoryLimit int64) error {
+	if err := safe.Username(username); err != nil {
+		return err
+	}
 	path := slicePath(username)
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return fmt.Errorf("mkdir cgroup: %w", err)
@@ -36,10 +41,16 @@ func UpdateSlice(username string, cpuQuota int, memoryLimit int64) error {
 }
 
 func DeleteSlice(username string) error {
+	if err := safe.Username(username); err != nil {
+		return err
+	}
 	return os.RemoveAll(slicePath(username))
 }
 
 func AddPID(username string, pid int) error {
+	if err := safe.Username(username); err != nil {
+		return err
+	}
 	path := filepath.Join(slicePath(username), "cgroup.procs")
 	return os.WriteFile(path, []byte(strconv.Itoa(pid)), 0644)
 }

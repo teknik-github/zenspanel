@@ -114,7 +114,15 @@ Each panel user maps to a Linux system user. cgroups v2 slice at `/sys/fs/cgroup
 ### Key conventions
 
 - Agent commands always use `exec.Command` with argument arrays — never shell string interpolation.
+- Every exported function in `agent/<subsystem>/` validates its caller-provided strings via `agent/safe` (`safe.Username`, `safe.Domain`, `safe.DBIdent`, `safe.DBPassword`, `safe.PHPVersion`) before any side effect — defense in depth, the API may not be the only caller.
 - Store methods use named sqlx queries (`:field` syntax) for inserts/updates.
+- Every struct in `internal/store/models.go` carries both `db:"snake_case"` and `json:"snake_case"` tags. Sensitive columns (`password_hash`, `api_keys.key_hash`) use `json:"-"`. Without `json` tags Go produces PascalCase keys that the frontend cannot bind.
+- Dynamic SQL identifiers (UPDATE columns, ORDER BY) sourced from request input must pass through allowlists in `internal/store/safefields.go` (`filterAllowed`, `safeSort`). Identifiers cannot be parameterized; this is the only safe option.
 - The `databases` table must always be quoted as `` `databases` `` in raw SQL.
 - Frontend components use `<script setup lang="ts">` (Composition API). TailwindCSS only — no custom CSS files. SVG icons are inline Lucide-style (`stroke="currentColor"`, `fill="none"`).
+- Both frontend apps require `postcss.config.js` next to `vite.config.ts`. Without it Tailwind directives are not processed and every page renders unstyled.
+- Admin app deploys at `/admin/`: `vite.config.ts` declares `base: '/admin/'` AND `router/index.ts` calls `createWebHistory('/admin/')` — both must agree or the entry script fails to load with a MIME error.
+- Both Vue apps await `auth.fetchMe()` in `main.ts` before mounting the router so reload-after-login restores `auth.user.*` flags.
 - Terminal and Backups sidebar items in the User Panel are conditionally rendered based on `auth.user.terminal_enabled` / `auth.user.backup_enabled`.
+
+See `CONTRIBUTING.md` for the full rationale and end-to-end recipe for adding a new entity.

@@ -71,6 +71,7 @@ func (s *UserStore) List(f UserFilter) ([]User, int, error) {
 	if f.Sort == "" {
 		f.Sort = "created_at"
 	}
+	f.Sort = safeSort(f.Sort, "created_at", allowedUserSort)
 	if f.Order != "asc" {
 		f.Order = "desc"
 	}
@@ -108,6 +109,7 @@ func (s *UserStore) List(f UserFilter) ([]User, int, error) {
 }
 
 func (s *UserStore) Update(id uint64, fields map[string]interface{}) error {
+	fields = filterAllowed(fields, allowedUserUpdate)
 	if len(fields) == 0 {
 		return nil
 	}

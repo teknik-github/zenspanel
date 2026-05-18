@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
+
+	"github.com/zenspanel/zenspanel/agent/safe"
 )
 
 type Client struct {
@@ -22,7 +24,20 @@ func New(dsn string) (*Client, error) {
 	return &Client{db: db}, nil
 }
 
+// CreateDatabase provisions a database and a dedicated user. SQL identifiers
+// (db_name, db_user) cannot be parameterized in MySQL, and the password is
+// quoted into the CREATE USER statement, so all three inputs must be strictly
+// validated here — never relax this without auditing the call sites.
 func (c *Client) CreateDatabase(dbName, dbUser, dbPassword string) error {
+	if err := safe.DBIdent(dbName); err != nil {
+		return err
+	}
+	if err := safe.DBIdent(dbUser); err != nil {
+		return err
+	}
+	if err := safe.DBPassword(dbPassword); err != nil {
+		return err
+	}
 	queries := []string{
 		fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4", dbName),
 		fmt.Sprintf("CREATE USER IF NOT EXISTS '%s'@'localhost' IDENTIFIED BY '%s'", dbUser, dbPassword),
@@ -38,6 +53,12 @@ func (c *Client) CreateDatabase(dbName, dbUser, dbPassword string) error {
 }
 
 func (c *Client) DropDatabase(dbName, dbUser string) error {
+	if err := safe.DBIdent(dbName); err != nil {
+		return err
+	}
+	if err := safe.DBIdent(dbUser); err != nil {
+		return err
+	}
 	queries := []string{
 		fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", dbName),
 		fmt.Sprintf("DROP USER IF EXISTS '%s'@'localhost'", dbUser),

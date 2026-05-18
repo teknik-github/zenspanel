@@ -10,7 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- API: store models now declare snake_case `json` tags on every field — without them Go's encoder/decoder used PascalCase keys (e.g. `CPUQuota`) so the Vue frontend (which speaks snake_case) silently failed to bind any field. Symptoms: `POST /api/v1/packages` returned 500 (empty `php_versions_allowed` rejected by MySQL JSON column), and list pages rendered cards with `undefined` values
+- Security: dynamic UPDATE in `users.go` and `domains.go` previously interpolated arbitrary JSON keys into SQL identifiers. With `multiStatements=true` in the DSN this enabled SQL injection (e.g. `{"x; DROP TABLE users--": 1}`). Now filtered through column allowlists in `internal/store/safefields.go`
+- Security: `users` list `ORDER BY` previously took an unvalidated `sort` query parameter directly into SQL. Now validated against an explicit column allowlist
+- Security: agent now validates every caller-provided string via `agent/safe` before any side effect — usernames, domains, MySQL identifiers, MySQL passwords, and PHP versions. The agent runs as root; defense in depth at this layer means an API-side validation bug cannot become a privesc
+- Security: `agent/mysql` previously interpolated db_name, db_user, and db_password into raw SQL without sanitization. Now strictly whitelist-validated (alphanumerics + safe punctuation) to make the necessary identifier interpolation safe
+- API: `users.Create` and `domains.Create` now reject usernames and domains that fail the documented format and reserved-name checks. Prevents path traversal in DocumentRoot construction and crashes downstream of `useradd` / nginx
+- Admin Panel auth store: tracks `terminal_enabled`, `backup_enabled`, and `package_id` to match the backend `Login` response (previously dropped these fields silently)
+- Admin & User Panel: both apps now await `auth.fetchMe()` in `main.ts` before mounting the router so reloads after login restore the full user state instead of leaving menu flags undefined
+
+### Added
+- `CONTRIBUTING.md` — captures the JSON-tag, dynamic-SQL allowlist, agent validation, and frontend build conventions, plus an end-to-end recipe for adding a new entity. Linked from README and summarized in CLAUDE.md
+- `agent/safe/` package — single source of truth for input validation regexes used across every agent subsystem
+- `internal/store/safefields.go` — column and sort-key allowlists used by all dynamic-SQL paths in the API
 - Admin Panel & User Panel: added missing `postcss.config.js` for both apps — without it Tailwind directives (`@tailwind base/components/utilities`) were not processed and the production CSS was a 60-byte raw passthrough, leaving every page unstyled
 - Admin Panel: `vite.config.ts` updated with `server.host: '0.0.0.0'` so dev mode is reachable when running on a remote server
 - User Panel: `vite.config.ts` updated with `server.host: '0.0.0.0'` for the same reason

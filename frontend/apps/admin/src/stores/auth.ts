@@ -9,6 +9,9 @@ export const useAuthStore = defineStore('auth', () => {
     username: string
     email: string
     role: string
+    terminal_enabled: boolean
+    backup_enabled: boolean
+    package_id: number | null
   } | null>(null)
 
   async function login(username: string, password: string) {

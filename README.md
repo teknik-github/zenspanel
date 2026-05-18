@@ -324,3 +324,5 @@ MIT License — see [LICENSE](LICENSE) for details.
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before sending a PR — it captures the conventions (JSON tags, dynamic-SQL allowlists, agent input validation, frontend build invariants) that have produced real bugs in this repo.

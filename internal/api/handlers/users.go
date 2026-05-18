@@ -136,6 +136,11 @@ func (h *UserHandler) Create(c *gin.Context) {
 		return
 	}
 
+	if err := ValidateUsername(req.Username); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	hash, err := store.HashPassword(req.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "hash password failed"})

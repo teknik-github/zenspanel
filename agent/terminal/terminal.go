@@ -6,6 +6,8 @@ import (
 	"os/exec"
 
 	"github.com/creack/pty"
+
+	"github.com/zenspanel/zenspanel/agent/safe"
 )
 
 type Session struct {
@@ -14,6 +16,9 @@ type Session struct {
 }
 
 func SpawnSession(username, homeBase string) (*Session, error) {
+	if err := safe.Username(username); err != nil {
+		return nil, err
+	}
 	homeDir := homeBase + "/" + username
 	cmd := exec.Command("su", "-s", "/bin/rbash", "-", username)
 	cmd.Env = []string{

@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/zenspanel/zenspanel/agent/safe"
 )
 
 func certDir(sslBase, domain string) string {
@@ -13,6 +15,9 @@ func certDir(sslBase, domain string) string {
 }
 
 func IssueLetsEncrypt(domain, email string, staging bool) error {
+	if err := safe.Domain(domain); err != nil {
+		return err
+	}
 	args := []string{
 		"--nginx",
 		"-d", domain,
@@ -31,6 +36,9 @@ func IssueLetsEncrypt(domain, email string, staging bool) error {
 }
 
 func WriteCustomCert(sslBase, domain, certPEM, keyPEM string) error {
+	if err := safe.Domain(domain); err != nil {
+		return err
+	}
 	if !strings.Contains(certPEM, "BEGIN CERTIFICATE") {
 		return fmt.Errorf("invalid certificate PEM")
 	}
@@ -51,5 +59,8 @@ func WriteCustomCert(sslBase, domain, certPEM, keyPEM string) error {
 }
 
 func RemoveCert(sslBase, domain string) error {
+	if err := safe.Domain(domain); err != nil {
+		return err
+	}
 	return os.RemoveAll(certDir(sslBase, domain))
 }

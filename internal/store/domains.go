@@ -57,6 +57,7 @@ func (s *DomainStore) CountByUserID(userID uint64) (int, error) {
 }
 
 func (s *DomainStore) Update(id uint64, fields map[string]interface{}) error {
+	fields = filterAllowed(fields, allowedDomainUpdate)
 	if len(fields) == 0 {
 		return nil
 	}

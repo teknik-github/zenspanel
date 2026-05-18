@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"text/template"
+
+	"github.com/zenspanel/zenspanel/agent/safe"
 )
 
 const poolTmpl = `[zenspanel-{{.Username}}]
@@ -32,6 +34,12 @@ func poolPath(phpPoolBase, username, phpVersion string) string {
 }
 
 func CreatePool(phpPoolBase, username, phpVersion string) error {
+	if err := safe.Username(username); err != nil {
+		return err
+	}
+	if err := safe.PHPVersion(phpVersion); err != nil {
+		return err
+	}
 	tmpl := template.Must(template.New("pool").Parse(poolTmpl))
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, poolData{Username: username, PHPVersion: phpVersion}); err != nil {
@@ -48,6 +56,12 @@ func CreatePool(phpPoolBase, username, phpVersion string) error {
 }
 
 func DeletePool(phpPoolBase, username, phpVersion string) error {
+	if err := safe.Username(username); err != nil {
+		return err
+	}
+	if err := safe.PHPVersion(phpVersion); err != nil {
+		return err
+	}
 	path := poolPath(phpPoolBase, username, phpVersion)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove pool: %w", err)
@@ -56,6 +70,9 @@ func DeletePool(phpPoolBase, username, phpVersion string) error {
 }
 
 func ReloadFPM(phpVersion string) error {
+	if err := safe.PHPVersion(phpVersion); err != nil {
+		return err
+	}
 	svc := fmt.Sprintf("php%s-fpm", phpVersion)
 	cmd := exec.Command("systemctl", "reload", svc)
 	if out, err := cmd.CombinedOutput(); err != nil {
