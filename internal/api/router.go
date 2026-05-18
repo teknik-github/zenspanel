@@ -1,13 +1,14 @@
 package api
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/zenspanel/zenspanel/internal/api/handlers"
 	"github.com/zenspanel/zenspanel/internal/api/middleware"
 	"github.com/zenspanel/zenspanel/internal/auth"
 	"github.com/zenspanel/zenspanel/internal/store"
 )
-
 type Router struct {
 	auth          *handlers.AuthHandler
 	users         *handlers.UserHandler
@@ -59,7 +60,11 @@ func (r *Router) Setup() *gin.Engine {
 	e.Use(gin.Logger(), gin.Recovery())
 
 	// public routes
-	e.POST("/api/v1/auth/login", r.auth.Login)
+	// Login is rate-limited per IP to make brute-forcing usernames painful
+	// without locking out legitimate users on shared NATs (10/min is enough
+	// headroom for a typo-prone admin and well below what any sensible
+	// attacker needs to make progress).
+	e.POST("/api/v1/auth/login", middleware.RateLimit(10, time.Minute), r.auth.Login)
 
 	// audit middleware records mutating requests on both protected and
 	// external groups so the audit_logs table covers admin actions and
