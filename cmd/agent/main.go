@@ -120,6 +120,23 @@ func main() {
 		return nil, agentcgroups.DeleteSlice(p.Username)
 	})
 
+	srv.Register("cgroups.read_metrics", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		ram, disk, err := agentcgroups.ReadMetrics(p.Username, cfg.Paths.HomeBase)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{
+			"ram_used":  ram,
+			"disk_used": disk,
+		}, nil
+	})
+
 	// ssl
 	srv.Register("ssl.issue_letsencrypt", func(params json.RawMessage) (interface{}, error) {
 		var p struct {

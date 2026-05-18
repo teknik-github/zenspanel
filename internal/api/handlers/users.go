@@ -300,19 +300,25 @@ func (h *UserHandler) ChangePackage(c *gin.Context) {
 }
 
 // GetUsage returns the resource usage for a user in the {used, max} shape
-// the User Panel Dashboard expects. The actual numbers are placeholders for
-// now (see CONTRIBUTING.md §8 — real cgroup metrics not yet implemented),
-// but the shape MUST stay stable so the UI doesn't crash on undefined
-// fields when we wire up real metrics later.
+// the User Panel Dashboard expects. RAM and disk are read from the agent
+// (cgroup v2 + du); failures fall through to 0 so the dashboard always
+// renders even when a user hasn't been provisioned yet or the agent is
+// briefly unreachable.
 func (h *UserHandler) GetUsage(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+
+	user, err := h.users.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
 
 	domainsUsed, _ := h.users.CountDomains(id)
 	databasesUsed, _ := h.users.CountDatabases(id)
 
 	maxDomains, maxDatabases := 0, 0
 	maxDisk, maxRAM := int64(0), int64(0)
-	if user, err := h.users.GetByID(id); err == nil && user.PackageID.Valid {
+	if user.PackageID.Valid {
 		if pkg, err := h.packages.GetByID(uint64(user.PackageID.Int64)); err == nil {
 			maxDomains = pkg.MaxDomains
 			maxDatabases = pkg.MaxDatabases
@@ -321,13 +327,22 @@ func (h *UserHandler) GetUsage(c *gin.Context) {
 		}
 	}
 
+	var metrics struct {
+		RAMUsed  int64 `json:"ram_used"`
+		DiskUsed int64 `json:"disk_used"`
+	}
+	agentClient := agent.NewClient(h.agentSock)
+	_ = agentClient.Call("cgroups.read_metrics", map[string]interface{}{
+		"username": user.Username,
+	}, &metrics)
+
 	c.JSON(http.StatusOK, gin.H{
 		"user_id": id,
 		"usage": gin.H{
 			"domains":   gin.H{"used": domainsUsed, "max": maxDomains},
 			"databases": gin.H{"used": databasesUsed, "max": maxDatabases},
-			"disk":      gin.H{"used": 0, "max": maxDisk},
-			"ram":       gin.H{"used": 0, "max": maxRAM},
+			"disk":      gin.H{"used": metrics.DiskUsed, "max": maxDisk},
+			"ram":       gin.H{"used": metrics.RAMUsed, "max": maxRAM},
 		},
 	})
 }

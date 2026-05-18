@@ -1,11 +1,14 @@
 package cgroups
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/zenspanel/zenspanel/agent/safe"
 )
@@ -122,4 +125,38 @@ func AddPID(username string, pid int) error {
 	}
 	path := filepath.Join(slicePath(username), "cgroup.procs")
 	return os.WriteFile(path, []byte(strconv.Itoa(pid)), 0644)
+}
+
+// ReadMetrics returns the current RAM and disk usage for a user, in bytes.
+// RAM comes from the cgroup v2 memory.current pseudo-file. Disk is `du -sb`
+// over the user's home directory — there's no per-user cgroup disk metric,
+// only quota tooling, and quotas may not be enabled. We cap du to 5s to
+// avoid pinning the API on a giant home tree.
+//
+// A missing slice or home dir is not an error here — it just means the
+// user hasn't been provisioned yet (or was just deleted), so we return 0
+// for whichever one is missing rather than failing the whole call.
+func ReadMetrics(username, homeBase string) (ramUsed, diskUsed int64, err error) {
+	if err := safe.Username(username); err != nil {
+		return 0, 0, err
+	}
+
+	if data, readErr := os.ReadFile(filepath.Join(slicePath(username), "memory.current")); readErr == nil {
+		ramUsed, _ = strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
+	}
+
+	homeDir := filepath.Join(homeBase, username)
+	if _, statErr := os.Stat(homeDir); statErr == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		out, runErr := exec.CommandContext(ctx, "du", "-sb", homeDir).Output()
+		if runErr == nil {
+			fields := strings.Fields(string(out))
+			if len(fields) > 0 {
+				diskUsed, _ = strconv.ParseInt(fields[0], 10, 64)
+			}
+		}
+	}
+
+	return ramUsed, diskUsed, nil
 }
