@@ -1,19 +1,52 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useUsersStore } from '@/stores/users'
-import { usersApi } from '@/api/users'
+import { systemApi, type SystemStats } from '@/api/system'
 
 const usersStore = useUsersStore()
-const serverStatus = ref<Record<string, string>>({
-  nginx: 'unknown',
-  mysql: 'unknown',
-  redis: 'unknown',
+const stats = ref<SystemStats | null>(null)
+let timer: ReturnType<typeof setInterval> | null = null
+
+const ramPercent = computed(() => {
+  if (!stats.value || !stats.value.ram_total) return 0
+  return (stats.value.ram_used / stats.value.ram_total) * 100
 })
-const stats = ref({ total_users: 0, active_domains: 0, cpu_usage: 0, ram_gb: 0 })
+
+const ramLabel = computed(() => {
+  if (!stats.value) return '—'
+  const used = stats.value.ram_used / 1073741824
+  const total = stats.value.ram_total / 1073741824
+  return `${used.toFixed(1)} / ${total.toFixed(1)} GB`
+})
+
+async function loadStats() {
+  try {
+    const res = await systemApi.stats()
+    stats.value = res.data
+  } catch {
+    // keep last known good values; the dashboard shouldn't disappear
+    // because of one transient failure
+  }
+}
 
 onMounted(async () => {
-  await usersStore.fetch({ limit: 5, sort: 'created_at', order: 'desc' })
+  await Promise.all([
+    usersStore.fetch({ limit: 5, sort: 'created_at', order: 'desc' }),
+    loadStats(),
+  ])
+  // refresh stats every 10s while the dashboard is open
+  timer = setInterval(loadStats, 10000)
 })
+
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
+})
+
+function statusClass(status?: string) {
+  if (status === 'active') return 'bg-green-100 text-green-700'
+  if (status === 'inactive' || status === 'failed') return 'bg-red-100 text-red-600'
+  return 'bg-gray-100 text-gray-500'
+}
 </script>
 
 <template>
@@ -24,26 +57,32 @@ onMounted(async () => {
     <div class="grid grid-cols-4 gap-4">
       <div class="bg-white border border-gray-200 rounded-lg p-4">
         <div class="text-xs text-gray-400 uppercase tracking-wide">Total Users</div>
-        <div class="text-2xl font-bold text-gray-800 mt-1">{{ usersStore.total }}</div>
-        <div class="text-xs text-emerald-600 mt-1">Active accounts</div>
+        <div class="text-2xl font-bold text-gray-800 mt-1">{{ stats?.users.total ?? usersStore.total }}</div>
+        <div class="text-xs text-emerald-600 mt-1">
+          {{ stats?.users.active ?? 0 }} active · {{ stats?.users.suspended ?? 0 }} suspended
+        </div>
       </div>
       <div class="bg-white border border-gray-200 rounded-lg p-4">
         <div class="text-xs text-gray-400 uppercase tracking-wide">Active Domains</div>
-        <div class="text-2xl font-bold text-gray-800 mt-1">—</div>
-        <div class="text-xs text-gray-400 mt-1">Across all users</div>
+        <div class="text-2xl font-bold text-gray-800 mt-1">{{ stats?.domains.active ?? '—' }}</div>
+        <div class="text-xs text-gray-400 mt-1">
+          of {{ stats?.domains.total ?? 0 }} total
+        </div>
       </div>
       <div class="bg-white border border-gray-200 rounded-lg p-4">
         <div class="text-xs text-gray-400 uppercase tracking-wide">CPU Usage</div>
-        <div class="text-2xl font-bold text-gray-800 mt-1">—%</div>
+        <div class="text-2xl font-bold text-gray-800 mt-1">{{ stats ? stats.cpu_percent.toFixed(1) : '—' }}%</div>
         <div class="mt-2 bg-gray-100 rounded-full h-1.5">
-          <div class="bg-indigo-500 h-1.5 rounded-full" style="width: 0%"></div>
+          <div class="bg-indigo-500 h-1.5 rounded-full transition-all"
+            :style="{ width: (stats?.cpu_percent ?? 0) + '%' }"></div>
         </div>
       </div>
       <div class="bg-white border border-gray-200 rounded-lg p-4">
         <div class="text-xs text-gray-400 uppercase tracking-wide">RAM Usage</div>
-        <div class="text-2xl font-bold text-gray-800 mt-1">— GB</div>
+        <div class="text-2xl font-bold text-gray-800 mt-1">{{ ramLabel }}</div>
         <div class="mt-2 bg-gray-100 rounded-full h-1.5">
-          <div class="bg-amber-500 h-1.5 rounded-full" style="width: 0%"></div>
+          <div class="bg-amber-500 h-1.5 rounded-full transition-all"
+            :style="{ width: ramPercent + '%' }"></div>
         </div>
       </div>
     </div>
@@ -81,11 +120,10 @@ onMounted(async () => {
       <div class="bg-white border border-gray-200 rounded-lg p-4">
         <h2 class="font-semibold text-gray-800 text-sm mb-3">Server Status</h2>
         <div class="space-y-2 text-xs">
-          <div v-for="(status, service) in serverStatus" :key="service"
+          <div v-for="(status, service) in stats?.services ?? { nginx: 'unknown', mysql: 'unknown', redis: 'unknown' }" :key="service"
             class="flex items-center justify-between">
             <span class="text-gray-600 capitalize">{{ service }}</span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-medium"
-              :class="status === 'running' ? 'bg-green-100 text-green-700' : status === 'disabled' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'">
+            <span class="px-2 py-0.5 rounded text-[10px] font-medium" :class="statusClass(status)">
               {{ status }}
             </span>
           </div>
