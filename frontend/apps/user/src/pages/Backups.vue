@@ -11,7 +11,7 @@ const loading = ref(false)
 const confirmRestore = ref<number | null>(null)
 const confirmDelete = ref<number | null>(null)
 
-const hasPending = computed(() => backups.value.some(b => ['pending', 'running'].includes(b.status)))
+const hasPending = computed(() => backups.value.some(b => ['pending', 'running', 'restoring'].includes(b.status)))
 
 let pollInterval: ReturnType<typeof setInterval> | null = null
 
@@ -66,8 +66,10 @@ function statusClass(status: string) {
   return {
     pending: 'bg-yellow-100 text-yellow-700',
     running: 'bg-blue-100 text-blue-700',
+    restoring: 'bg-indigo-100 text-indigo-700',
     done: 'bg-green-100 text-green-700',
     failed: 'bg-red-100 text-red-600',
+    restore_failed: 'bg-red-100 text-red-600',
   }[status] || 'bg-gray-100 text-gray-500'
 }
 

@@ -46,7 +46,7 @@ func main() {
 	apiKeysH := handlers.NewAPIKeyHandler(apiKeyStore)
 	auditLogsH := handlers.NewAuditLogHandler(auditLogStore)
 	sslH := handlers.NewSSLHandler(domainStore, cfg.Agent.Socket, cfg.LetsEncrypt.Email, cfg.LetsEncrypt.Staging)
-	backupsH := handlers.NewBackupHandler(backupStore, userStore, databaseStore, cfg.Paths.HomeBase, cfg.Paths.BackupBase)
+	backupsH := handlers.NewBackupHandler(backupStore, userStore, databaseStore, cfg.Paths.HomeBase, cfg.Paths.BackupBase, cfg.Agent.Socket)
 	filesH := handlers.NewFileManagerHandler(userStore, cfg.Agent.Socket)
 	systemH := handlers.NewSystemHandler(userStore, domainStore, databaseStore)
 

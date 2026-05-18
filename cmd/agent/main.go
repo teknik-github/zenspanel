@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/zenspanel/zenspanel/agent"
+	agentbackup "github.com/zenspanel/zenspanel/agent/backup"
 	agentcgroups "github.com/zenspanel/zenspanel/agent/cgroups"
 	agentfilemanager "github.com/zenspanel/zenspanel/agent/filemanager"
 	agentmysql "github.com/zenspanel/zenspanel/agent/mysql"
@@ -261,6 +262,33 @@ func main() {
 			return nil, err
 		}
 		return nil, agentuser.Delete(p.Username)
+	})
+
+	// backup restore
+	srv.Register("backup.restore_files", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username    string `json:"username"`
+			ArchivePath string `json:"archive_path"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentbackup.RestoreFiles(p.Username, cfg.Paths.HomeBase, cfg.Paths.BackupBase, p.ArchivePath)
+	})
+
+	srv.Register("backup.restore_db", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			DBName      string `json:"db_name"`
+			ArchivePath string `json:"archive_path"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		dsn := cfg.Agent.MySQLAdminDSN
+		if dsn == "" {
+			dsn = cfg.Database.DSN
+		}
+		return nil, agentbackup.RestoreDB(p.DBName, p.ArchivePath, dsn, cfg.Paths.BackupBase)
 	})
 
 	// filemanager

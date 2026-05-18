@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/zenspanel/zenspanel/internal/agent"
 	"github.com/zenspanel/zenspanel/internal/auth"
 	"github.com/zenspanel/zenspanel/internal/store"
 )
@@ -22,15 +23,17 @@ type BackupHandler struct {
 	databases  *store.DatabaseStore
 	homeBase   string
 	backupBase string
+	agentSock  string
 }
 
-func NewBackupHandler(backups *store.BackupStore, users *store.UserStore, databases *store.DatabaseStore, homeBase, backupBase string) *BackupHandler {
+func NewBackupHandler(backups *store.BackupStore, users *store.UserStore, databases *store.DatabaseStore, homeBase, backupBase, agentSock string) *BackupHandler {
 	return &BackupHandler{
 		backups:    backups,
 		users:      users,
 		databases:  databases,
 		homeBase:   homeBase,
 		backupBase: backupBase,
+		agentSock:  agentSock,
 	}
 }
 
@@ -104,13 +107,81 @@ func (h *BackupHandler) Download(c *gin.Context) {
 	c.FileAttachment(row.FilePath.String, filepath.Base(row.FilePath.String))
 }
 
-// Restore is intentionally a stub. Restoring user data is destructive and
-// needs a confirm + diff step the UI does not have yet, so we surface 501
-// rather than ship a half-built dangerous path.
+// Restore replays a backup over the user's current files and databases.
+// This is destructive: existing files in the home directory are wiped
+// before extract, and existing tables in each managed database are
+// overwritten by the dumped state. Ownership is checked against the
+// caller (admin override allowed). The actual work runs in a goroutine
+// so the UI gets an immediate response and can poll the row's status
+// the same way it polls Create.
 func (h *BackupHandler) Restore(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{
-		"error": "restore is not implemented yet — download the archive and restore manually",
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	row, err := h.backups.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "backup not found"})
+		return
+	}
+	if auth.GetRole(c) != "admin" && row.UserID != auth.GetUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	if row.Status != "done" || !row.FilePath.Valid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "backup must be in 'done' status with a file path"})
+		return
+	}
+	user, err := h.users.GetByID(row.UserID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "owner user not found"})
+		return
+	}
+
+	go h.runRestore(row.ID, row.UserID, user.Username, row.Type, row.FilePath.String)
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":   "restore started",
+		"backup_id": row.ID,
 	})
+}
+
+// runRestore is the goroutine that drives a restore through to terminal
+// state. Status transitions: done -> restoring -> done|restore_failed.
+// We keep the row at "done" on success so the Restore button stays
+// available for re-runs. Failures land on "restore_failed" with the
+// underlying error in error_msg so the operator can see why before
+// kicking it again.
+func (h *BackupHandler) runRestore(backupID, userID uint64, username, kind, archivePath string) {
+	_ = h.backups.UpdateStatus(backupID, "restoring", archivePath, 0, "")
+
+	agentClient := agent.NewClient(h.agentSock)
+
+	if kind == "files" || kind == "full" {
+		if err := agentClient.Call("backup.restore_files", map[string]interface{}{
+			"username":     username,
+			"archive_path": archivePath,
+		}, nil); err != nil {
+			_ = h.backups.UpdateStatus(backupID, "restore_failed", archivePath, 0, "files: "+err.Error())
+			return
+		}
+	}
+
+	if kind == "db" || kind == "full" {
+		dbs, err := h.databases.ListByUserID(userID)
+		if err != nil {
+			_ = h.backups.UpdateStatus(backupID, "restore_failed", archivePath, 0, "list dbs: "+err.Error())
+			return
+		}
+		for _, db := range dbs {
+			if err := agentClient.Call("backup.restore_db", map[string]interface{}{
+				"db_name":      db.DBName,
+				"archive_path": archivePath,
+			}, nil); err != nil {
+				_ = h.backups.UpdateStatus(backupID, "restore_failed", archivePath, 0, "db "+db.DBName+": "+err.Error())
+				return
+			}
+		}
+	}
+
+	_ = h.backups.UpdateStatus(backupID, "done", archivePath, 0, "")
 }
 
 func (h *BackupHandler) Delete(c *gin.Context) {
