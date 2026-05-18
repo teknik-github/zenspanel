@@ -246,17 +246,19 @@ calling the change done. Type checking does not verify layout or behavior.
 
 Captured here so future work doesn't waste time discovering they are stubs:
 
-- **Backups handler** is missing (`internal/api/handlers/`) even though the
-  store, migration, and frontend page exist. Clicking backup actions in the
-  User Panel currently 404s.
-- **API key authentication** is described in README and the store has
-  `ValidateKey`, but no middleware wires it up — only JWT auth is enforced.
-- **Audit logging** has migration, store, and List endpoint but no producer
-  side: nothing in the request flow currently calls `AuditLogStore.Create`.
-- **Rate limiting** on the login endpoint is described in the README but not
-  implemented.
-- **`UserHandler.GetUsage`** returns hardcoded zeros — real cgroup metrics
-  collection is not implemented.
+- **Backup restore** is intentionally a 501 stub. Restoring user data is
+  destructive and needs a confirm/diff UI we don't have yet. Download the
+  archive and restore by hand for now.
+- **Multi-server rate limiting** — the login limiter at
+  `internal/api/middleware/ratelimit.go` is in-memory (`sync.Map`).
+  Single-server deployments are fully covered, but a fleet behind a load
+  balancer will lose the counter at the proxy layer. Swap in a Redis-backed
+  store before scaling out.
+- **CPU metrics** — `cgroups.read_metrics` returns RAM and disk only; CPU
+  usage from `cpu.stat` would round out the dashboard but isn't wired yet.
+- **File upload via UI** — the file manager edits text files inline via
+  Monaco. Uploading binary files requires SCP/SFTP today; a multipart
+  upload endpoint + drag-and-drop would close the gap.
 
 When picking these up, do the work end-to-end including a §6-style
 checklist and a CHANGELOG entry.
