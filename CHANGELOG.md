@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- API: store models now declare snake_case `json` tags on every field — without them Go's encoder/decoder used PascalCase keys (e.g. `CPUQuota`) so the Vue frontend (which speaks snake_case) silently failed to bind any field. Symptoms: `POST /api/v1/packages` returned 500 (empty `php_versions_allowed` rejected by MySQL JSON column), and list pages rendered cards with `undefined` values
 - Admin Panel & User Panel: added missing `postcss.config.js` for both apps — without it Tailwind directives (`@tailwind base/components/utilities`) were not processed and the production CSS was a 60-byte raw passthrough, leaving every page unstyled
 - Admin Panel: `vite.config.ts` updated with `server.host: '0.0.0.0'` so dev mode is reachable when running on a remote server
 - User Panel: `vite.config.ts` updated with `server.host: '0.0.0.0'` for the same reason
