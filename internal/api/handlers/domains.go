@@ -143,6 +143,37 @@ func (h *DomainHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// If PHP version changed, the user's FPM pool for the new version must
+	// exist and the nginx vhost has to be regenerated to point its
+	// fastcgi_pass at the right socket. The DB update alone changes nothing
+	// the kernel can see — without these calls, the site stays on the old
+	// PHP until the next restart of the agent or a manual reload.
+	if newPHP, ok := fields["php_version"].(string); ok && newPHP != domain.PHPVersion {
+		user, uerr := h.users.GetByID(domain.UserID)
+		if uerr == nil {
+			agentClient := agent.NewClient(h.agentSock)
+			// Ensure the new pool exists for this user; create_pool is
+			// idempotent at the file level (overwrite).
+			_ = agentClient.Call("phpfpm.create_pool", map[string]interface{}{
+				"username":    user.Username,
+				"php_version": newPHP,
+			}, nil)
+			_ = agentClient.Call("phpfpm.reload", map[string]interface{}{
+				"php_version": newPHP,
+			}, nil)
+			// Rewrite the vhost so fastcgi_pass points at the new socket.
+			_ = agentClient.Call("nginx.create_vhost", map[string]interface{}{
+				"domain":      domain.Domain,
+				"username":    user.Username,
+				"php_version": newPHP,
+				"doc_root":    domain.DocumentRoot,
+			}, nil)
+		} else {
+			log.Printf("php_version reload: lookup user %d failed: %v", domain.UserID, uerr)
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "updated"})
 }
 

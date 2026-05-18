@@ -85,6 +85,16 @@ func main() {
 		return nil, agentphpfpm.DeletePool(cfg.Paths.PHPPoolBase, p.Username, p.PHPVersion)
 	})
 
+	srv.Register("phpfpm.reload", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			PHPVersion string `json:"php_version"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentphpfpm.ReloadFPM(p.PHPVersion)
+	})
+
 	// cgroups
 	srv.Register("cgroups.create_slice", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
