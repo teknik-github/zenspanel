@@ -21,6 +21,7 @@ type Router struct {
 	ssl           *handlers.SSLHandler
 	backups       *handlers.BackupHandler
 	files         *handlers.FileManagerHandler
+	system        *handlers.SystemHandler
 	apiKeyStore   *store.APIKeyStore
 	auditLogStore *store.AuditLogStore
 	jwtSecret     string
@@ -38,6 +39,7 @@ func NewRouter(
 	sslH *handlers.SSLHandler,
 	backupsH *handlers.BackupHandler,
 	filesH *handlers.FileManagerHandler,
+	systemH *handlers.SystemHandler,
 	apiKeyStore *store.APIKeyStore,
 	auditLogStore *store.AuditLogStore,
 	jwtSecret string,
@@ -54,6 +56,7 @@ func NewRouter(
 		ssl:           sslH,
 		backups:       backupsH,
 		files:         filesH,
+		system:        systemH,
 		apiKeyStore:   apiKeyStore,
 		auditLogStore: auditLogStore,
 		jwtSecret:     jwtSecret,
@@ -130,6 +133,9 @@ func (r *Router) Setup() *gin.Engine {
 
 		// audit logs
 		api.GET("/audit-logs", auth.RequireRole("admin"), r.auditLogs.List)
+
+		// system stats — admin dashboard host metrics
+		api.GET("/system/stats", auth.RequireRole("admin"), r.system.Stats)
 
 		// backups (per-user)
 		api.GET("/backups", r.backups.List)
