@@ -156,7 +156,17 @@ func main() {
 	})
 
 	// mysql
-	mysqlClient, err := agentmysql.New(cfg.Database.DSN)
+	// The agent needs admin-level access to CREATE DATABASE / CREATE USER /
+	// GRANT — the panel-user DSN only has rights on its own schema, so we
+	// require a separate admin DSN. Fall back to the panel DSN only if the
+	// admin one isn't configured (which will fail loudly the first time a
+	// db is provisioned, surfacing the misconfiguration).
+	mysqlDSN := cfg.Agent.MySQLAdminDSN
+	if mysqlDSN == "" {
+		mysqlDSN = cfg.Database.DSN
+		log.Printf("WARN: agent.mysql_admin_dsn not set; falling back to database.dsn — CREATE DATABASE will fail unless that user has admin grants")
+	}
+	mysqlClient, err := agentmysql.New(mysqlDSN)
 	if err != nil {
 		log.Fatalf("failed to connect agent mysql: %v", err)
 	}

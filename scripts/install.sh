@@ -410,6 +410,7 @@ jwt:
 agent:
   socket: "/run/zenspanel/agent.sock"
   socket_group: "zenspanel"
+  mysql_admin_dsn: "root:${MYSQL_ROOT_PASS}@tcp(127.0.0.1:3306)/?parseTime=true&multiStatements=true"
 
 paths:
   home_base: "${ZENSPANEL_DATA}/home"

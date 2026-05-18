@@ -34,8 +34,9 @@ type JWTConfig struct {
 }
 
 type AgentConfig struct {
-	Socket      string
-	SocketGroup string `mapstructure:"socket_group"`
+	Socket         string
+	SocketGroup    string `mapstructure:"socket_group"`
+	MySQLAdminDSN  string `mapstructure:"mysql_admin_dsn"`
 }
 
 type PathsConfig struct {
