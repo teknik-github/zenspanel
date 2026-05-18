@@ -295,6 +295,14 @@ build_zenspanel() {
     (cd "$src" && /usr/local/go/bin/go build -o "$ZENSPANEL_DIR/bin/zenspanel-agent" ./cmd/agent) || \
         die "Failed to build zenspanel-agent"
 
+    log_info "Building zenspanel-cli..."
+    (cd "$src" && /usr/local/go/bin/go build -o "$ZENSPANEL_DIR/bin/zenspanel-cli" ./cmd/cli) || \
+        die "Failed to build zenspanel-cli"
+
+    # Symlink the CLI into /usr/local/bin so admins can run `zenspanel-cli`
+    # from anywhere without remembering the install path.
+    ln -sf "$ZENSPANEL_DIR/bin/zenspanel-cli" /usr/local/bin/zenspanel-cli
+
     # Build frontend
     log_info "Building frontend (this may take a few minutes)..."
     (cd "$src/frontend" && \

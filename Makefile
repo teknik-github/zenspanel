@@ -3,6 +3,7 @@
 build:
 	go build -o bin/zenspanel-api ./cmd/api
 	go build -o bin/zenspanel-agent ./cmd/agent
+	go build -o bin/zenspanel-cli ./cmd/cli
 
 test:
 	go test ./... -v -count=1
