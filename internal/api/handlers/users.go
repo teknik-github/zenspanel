@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/zenspanel/zenspanel/internal/agent"
 	"github.com/zenspanel/zenspanel/internal/auth"
 	"github.com/zenspanel/zenspanel/internal/store"
 )
@@ -126,10 +127,12 @@ func (h *UserHandler) Get(c *gin.Context) {
 
 func (h *UserHandler) Create(c *gin.Context) {
 	var req struct {
-		Username  string `json:"username" binding:"required"`
-		Email     string `json:"email" binding:"required"`
-		Password  string `json:"password" binding:"required"`
-		PackageID uint64 `json:"package_id"`
+		Username        string `json:"username" binding:"required"`
+		Email           string `json:"email" binding:"required"`
+		Password        string `json:"password" binding:"required"`
+		PackageID       uint64 `json:"package_id"`
+		TerminalEnabled bool   `json:"terminal_enabled"`
+		BackupEnabled   bool   `json:"backup_enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -151,12 +154,14 @@ func (h *UserHandler) Create(c *gin.Context) {
 	newUID := maxUID + 1
 
 	user := &store.User{
-		Username:     req.Username,
-		Email:        req.Email,
-		PasswordHash: hash,
-		Role:         "user",
-		LinuxUID:     newUID,
-		Status:       "active",
+		Username:        req.Username,
+		Email:           req.Email,
+		PasswordHash:    hash,
+		Role:            "user",
+		LinuxUID:        newUID,
+		Status:          "active",
+		TerminalEnabled: req.TerminalEnabled,
+		BackupEnabled:   req.BackupEnabled,
 	}
 	if req.PackageID > 0 {
 		user.PackageID.Int64 = int64(req.PackageID)
@@ -167,7 +172,60 @@ func (h *UserHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, user)
+
+	// Provision system resources via the agent. If the Linux user creation
+	// fails the panel row is rolled back so the next attempt with the same
+	// username is not blocked by the unique constraint.
+	agentClient := agent.NewClient(h.agentSock)
+	if err := agentClient.Call("user.create", map[string]interface{}{
+		"username": user.Username,
+		"uid":      user.LinuxUID,
+	}, nil); err != nil {
+		_ = h.users.Delete(user.ID)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "provision linux user: " + err.Error()})
+		return
+	}
+
+	// Cgroup slice and PHP-FPM pool only make sense once a package picks the
+	// limits and PHP version. Failures here are logged into the response but
+	// do not roll back the row — the user can still log in, and an admin can
+	// retry by reassigning the package.
+	provisionWarnings := []string{}
+	if user.PackageID.Valid {
+		pkg, err := h.packages.GetByID(uint64(user.PackageID.Int64))
+		if err == nil {
+			if err := agentClient.Call("cgroups.create_slice", map[string]interface{}{
+				"username":     user.Username,
+				"cpu_quota":    pkg.CPUQuota,
+				"memory_limit": pkg.MemoryLimit,
+			}, nil); err != nil {
+				provisionWarnings = append(provisionWarnings, "cgroups: "+err.Error())
+			}
+			if err := agentClient.Call("phpfpm.create_pool", map[string]interface{}{
+				"username":    user.Username,
+				"php_version": "8.3",
+			}, nil); err != nil {
+				provisionWarnings = append(provisionWarnings, "phpfpm: "+err.Error())
+			}
+		}
+	}
+
+	resp := gin.H{
+		"id":               user.ID,
+		"username":         user.Username,
+		"email":            user.Email,
+		"role":             user.Role,
+		"linux_uid":        user.LinuxUID,
+		"package_id":       user.PackageID,
+		"status":           user.Status,
+		"terminal_enabled": user.TerminalEnabled,
+		"backup_enabled":   user.BackupEnabled,
+		"created_at":       user.CreatedAt,
+	}
+	if len(provisionWarnings) > 0 {
+		resp["warnings"] = provisionWarnings
+	}
+	c.JSON(http.StatusCreated, resp)
 }
 
 func (h *UserHandler) Update(c *gin.Context) {

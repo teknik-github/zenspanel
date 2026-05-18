@@ -8,7 +8,7 @@ const router = createRouter({
     {
       path: '/',
       component: () => import('@/layouts/AdminLayout.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: true, requiresAdmin: true },
       children: [
         { path: '', redirect: '/dashboard' },
         { path: 'dashboard', component: () => import('@/pages/Dashboard.vue') },
@@ -29,9 +29,17 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
+  if (!to.meta.requiresAuth) return
   const auth = useAuthStore()
-  if (to.meta.requiresAuth && !auth.token) return '/login'
+  if (!auth.token) return '/login'
+  if (!auth.user) {
+    try { await auth.fetchMe() } catch { return '/login' }
+  }
+  if (to.meta.requiresAdmin && auth.user?.role !== 'admin') {
+    auth.logout()
+    return '/login'
+  }
 })
 
 export default router

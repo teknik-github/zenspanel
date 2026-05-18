@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Admin Panel: "Add User" button + modal on the Users page. Form covers username, email, password, package, and the terminal/backup override flags. Uses the existing `POST /api/v1/users` endpoint
+- API: `users.Create` now provisions system resources after the DB insert — calls `agent.user.create` (Linux user + home dir) and, when a package is assigned, `agent.cgroups.create_slice` and `agent.phpfpm.create_pool`. If the Linux user step fails the panel row is rolled back. cgroups and phpfpm failures surface as a `warnings` array in the response so the row stands and the admin can retry by reassigning the package
+- API: `users.Create` request body now accepts `terminal_enabled` and `backup_enabled` so the admin can toggle these at creation time
+
+### Security
+- Admin Panel route guard now enforces `role === 'admin'` on every protected route (previously the guard checked only for the presence of a token, so any authenticated panel user who guessed `/admin/` could browse the admin UI). The guard awaits `auth.fetchMe()` if the user is not yet loaded and logs the session out before redirecting on role mismatch
+
 ### Fixed
 - Security: dynamic UPDATE in `users.go` and `domains.go` previously interpolated arbitrary JSON keys into SQL identifiers. With `multiStatements=true` in the DSN this enabled SQL injection (e.g. `{"x; DROP TABLE users--": 1}`). Now filtered through column allowlists in `internal/store/safefields.go`
 - Security: `users` list `ORDER BY` previously took an unvalidated `sort` query parameter directly into SQL. Now validated against an explicit column allowlist
