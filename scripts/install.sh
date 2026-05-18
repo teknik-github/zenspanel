@@ -243,6 +243,19 @@ build_zenspanel() {
     mkdir -p /etc/nginx/zenspanel
     mkdir -p /etc/nginx/ssl/zenspanel
 
+    # Ensure the zenspanel group exists before we ship ownership at it. The
+    # zenspanel system user is created later in setup_services(); the group
+    # is created here too so subsequent useradd -g zenspanel succeeds.
+    getent group zenspanel >/dev/null || groupadd -r zenspanel
+
+    # API runs as the zenspanel user and writes to home/ (when not via the
+    # agent) and backups/. Without these chown calls the backup handler's
+    # tar would fail with permission denied on first run.
+    if id zenspanel &>/dev/null; then
+        chown -R zenspanel:zenspanel "$ZENSPANEL_DATA"
+        chmod 750 "$ZENSPANEL_DATA/home" "$ZENSPANEL_DATA/backups"
+    fi
+
     local src="$ZENSPANEL_DIR/src"
 
     # Use local source if running from repo, otherwise clone
@@ -485,8 +498,13 @@ EOF
 setup_services() {
     log_section "Setting up systemd services"
 
-    # Create zenspanel system user
-    id zenspanel &>/dev/null || useradd -r -s /bin/false -d "$ZENSPANEL_DIR" zenspanel
+    # Create zenspanel system user + group. groupadd is explicit so the
+    # config field agent.socket_group: "zenspanel" and the chown on
+    # /run/zenspanel below have a guaranteed-existing group to point at,
+    # rather than relying on useradd's implicit group creation behaviour
+    # which differs between distros.
+    getent group zenspanel >/dev/null || groupadd -r zenspanel
+    id zenspanel &>/dev/null || useradd -r -g zenspanel -s /bin/false -d "$ZENSPANEL_DIR" zenspanel
 
     # Socket directory
     mkdir -p /run/zenspanel
@@ -544,6 +562,8 @@ EOF
     # Permissions
     chown -R zenspanel:zenspanel "$ZENSPANEL_DIR/bin"
     chown -R zenspanel:zenspanel "$ZENSPANEL_LOG"
+    chown -R zenspanel:zenspanel "$ZENSPANEL_DATA"
+    chmod 750 "$ZENSPANEL_DATA/home" "$ZENSPANEL_DATA/backups"
     chown zenspanel:zenspanel "$ZENSPANEL_CONF/config.yaml"
     # Agent needs to read config too
     chmod 640 "$ZENSPANEL_CONF/config.yaml"
