@@ -15,6 +15,7 @@ type Router struct {
 	phpVersions *handlers.PHPVersionHandler
 	apiKeys     *handlers.APIKeyHandler
 	auditLogs   *handlers.AuditLogHandler
+	ssl         *handlers.SSLHandler
 	jwtSecret   string
 }
 
@@ -27,6 +28,7 @@ func NewRouter(
 	phpVersionsH *handlers.PHPVersionHandler,
 	apiKeysH *handlers.APIKeyHandler,
 	auditLogsH *handlers.AuditLogHandler,
+	sslH *handlers.SSLHandler,
 	jwtSecret string,
 ) *Router {
 	return &Router{
@@ -38,6 +40,7 @@ func NewRouter(
 		phpVersions: phpVersionsH,
 		apiKeys:     apiKeysH,
 		auditLogs:   auditLogsH,
+		ssl:         sslH,
 		jwtSecret:   jwtSecret,
 	}
 }
@@ -79,6 +82,10 @@ func (r *Router) Setup() *gin.Engine {
 		api.POST("/domains", r.domains.Create)
 		api.PUT("/domains/:id", r.domains.Update)
 		api.DELETE("/domains/:id", r.domains.Delete)
+
+		// ssl (per-domain)
+		api.POST("/domains/:id/ssl", r.ssl.Issue)
+		api.DELETE("/domains/:id/ssl", r.ssl.Remove)
 
 		// databases
 		api.GET("/databases", r.databases.List)

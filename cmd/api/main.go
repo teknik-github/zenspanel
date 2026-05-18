@@ -44,11 +44,12 @@ func main() {
 	phpVersionsH := handlers.NewPHPVersionHandler(phpVersionStore)
 	apiKeysH := handlers.NewAPIKeyHandler(apiKeyStore)
 	auditLogsH := handlers.NewAuditLogHandler(auditLogStore)
+	sslH := handlers.NewSSLHandler(domainStore, cfg.Agent.Socket, cfg.LetsEncrypt.Email, cfg.LetsEncrypt.Staging)
 
 	// router
 	router := api.NewRouter(
 		authH, usersH, packagesH, domainsH, databasesH,
-		phpVersionsH, apiKeysH, auditLogsH,
+		phpVersionsH, apiKeysH, auditLogsH, sslH,
 		cfg.JWT.Secret,
 	)
 	engine := router.Setup()
