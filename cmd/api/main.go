@@ -39,7 +39,7 @@ func main() {
 	authH := handlers.NewAuthHandler(userStore, cfg.JWT.Secret, cfg.JWT.Expiry)
 	usersH := handlers.NewUserHandler(userStore, packageStore, cfg.Agent.Socket)
 	packagesH := handlers.NewPackageHandler(packageStore)
-	domainsH := handlers.NewDomainHandler(domainStore, userStore)
+	domainsH := handlers.NewDomainHandler(domainStore, userStore, cfg.Agent.Socket, cfg.Paths.HomeBase)
 	databasesH := handlers.NewDatabaseHandler(databaseStore)
 	phpVersionsH := handlers.NewPHPVersionHandler(phpVersionStore)
 	apiKeysH := handlers.NewAPIKeyHandler(apiKeyStore)

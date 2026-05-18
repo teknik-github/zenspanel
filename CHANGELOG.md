@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Domain create/delete now provision the actual nginx vhost. `POST /domains` calls `agent.nginx.create_vhost` after the DB insert and rolls the row back on failure (so the unique domain constraint doesn't block retries). After successful provision, the domain status is flipped from `pending` to `active`. `DELETE /domains/:id` now calls `agent.nginx.delete_vhost` first; if the agent fails the panel row is still removed because an orphan row blocks recreate
 - Admin Panel: "Add User" button + modal on the Users page. Form covers username, email, password, package, and the terminal/backup override flags. Uses the existing `POST /api/v1/users` endpoint
 - API: `users.Create` now provisions system resources after the DB insert — calls `agent.user.create` (Linux user + home dir) and, when a package is assigned, `agent.cgroups.create_slice` and `agent.phpfpm.create_pool`. If the Linux user step fails the panel row is rolled back. cgroups and phpfpm failures surface as a `warnings` array in the response so the row stands and the admin can retry by reassigning the package
 - API: `users.Create` request body now accepts `terminal_enabled` and `backup_enabled` so the admin can toggle these at creation time

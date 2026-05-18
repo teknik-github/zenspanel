@@ -1,21 +1,25 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/zenspanel/zenspanel/internal/agent"
 	"github.com/zenspanel/zenspanel/internal/auth"
 	"github.com/zenspanel/zenspanel/internal/store"
 )
 
 type DomainHandler struct {
-	domains *store.DomainStore
-	users   *store.UserStore
+	domains   *store.DomainStore
+	users     *store.UserStore
+	agentSock string
+	homeBase  string
 }
 
-func NewDomainHandler(domains *store.DomainStore, users *store.UserStore) *DomainHandler {
-	return &DomainHandler{domains: domains, users: users}
+func NewDomainHandler(domains *store.DomainStore, users *store.UserStore, agentSock, homeBase string) *DomainHandler {
+	return &DomainHandler{domains: domains, users: users, agentSock: agentSock, homeBase: homeBase}
 }
 
 func (h *DomainHandler) List(c *gin.Context) {
@@ -85,7 +89,7 @@ func (h *DomainHandler) Create(c *gin.Context) {
 	domain := &store.Domain{
 		UserID:       userID,
 		Domain:       req.Domain,
-		DocumentRoot: "/home/zenspanel/" + user.Username + "/public_html/" + req.Domain,
+		DocumentRoot: h.homeBase + "/" + user.Username + "/public_html/" + req.Domain,
 		PHPVersion:   phpVersion,
 		SSLType:      "none",
 		Status:       "pending",
@@ -95,6 +99,25 @@ func (h *DomainHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Provision the nginx vhost. On agent failure we roll back the row so
+	// the unique constraint on `domain` doesn't permanently block retries.
+	agentClient := agent.NewClient(h.agentSock)
+	if err := agentClient.Call("nginx.create_vhost", map[string]interface{}{
+		"domain":      domain.Domain,
+		"username":    user.Username,
+		"php_version": domain.PHPVersion,
+		"doc_root":    domain.DocumentRoot,
+	}, nil); err != nil {
+		_ = h.domains.Delete(domain.ID)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "provision nginx vhost: " + err.Error()})
+		return
+	}
+
+	if err := h.domains.Update(domain.ID, map[string]interface{}{"status": "active"}); err == nil {
+		domain.Status = "active"
+	}
+
 	c.JSON(http.StatusCreated, domain)
 }
 
@@ -134,6 +157,17 @@ func (h *DomainHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
+
+	// Ask the agent to remove the nginx vhost first. If it fails we still
+	// want to delete the panel row — leaving an orphan row is worse than
+	// leaving an orphan .conf because the row blocks recreate.
+	agentClient := agent.NewClient(h.agentSock)
+	if err := agentClient.Call("nginx.delete_vhost", map[string]interface{}{
+		"domain": domain.Domain,
+	}, nil); err != nil {
+		log.Printf("nginx.delete_vhost failed for %s: %v", domain.Domain, err)
+	}
+
 	if err := h.domains.Delete(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
