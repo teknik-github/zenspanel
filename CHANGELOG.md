@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Admin Panel: `vite.config.ts` updated with `server.host: '0.0.0.0'` so dev mode is reachable when running on a remote server
+- User Panel: `vite.config.ts` updated with `server.host: '0.0.0.0'` for the same reason
+- `frontend/pnpm-workspace.yaml`: replaced non-standard `allowBuilds` field with pnpm-supported `onlyBuiltDependencies` so esbuild and vue-demi build scripts are auto-approved during install
 - Installer: migrations now run reliably by starting API binary briefly (timeout 30s) and verifying table count
 - Installer: admin password hash uses `php -r "password_hash(...)"` instead of python3-bcrypt which may not be installed
 - Installer: config symlink created at `ZENSPANEL_DIR/src/config.yaml` so API finds config on startup
