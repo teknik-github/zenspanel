@@ -1,0 +1,215 @@
+package handlers
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/zenspanel/zenspanel/internal/auth"
+	"github.com/zenspanel/zenspanel/internal/store"
+)
+
+type BackupHandler struct {
+	backups    *store.BackupStore
+	users      *store.UserStore
+	databases  *store.DatabaseStore
+	homeBase   string
+	backupBase string
+}
+
+func NewBackupHandler(backups *store.BackupStore, users *store.UserStore, databases *store.DatabaseStore, homeBase, backupBase string) *BackupHandler {
+	return &BackupHandler{
+		backups:    backups,
+		users:      users,
+		databases:  databases,
+		homeBase:   homeBase,
+		backupBase: backupBase,
+	}
+}
+
+func (h *BackupHandler) List(c *gin.Context) {
+	uid := auth.GetUserID(c)
+	rows, err := h.backups.ListByUserID(uid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": rows})
+}
+
+func (h *BackupHandler) Create(c *gin.Context) {
+	var req struct {
+		Type string `json:"type" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Type != "full" && req.Type != "db" && req.Type != "files" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "type must be full, db, or files"})
+		return
+	}
+	uid := auth.GetUserID(c)
+	user, err := h.users.GetByID(uid)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	if !user.BackupEnabled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "backups not enabled for this user"})
+		return
+	}
+
+	row := &store.Backup{
+		UserID: uid,
+		Type:   req.Type,
+		Status: "pending",
+	}
+	if err := h.backups.Create(row); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Spawn the actual archival in a goroutine so the API returns
+	// immediately. The frontend polls List() every 5s while a row is
+	// pending or running, so progress lands in the UI without an open
+	// connection.
+	go h.runBackup(row.ID, uid, user.Username, req.Type)
+
+	c.JSON(http.StatusAccepted, row)
+}
+
+func (h *BackupHandler) Download(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	row, err := h.backups.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "backup not found"})
+		return
+	}
+	if auth.GetRole(c) != "admin" && row.UserID != auth.GetUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	if !row.FilePath.Valid || row.Status != "done" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "backup not ready"})
+		return
+	}
+	c.FileAttachment(row.FilePath.String, filepath.Base(row.FilePath.String))
+}
+
+// Restore is intentionally a stub. Restoring user data is destructive and
+// needs a confirm + diff step the UI does not have yet, so we surface 501
+// rather than ship a half-built dangerous path.
+func (h *BackupHandler) Restore(c *gin.Context) {
+	c.JSON(http.StatusNotImplemented, gin.H{
+		"error": "restore is not implemented yet — download the archive and restore manually",
+	})
+}
+
+func (h *BackupHandler) Delete(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	row, err := h.backups.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "backup not found"})
+		return
+	}
+	if auth.GetRole(c) != "admin" && row.UserID != auth.GetUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	if row.FilePath.Valid {
+		if err := os.Remove(row.FilePath.String); err != nil && !os.IsNotExist(err) {
+			log.Printf("backup delete: remove file %s: %v", row.FilePath.String, err)
+		}
+	}
+	if err := h.backups.Delete(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+}
+
+// runBackup performs the actual archival in the background. Status
+// transitions are persisted so the UI can show progress / error message.
+//
+// Backup files land at <backupBase>/<username>/<timestamp>-<kind>.tar.gz.
+// "db"     — mysqldump of every panel-tracked DB the user owns
+// "files"  — tar of the user's home directory
+// "full"   — both, bundled together
+//
+// mysqldump is invoked as the panel system user; getting per-DB
+// credentials would mean storing user passwords (we don't), so this
+// relies on a `[mysqldump]` block in /etc/mysql/conf.d that authenticates
+// as a backup-only MySQL user with read access to all schemas. That
+// setup is documented in CONTRIBUTING.md.
+func (h *BackupHandler) runBackup(id, userID uint64, username, kind string) {
+	_ = h.backups.UpdateStatus(id, "running", "", 0, "")
+
+	dir := filepath.Join(h.backupBase, username)
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		_ = h.backups.UpdateStatus(id, "failed", "", 0, "mkdir: "+err.Error())
+		return
+	}
+	stamp := time.Now().Format("20060102-150405")
+	archivePath := filepath.Join(dir, fmt.Sprintf("%s-%s.tar.gz", stamp, kind))
+
+	tmpDir, err := os.MkdirTemp("", "zp-backup-*")
+	if err != nil {
+		_ = h.backups.UpdateStatus(id, "failed", "", 0, "mktemp: "+err.Error())
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tarArgs := []string{"-czf", archivePath}
+
+	if kind == "db" || kind == "full" {
+		dbs, err := h.databases.ListByUserID(userID)
+		if err != nil {
+			_ = h.backups.UpdateStatus(id, "failed", "", 0, "list dbs: "+err.Error())
+			return
+		}
+		dumpPath := filepath.Join(tmpDir, "databases.sql")
+		f, err := os.Create(dumpPath)
+		if err != nil {
+			_ = h.backups.UpdateStatus(id, "failed", "", 0, "create dump: "+err.Error())
+			return
+		}
+		for _, db := range dbs {
+			cmd := exec.Command("mysqldump", "--single-transaction", db.DBName)
+			cmd.Stdout = f
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				f.Close()
+				_ = h.backups.UpdateStatus(id, "failed", "", 0, "mysqldump "+db.DBName+": "+err.Error())
+				return
+			}
+		}
+		f.Close()
+		tarArgs = append(tarArgs, "-C", tmpDir, "databases.sql")
+	}
+
+	if kind == "files" || kind == "full" {
+		tarArgs = append(tarArgs, "-C", h.homeBase, username)
+	}
+
+	cmd := exec.Command("tar", tarArgs...)
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		_ = h.backups.UpdateStatus(id, "failed", "", 0, "tar: "+err.Error())
+		return
+	}
+
+	info, err := os.Stat(archivePath)
+	if err != nil {
+		_ = h.backups.UpdateStatus(id, "failed", "", 0, "stat: "+err.Error())
+		return
+	}
+	_ = h.backups.UpdateStatus(id, "done", archivePath, info.Size(), "")
+}
