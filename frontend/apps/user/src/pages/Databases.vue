@@ -43,7 +43,21 @@ async function deleteDatabase(id: number) {
 }
 
 function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text)
+  // navigator.clipboard is undefined in non-secure contexts (plain HTTP).
+  // Fall back to the legacy execCommand-based copy so this works during
+  // local testing before TLS is set up.
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text)
+    return
+  }
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.position = 'fixed'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  try { document.execCommand('copy') } catch {}
+  document.body.removeChild(ta)
 }
 </script>
 
