@@ -71,3 +71,32 @@ func (c *Client) DropDatabase(dbName, dbUser string) error {
 	}
 	return nil
 }
+
+// ResetUserPassword changes a panel-managed MySQL user's password to a new
+// value, used by the phpMyAdmin SSO flow: we mint a one-shot password,
+// hand it to phpMyAdmin's auto-submit form, and discard it. The original
+// password is gone — we never stored it — so a new one is the only way
+// to log the user in non-interactively.
+//
+// Same identifier-and-password validation as CreateDatabase: dbUser must
+// be alphanumeric/underscore, password must come from the safe charset.
+// MySQL has no parameterised form for ALTER USER's IDENTIFIED BY, so this
+// gate is the only thing keeping injection out.
+func (c *Client) ResetUserPassword(dbUser, newPassword string) error {
+	if err := safe.DBIdent(dbUser); err != nil {
+		return err
+	}
+	if err := safe.DBPassword(newPassword); err != nil {
+		return err
+	}
+	queries := []string{
+		fmt.Sprintf("ALTER USER '%s'@'localhost' IDENTIFIED BY '%s'", dbUser, newPassword),
+		"FLUSH PRIVILEGES",
+	}
+	for _, q := range queries {
+		if _, err := c.db.Exec(q); err != nil {
+			return fmt.Errorf("query failed: %w", err)
+		}
+	}
+	return nil
+}

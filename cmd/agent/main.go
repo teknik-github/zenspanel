@@ -224,6 +224,17 @@ func main() {
 		return nil, mysqlClient.DropDatabase(p.DBName, p.DBUser)
 	})
 
+	srv.Register("mysql.reset_password", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			DBUser      string `json:"db_user"`
+			NewPassword string `json:"new_password"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, mysqlClient.ResetUserPassword(p.DBUser, p.NewPassword)
+	})
+
 	// terminal
 	srv.Register("terminal.spawn", func(params json.RawMessage) (interface{}, error) {
 		var p struct {

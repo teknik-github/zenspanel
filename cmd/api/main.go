@@ -66,7 +66,7 @@ func main() {
 	usersH := handlers.NewUserHandler(userStore, packageStore, cfg.Agent.Socket)
 	packagesH := handlers.NewPackageHandler(packageStore)
 	domainsH := handlers.NewDomainHandler(domainStore, userStore, cfg.Agent.Socket, cfg.Paths.HomeBase)
-	databasesH := handlers.NewDatabaseHandler(databaseStore, cfg.Agent.Socket)
+	databasesH := handlers.NewDatabaseHandler(databaseStore, cfg.Agent.Socket, rdb)
 	phpVersionsH := handlers.NewPHPVersionHandler(phpVersionStore)
 	apiKeysH := handlers.NewAPIKeyHandler(apiKeyStore)
 	auditLogsH := handlers.NewAuditLogHandler(auditLogStore)

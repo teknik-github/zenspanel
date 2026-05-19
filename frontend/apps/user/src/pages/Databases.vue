@@ -32,8 +32,17 @@ async function createDatabase() {
 }
 
 async function openPHPMyAdmin(id: number) {
-  const res = await databasesApi.getPHPMyAdminToken(id)
-  window.open(res.data.url, '_blank')
+  // Launch endpoint resets the MySQL password, mints a one-time token,
+  // and returns a redeem URL. We open the redeem URL in a new tab; that
+  // page auto-submits a form into phpMyAdmin's cookie-auth login.
+  try {
+    const res = await databasesApi.launchPHPMyAdmin(id)
+    if (res.data.url) {
+      window.open(res.data.url, '_blank')
+    }
+  } catch (e: any) {
+    alert(e.response?.data?.error || 'Failed to open phpMyAdmin')
+  }
 }
 
 async function deleteDatabase(id: number) {

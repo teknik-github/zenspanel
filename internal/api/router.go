@@ -86,6 +86,12 @@ func (r *Router) Setup() *gin.Engine {
 	}
 	e.POST("/api/v1/auth/login", loginLimiter, r.auth.Login)
 
+	// phpMyAdmin SSO redeem — no JWT required, the URL token is the
+	// credential. Lives outside the protected /api/v1 group because the
+	// browser opens this in a new tab where the JWT bearer header isn't
+	// sent. The token is one-time-use and expires in 60 seconds.
+	e.GET("/api/v1/phpmyadmin/sso/:token", r.databases.RedeemPHPMyAdmin)
+
 	// audit middleware records mutating requests on both protected and
 	// external groups so the audit_logs table covers admin actions and
 	// billing-system actions alike
