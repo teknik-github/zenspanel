@@ -18,6 +18,7 @@ const router = createRouter({
         { path: 'databases', component: () => import('@/pages/Databases.vue') },
         { path: 'file-manager', component: () => import('@/pages/FileManager.vue') },
         { path: 'cron-jobs', component: () => import('@/pages/CronJobs.vue') },
+        { path: 'logs', component: () => import('@/pages/Logs.vue') },
         { path: 'terminal', component: () => import('@/pages/Terminal.vue') },
         { path: 'backups', component: () => import('@/pages/Backups.vue') },
       ],

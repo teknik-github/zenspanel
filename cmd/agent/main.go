@@ -13,6 +13,7 @@ import (
 	agentcron "github.com/zenspanel/zenspanel/agent/cron"
 	agentfilebrowser "github.com/zenspanel/zenspanel/agent/filebrowser"
 	agentfilemanager "github.com/zenspanel/zenspanel/agent/filemanager"
+	agentlogs "github.com/zenspanel/zenspanel/agent/logs"
 	agentmysql "github.com/zenspanel/zenspanel/agent/mysql"
 	agentnginx "github.com/zenspanel/zenspanel/agent/nginx"
 	agentphpfpm "github.com/zenspanel/zenspanel/agent/phpfpm"
@@ -352,7 +353,7 @@ func main() {
 		return nil, agentuser.SetupBin(p.Username, cfg.Paths.HomeBase, p.PHPVersion)
 	})
 
-	// cron.sync — atomically rewrites the user's crontab. All jobs are
+	// cron.sync — atomically rewrites the user's crontab.
 	// validated (expression + command) before any write (V23, V24).
 	// Disabled jobs are written as commented lines so they survive
 	// re-enable without data loss (V26).
@@ -365,6 +366,23 @@ func main() {
 			return nil, err
 		}
 		return nil, agentcron.Sync(p.Username, p.Jobs)
+	})
+
+	// logs.tail — return last N lines of a log file. Path is validated
+	// against an allowlist of log directories (V30). Max 500 lines (V31).
+	srv.Register("logs.tail", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			LogPath string `json:"log_path"`
+			Lines   int    `json:"lines"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		lines, err := agentlogs.Tail(p.LogPath, p.Lines)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"lines": lines}, nil
 	})
 
 	// quota — filesystem-level disk quota enforcement. Hard limit comes

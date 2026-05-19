@@ -74,6 +74,7 @@ func main() {
 	phpVersionsH := handlers.NewPHPVersionHandler(phpVersionStore)
 	phpExtensionsH := handlers.NewPHPExtensionHandler(phpExtensionStore, userStore, cfg.Agent.Socket)
 	cronJobsH := handlers.NewCronJobHandler(cronJobStore, userStore, packageStore, cfg.Agent.Socket)
+	logsH := handlers.NewLogHandler(domainStore, userStore, cfg.Agent.Socket)
 	apiKeysH := handlers.NewAPIKeyHandler(apiKeyStore)
 	auditLogsH := handlers.NewAuditLogHandler(auditLogStore)
 	sslH := handlers.NewSSLHandler(domainStore, subdomainStore, cfg.Agent.Socket, cfg.LetsEncrypt.Email, cfg.LetsEncrypt.Staging)
@@ -85,7 +86,7 @@ func main() {
 	// router
 	router := api.NewRouter(
 		authH, usersH, packagesH, domainsH, subdomainsH, databasesH,
-		phpVersionsH, phpExtensionsH, cronJobsH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH, terminalH,
+		phpVersionsH, phpExtensionsH, cronJobsH, logsH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH, terminalH,
 		apiKeyStore, auditLogStore,
 		rdb,
 		cfg.JWT.Secret,

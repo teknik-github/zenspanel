@@ -21,6 +21,7 @@ type Router struct {
 	phpVersions   *handlers.PHPVersionHandler
 	phpExtensions *handlers.PHPExtensionHandler
 	cronJobs      *handlers.CronJobHandler
+	logs          *handlers.LogHandler
 	apiKeys       *handlers.APIKeyHandler
 	auditLogs     *handlers.AuditLogHandler
 	ssl           *handlers.SSLHandler
@@ -44,6 +45,7 @@ func NewRouter(
 	phpVersionsH *handlers.PHPVersionHandler,
 	phpExtensionsH *handlers.PHPExtensionHandler,
 	cronJobsH *handlers.CronJobHandler,
+	logsH *handlers.LogHandler,
 	apiKeysH *handlers.APIKeyHandler,
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
@@ -66,6 +68,7 @@ func NewRouter(
 		phpVersions:   phpVersionsH,
 		phpExtensions: phpExtensionsH,
 		cronJobs:      cronJobsH,
+		logs:          logsH,
 		apiKeys:       apiKeysH,
 		auditLogs:     auditLogsH,
 		ssl:           sslH,
@@ -155,6 +158,7 @@ func (r *Router) Setup() *gin.Engine {
 		// ssl (per-domain)
 		api.POST("/domains/:id/ssl", r.ssl.Issue)
 		api.DELETE("/domains/:id/ssl", r.ssl.Remove)
+		api.GET("/domains/:id/logs", r.logs.DomainLogs)
 
 		// subdomains
 		api.GET("/subdomains", r.subdomains.List)

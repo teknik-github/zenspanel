@@ -208,11 +208,11 @@ V33: installer runs as Linux user (agent drops privs via `su -s /bin/sh -c ... <
 | T43 | . | `internal/api/handlers/auth.go`: Setup/Confirm/Disable 2FA handlers; modify Login to return `requires_2fa+temp_token`; add Verify + Recover handlers | I.api,V27,V28,V29 |
 | T44 | . | wire 2FA routes @ `internal/api/router.go` (public: verify, recover; JWT: setup, confirm, disable) | I.api |
 | T45 | . | user panel: 2FA setup flow — QR code display, confirm code input, recovery codes download; login page: TOTP step after password | I.frontend,V28 |
-| T46 | . | `agent/logs/logs.go`: `Tail(logPath string, lines int) ([]string, error)` — path jail (V30), max 500 lines (V31) | V30,V31 |
-| T47 | . | register `logs.tail` RPC @ `cmd/agent/main.go` | V30 |
-| T48 | . | `internal/api/handlers/logs.go`: `DomainLogs` handler — resolve nginx + fpm log paths from domain row, call agent `logs.tail` | I.api,V30,V31 |
-| T49 | . | wire `GET /api/v1/domains/:id/logs` route | I.api |
-| T50 | . | user panel: Logs viewer — per-domain dropdown (nginx/fpm), line count selector, auto-refresh toggle | I.frontend |
+| T46 | x | `agent/logs/logs.go`: `Tail(logPath string, lines int) ([]string, error)` — path jail (V30), max 500 lines (V31) | V30,V31 |
+| T47 | x | register `logs.tail` RPC @ `cmd/agent/main.go` | V30 |
+| T48 | x | `internal/api/handlers/logs.go`: `DomainLogs` handler — resolve nginx + fpm log paths from domain row, call agent `logs.tail` | I.api,V30,V31 |
+| T49 | x | wire `GET /api/v1/domains/:id/logs` route | I.api |
+| T50 | x | user panel: Logs viewer — per-domain dropdown (nginx/fpm), line count selector, auto-refresh toggle | I.frontend |
 | T51 | . | `agent/installer/installer.go`: app catalog (WordPress, Laravel skeleton, plain HTML); `Run(appID, username, docroot, db*)` — download, extract, configure, chown (V32,V33) | V32,V33 |
 | T52 | . | register `installer.run` + `installer.status` RPCs @ `cmd/agent/main.go` | V33 |
 | T53 | . | `internal/api/handlers/installer.go`: ListApps, Install (async → job_id), Status — ownership check, domain lookup | I.api,V32 |
