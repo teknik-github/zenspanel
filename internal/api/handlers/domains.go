@@ -149,28 +149,45 @@ func (h *DomainHandler) Update(c *gin.Context) {
 	// fastcgi_pass at the right socket. The DB update alone changes nothing
 	// the kernel can see — without these calls, the site stays on the old
 	// PHP until the next restart of the agent or a manual reload.
+	//
+	// Errors here used to be swallowed with `_` — meaning the row got
+	// updated to the new version even when the new pool couldn't be
+	// created or php<ver>-fpm wasn't running, which left the site with
+	// nginx pointing at a non-existent socket and ERR_CONNECTION_REFUSED
+	// in the browser. Now we collect them and report 500 if any fail
+	// so the operator knows to investigate.
 	if newPHP, ok := fields["php_version"].(string); ok && newPHP != domain.PHPVersion {
 		user, uerr := h.users.GetByID(domain.UserID)
-		if uerr == nil {
-			agentClient := agent.NewClient(h.agentSock)
-			// Ensure the new pool exists for this user; create_pool is
-			// idempotent at the file level (overwrite).
-			_ = agentClient.Call("phpfpm.create_pool", map[string]interface{}{
-				"username":    user.Username,
-				"php_version": newPHP,
-			}, nil)
-			_ = agentClient.Call("phpfpm.reload", map[string]interface{}{
-				"php_version": newPHP,
-			}, nil)
-			// Rewrite the vhost so fastcgi_pass points at the new socket.
-			_ = agentClient.Call("nginx.create_vhost", map[string]interface{}{
-				"domain":      domain.Domain,
-				"username":    user.Username,
-				"php_version": newPHP,
-				"doc_root":    domain.DocumentRoot,
-			}, nil)
-		} else {
-			log.Printf("php_version reload: lookup user %d failed: %v", domain.UserID, uerr)
+		if uerr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "lookup user for php switch: " + uerr.Error(),
+			})
+			return
+		}
+		agentClient := agent.NewClient(h.agentSock)
+		// CreatePool now also enables+starts the php<ver>-fpm service
+		// (Ubuntu only auto-starts the version installed first), so a
+		// switch to PHP 8.2 from 8.3 doesn't leave the 8.2 unit dead.
+		if err := agentClient.Call("phpfpm.create_pool", map[string]interface{}{
+			"username":    user.Username,
+			"php_version": newPHP,
+		}, nil); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "phpfpm.create_pool for " + newPHP + ": " + err.Error(),
+			})
+			return
+		}
+		// Rewrite the vhost so fastcgi_pass points at the new socket.
+		if err := agentClient.Call("nginx.create_vhost", map[string]interface{}{
+			"domain":      domain.Domain,
+			"username":    user.Username,
+			"php_version": newPHP,
+			"doc_root":    domain.DocumentRoot,
+		}, nil); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "nginx.create_vhost for " + newPHP + ": " + err.Error(),
+			})
+			return
 		}
 	}
 
