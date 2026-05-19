@@ -700,6 +700,51 @@ EOF
 setup_nginx() {
     log_section "Setting up Nginx"
 
+    # "Sorry!" catch-all on port 80 — cPanel-style. Triggers in two
+    # cases: (1) someone visits the panel hostname on :80 (panel
+    # itself runs on $PANEL_PORT, not :80), (2) someone resolves a
+    # random hostname or raw IP to this server before any user vhost
+    # claims it. Each user vhost added later via the panel listens on
+    # :80 too with its own server_name, so this default_server only
+    # catches the leftovers.
+    cat > /etc/nginx/sites-available/zenspanel-sorry <<'EOF'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    access_log off;
+    error_log /dev/null;
+
+    location / {
+        return 200 '<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sorry!</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:#f9fafb;color:#374151;display:flex;align-items:center;
+    justify-content:center;min-height:100vh;margin:0;padding:1rem}
+  .box{text-align:center;max-width:480px}
+  .ico{width:72px;height:72px;border-radius:50%;background:#fef3c7;
+    color:#d97706;display:inline-flex;align-items:center;justify-content:center;
+    margin-bottom:1rem;font-size:2.25rem;font-weight:700}
+  h1{font-size:1.5rem;font-weight:700;margin:.25rem 0 .75rem;color:#111827}
+  p{color:#6b7280;line-height:1.6;font-size:.95rem;margin:.5rem 0}
+  .hint{margin-top:1.5rem;font-size:.75rem;color:#9ca3af}
+</style></head>
+<body><div class="box">
+<div class="ico">!</div>
+<h1>Sorry!</h1>
+<p>The website you are looking for is not currently available.</p>
+<p>This may be because the domain has not been pointed to this server yet, or because the site is still being set up.</p>
+<div class="hint">Powered by ZensPanel</div>
+</div></body></html>';
+        add_header Content-Type "text/html; charset=utf-8";
+    }
+}
+EOF
+
     cat > /etc/nginx/sites-available/zenspanel <<EOF
 server {
     listen ${PANEL_PORT};
@@ -808,6 +853,7 @@ EOF
     fi
 
     ln -sf /etc/nginx/sites-available/zenspanel /etc/nginx/sites-enabled/zenspanel
+    ln -sf /etc/nginx/sites-available/zenspanel-sorry /etc/nginx/sites-enabled/zenspanel-sorry
     rm -f /etc/nginx/sites-enabled/default
 
     nginx -t 2>/dev/null && systemctl reload nginx
