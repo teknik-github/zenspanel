@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/zenspanel/zenspanel/agent/safe"
@@ -21,10 +23,83 @@ import (
 const fileBrowserURL = "http://127.0.0.1:8081/filebrowser"
 
 // adminUser is the FileBrowser user we authenticate as for management
-// calls. It exists because `filebrowser config init` creates it
-// automatically; with proxy auth the username in the X-Auth-User
-// header is the credential, so no password is needed.
+// calls. Created by install.sh's `users add admin --perm.admin=true`.
 const adminUser = "admin"
+
+// FileBrowser proxy auth doesn't make every endpoint trust the
+// X-Auth-User header — only /api/login does. To call /api/users we
+// must first POST /api/login with X-Auth-User to receive a JWT, then
+// pass that JWT in Authorization: Bearer for the actual request.
+//
+// We cache the JWT for ~1h since FileBrowser's default token TTL is 2h
+// and renewing once an hour avoids per-call latency without risking
+// expiry races. Cache is process-local — agent restart wipes it, which
+// is fine.
+type tokenCache struct {
+	mu        sync.Mutex
+	token     string
+	expiresAt time.Time
+}
+
+var fbToken tokenCache
+
+func getAdminJWT() (string, error) {
+	fbToken.mu.Lock()
+	defer fbToken.mu.Unlock()
+
+	if fbToken.token != "" && time.Now().Before(fbToken.expiresAt) {
+		return fbToken.token, nil
+	}
+
+	// /api/login under proxy auth: the body can be empty; the
+	// X-Auth-User header IS the credential. Response body is the raw
+	// JWT string (not JSON-wrapped).
+	req, err := http.NewRequest("POST", fileBrowserURL+"/api/login", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("X-Auth-User", adminUser)
+
+	cli := &http.Client{Timeout: 5 * time.Second}
+	resp, err := cli.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("filebrowser login: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("filebrowser login HTTP %d: %s", resp.StatusCode, string(body))
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	tok := string(bytes.TrimSpace(body))
+	if tok == "" {
+		return "", fmt.Errorf("filebrowser login returned empty token")
+	}
+	fbToken.token = tok
+	fbToken.expiresAt = time.Now().Add(1 * time.Hour)
+	return tok, nil
+}
+
+// authReq builds an *http.Request with the cached admin JWT attached.
+// Used by all management calls below.
+func authReq(method, url string, body io.Reader) (*http.Request, error) {
+	tok, err := getAdminJWT()
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Auth", tok)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return req, nil
+}
 
 type fbUser struct {
 	Username string `json:"username"`
@@ -85,15 +160,10 @@ func CreateUser(username, homeBase string) error {
 		},
 	})
 
-	req, err := http.NewRequest("POST", fileBrowserURL+"/api/users", bytes.NewReader(body))
+	req, err := authReq("POST", fileBrowserURL+"/api/users", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	// Proxy auth: the username in this header is the identity
-	// FileBrowser will run the request as. Admin scope is required
-	// to create users.
-	req.Header.Set("X-Auth-User", adminUser)
 
 	cli := &http.Client{Timeout: 5 * time.Second}
 	resp, err := cli.Do(req)
@@ -107,7 +177,8 @@ func CreateUser(username, homeBase string) error {
 	if resp.StatusCode == http.StatusConflict {
 		return nil // user already exists — exactly what we want
 	}
-	return fmt.Errorf("filebrowser create user: HTTP %d", resp.StatusCode)
+	respBody, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("filebrowser create user: HTTP %d: %s", resp.StatusCode, string(respBody))
 }
 
 // DeleteUser removes the FileBrowser user record. Looks the user up
@@ -123,12 +194,10 @@ func DeleteUser(username string) error {
 	if id == 0 {
 		return nil // nothing to delete
 	}
-	req, err := http.NewRequest("DELETE",
-		fileBrowserURL+"/api/users/"+strconv.Itoa(id), nil)
+	req, err := authReq("DELETE", fileBrowserURL+"/api/users/"+strconv.Itoa(id), nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-Auth-User", adminUser)
 	cli := &http.Client{Timeout: 5 * time.Second}
 	resp, err := cli.Do(req)
 	if err != nil {
@@ -138,14 +207,17 @@ func DeleteUser(username string) error {
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
 		return nil
 	}
-	return fmt.Errorf("filebrowser delete user: HTTP %d", resp.StatusCode)
+	respBody, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("filebrowser delete user: HTTP %d: %s", resp.StatusCode, string(respBody))
 }
 
 // userID asks FileBrowser for the numeric ID matching a username so we
 // can hit the /api/users/<id> DELETE endpoint.
 func userID(username string) (int, error) {
-	req, _ := http.NewRequest("GET", fileBrowserURL+"/api/users", nil)
-	req.Header.Set("X-Auth-User", adminUser)
+	req, err := authReq("GET", fileBrowserURL+"/api/users", nil)
+	if err != nil {
+		return 0, err
+	}
 	cli := &http.Client{Timeout: 5 * time.Second}
 	resp, err := cli.Do(req)
 	if err != nil {
