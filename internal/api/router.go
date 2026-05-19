@@ -151,6 +151,11 @@ func (r *Router) Setup() *gin.Engine {
 		api.POST("/databases", r.databases.Create)
 		api.DELETE("/databases/:id", r.databases.Delete)
 		api.GET("/databases/:id/phpmyadmin", r.databases.GetPHPMyAdminToken)
+		// LaunchPHPMyAdmin: resets the DB user password, mints a one-time
+		// SSO token in Redis, returns the redeem URL. Frontend opens that
+		// URL in a new tab; the redeem endpoint (registered above outside
+		// the JWT group) serves a self-submitting login form.
+		api.GET("/databases/:id/phpmyadmin/launch", r.databases.LaunchPHPMyAdmin)
 
 		// php versions
 		api.GET("/php-versions", r.phpVersions.List)
