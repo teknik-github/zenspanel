@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/zenspanel/zenspanel/agent"
@@ -344,6 +346,27 @@ func main() {
 			return nil, err
 		}
 		return nil, agentfilemanager.Write(p.Username, cfg.Paths.HomeBase, p.Path, p.Content)
+	})
+
+	// filemanager.upload accepts a base64-encoded blob from the API
+	// because the agent's JSON socket can't carry raw binary safely.
+	// The API's Upload handler reads multipart/form-data, encodes, and
+	// sends it through here. The agent decodes and writes — same home
+	// jail as Write, just with []byte instead of string.
+	srv.Register("filemanager.upload", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+			Path     string `json:"path"`
+			DataB64  string `json:"data_b64"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		data, err := base64.StdEncoding.DecodeString(p.DataB64)
+		if err != nil {
+			return nil, fmt.Errorf("decode base64: %w", err)
+		}
+		return nil, agentfilemanager.Upload(p.Username, cfg.Paths.HomeBase, p.Path, data)
 	})
 
 	srv.Register("filemanager.mkdir", func(params json.RawMessage) (interface{}, error) {

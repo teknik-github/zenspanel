@@ -15,4 +15,15 @@ export const filesApi = {
   mkdir: (path: string) => client.post('/files/mkdir', { path }),
   rename: (oldPath: string, newPath: string) => client.put('/files/rename', { old_path: oldPath, new_path: newPath }),
   delete: (path: string) => client.delete('/files', { params: { path } }),
+  upload: (destDir: string, file: File, onProgress?: (pct: number) => void) => {
+    const fd = new FormData()
+    fd.append('path', destDir)
+    fd.append('file', file)
+    return client.post('/files/upload', fd, {
+      onUploadProgress: e => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total))
+      },
+    })
+  },
 }
+

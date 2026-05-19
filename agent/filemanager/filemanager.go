@@ -14,6 +14,14 @@ import (
 // a few MB; larger files should be edited via terminal/SFTP.
 const maxReadSize int64 = 4 * 1024 * 1024 // 4 MiB
 
+// maxUploadSize caps inbound binary uploads. The agent JSON socket isn't
+// great for very large blobs (the API has to base64-encode the bytes
+// before forwarding, which inflates them ~33%), and the upload handler
+// holds the whole file in memory at once. 64 MiB matches Gin's
+// MaxMultipartMemory default and is more than enough for typical web
+// hosting assets — anything larger should travel over SFTP.
+const maxUploadSize int64 = 64 * 1024 * 1024 // 64 MiB
+
 // Entry is one row of a directory listing.
 type Entry struct {
 	Name    string `json:"name"`
@@ -120,6 +128,27 @@ func Write(username, homeBase, rel, content string) error {
 		return fmt.Errorf("mkdir parent: %w", err)
 	}
 	return os.WriteFile(target, []byte(content), 0644)
+}
+
+// Upload writes a binary blob to the user's home jail. Same security
+// gate as Write (path resolves through resolve()), but accepts raw
+// []byte so the caller can ship binaries (images, archives, etc.) that
+// would corrupt over the JSON-string Write path. The byte slice has
+// already been base64-decoded in cmd/agent/main.go before reaching here;
+// the size cap is defensive in case the API forwards something larger
+// than its own limit.
+func Upload(username, homeBase, rel string, data []byte) error {
+	if int64(len(data)) > maxUploadSize {
+		return fmt.Errorf("file too large (max %d bytes)", maxUploadSize)
+	}
+	target, err := resolve(username, homeBase, rel)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		return fmt.Errorf("mkdir parent: %w", err)
+	}
+	return os.WriteFile(target, data, 0644)
 }
 
 func Mkdir(username, homeBase, rel string) error {

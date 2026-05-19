@@ -17,6 +17,31 @@ const renameTarget = ref<FileEntry | null>(null)
 const renameNewName = ref('')
 const confirmDelete = ref<FileEntry | null>(null)
 
+// Upload state. uploads holds in-flight files keyed by name; the list
+// renders only as long as a file is in here, so completed uploads
+// disappear from the toast strip naturally.
+type UploadStatus = { name: string; pct: number; error?: string }
+const uploads = ref<UploadStatus[]>([])
+const fileInput = ref<HTMLInputElement | null>(null)
+const isDragging = ref(false)
+
+// Text-editable extensions. Anything not in this list is treated as
+// binary and the editor panel shows a "binary file" placeholder
+// instead of trying to load it through Monaco — Monaco chokes on
+// non-UTF8, and Read caps at 4 MiB anyway.
+const textExtensions = new Set([
+  'php', 'html', 'htm', 'css', 'js', 'mjs', 'ts', 'tsx', 'jsx',
+  'json', 'md', 'txt', 'yaml', 'yml', 'sh', 'bash', 'env',
+  'xml', 'csv', 'sql', 'ini', 'conf', 'toml', 'log', 'py', 'go',
+])
+
+function isTextFile(name: string): boolean {
+  const dot = name.lastIndexOf('.')
+  if (dot < 0) return true // no extension — assume text (README, Dockerfile)
+  const ext = name.slice(dot + 1).toLowerCase()
+  return textExtensions.has(ext)
+}
+
 const monaco = shallowRef<any>(null)
 const editorContainer = ref<HTMLElement | null>(null)
 let editorInstance: any = null
@@ -64,6 +89,13 @@ async function openEntry(e: FileEntry) {
 
 async function loadFileIntoEditor(e: FileEntry) {
   selected.value = e
+  closeEditor()
+  if (!isTextFile(e.name)) {
+    // Binary file — don't try to read it through Monaco. The editor
+    // panel template watches `selected` + isTextFile(selected.name) and
+    // renders a "binary file" placeholder.
+    return
+  }
   loading.value = true
   error.value = ''
   try {
@@ -189,6 +221,59 @@ function formatSize(n: number) {
   return (n / 1024 / 1024 / 1024).toFixed(1) + ' GB'
 }
 
+// Upload pipeline. We process files sequentially to keep memory usage
+// bounded — each upload base64-inflates ~33% in the API process before
+// hitting the agent socket. Per-file progress lives in `uploads` and
+// the toast strip auto-removes finished items after a brief delay so
+// the user sees "100%" before it disappears.
+async function uploadFiles(files: FileList | File[]) {
+  const list = Array.from(files)
+  for (const f of list) {
+    const status: UploadStatus = { name: f.name, pct: 0 }
+    uploads.value.push(status)
+    try {
+      await filesApi.upload(cwd.value, f, pct => { status.pct = pct })
+      status.pct = 100
+    } catch (e: any) {
+      status.error = e.response?.data?.error || 'upload failed'
+    }
+    // Drop the row after a short pause so the user reads the result.
+    setTimeout(() => {
+      uploads.value = uploads.value.filter(u => u !== status)
+    }, status.error ? 4000 : 1500)
+  }
+  await refresh()
+}
+
+function triggerFilePicker() {
+  fileInput.value?.click()
+}
+
+function onFileInputChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (input.files && input.files.length) {
+    uploadFiles(input.files)
+    input.value = '' // allow same-file re-upload
+  }
+}
+
+function onDragOver(e: DragEvent) {
+  e.preventDefault()
+  isDragging.value = true
+}
+
+function onDragLeave() {
+  isDragging.value = false
+}
+
+function onDrop(e: DragEvent) {
+  e.preventDefault()
+  isDragging.value = false
+  if (e.dataTransfer?.files?.length) {
+    uploadFiles(e.dataTransfer.files)
+  }
+}
+
 watch(cwd, () => refresh())
 onMounted(refresh)
 </script>
@@ -198,8 +283,11 @@ onMounted(refresh)
     <div class="flex items-center justify-between">
       <h1 class="text-lg font-semibold text-gray-800">File Manager</h1>
       <div class="flex gap-2">
+        <input ref="fileInput" type="file" multiple class="hidden" @change="onFileInputChange" />
+        <button @click="triggerFilePicker"
+          class="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700">⬆ Upload</button>
         <button @click="showNewFile = true; newName = ''"
-          class="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700">+ File</button>
+          class="text-xs bg-gray-100 text-gray-600 border border-gray-200 px-3 py-1.5 rounded-md hover:bg-gray-200">+ File</button>
         <button @click="showNewDir = true; newName = ''"
           class="text-xs bg-gray-100 text-gray-600 border border-gray-200 px-3 py-1.5 rounded-md hover:bg-gray-200">+ Folder</button>
         <button @click="refresh"
@@ -220,7 +308,15 @@ onMounted(refresh)
 
     <div class="flex-1 grid grid-cols-[280px_1fr] gap-3 min-h-0">
       <!-- File list -->
-      <div class="bg-white border border-gray-200 rounded-lg overflow-y-auto">
+      <div class="bg-white border border-gray-200 rounded-lg overflow-y-auto relative"
+        :class="isDragging ? 'ring-2 ring-indigo-400 ring-offset-1' : ''"
+        @dragover="onDragOver"
+        @dragleave="onDragLeave"
+        @drop="onDrop">
+        <div v-if="isDragging"
+          class="absolute inset-0 bg-indigo-50/80 flex items-center justify-center text-xs text-indigo-700 font-medium pointer-events-none z-10">
+          Drop files to upload to {{ cwd || 'home' }}/
+        </div>
         <div v-if="loading && !entries.length" class="p-3 text-xs text-gray-400">Loading...</div>
         <div v-else-if="!entries.length" class="p-3 text-xs text-gray-400">Empty directory</div>
         <ul v-else class="divide-y divide-gray-100">
@@ -259,6 +355,18 @@ onMounted(refresh)
         <div v-if="!selected" class="flex-1 flex items-center justify-center text-xs text-gray-400">
           Select a file to edit
         </div>
+        <template v-else-if="!isTextFile(selected.name)">
+          <div class="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+            <div class="text-xs text-gray-600 truncate">{{ joinPath(cwd, selected.name) }}</div>
+            <span class="text-[10px] text-gray-400">{{ formatSize(selected.size) }}</span>
+          </div>
+          <div class="flex-1 flex items-center justify-center text-xs text-gray-400 text-center px-6">
+            <div>
+              <p class="font-medium text-gray-500 mb-1">Binary file</p>
+              <p>Cannot be edited in the browser. Use the terminal or SFTP to modify.</p>
+            </div>
+          </div>
+        </template>
         <template v-else>
           <div class="flex items-center justify-between px-3 py-2 border-b border-gray-100">
             <div class="text-xs text-gray-600 truncate">{{ joinPath(cwd, selected.name) }}</div>
@@ -272,6 +380,26 @@ onMounted(refresh)
           </div>
           <div ref="editorContainer" class="flex-1 min-h-0"></div>
         </template>
+      </div>
+    </div>
+
+    <!-- Upload progress strip -->
+    <div v-if="uploads.length"
+      class="fixed bottom-4 right-4 z-40 w-72 space-y-2">
+      <div v-for="u in uploads" :key="u.name"
+        class="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-gray-700 font-medium truncate">{{ u.name }}</span>
+          <span v-if="u.error" class="text-red-600">failed</span>
+          <span v-else-if="u.pct === 100" class="text-emerald-600">done</span>
+          <span v-else class="text-gray-500">{{ u.pct }}%</span>
+        </div>
+        <div class="bg-gray-100 rounded-full h-1">
+          <div class="h-1 rounded-full transition-all"
+            :class="u.error ? 'bg-red-500' : u.pct === 100 ? 'bg-emerald-500' : 'bg-indigo-500'"
+            :style="{ width: u.pct + '%' }"></div>
+        </div>
+        <p v-if="u.error" class="mt-1 text-red-600 text-[10px]">{{ u.error }}</p>
       </div>
     </div>
 

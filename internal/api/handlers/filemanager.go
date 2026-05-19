@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"encoding/base64"
+	"io"
 	"net/http"
+	"path"
 
 	"github.com/gin-gonic/gin"
 
@@ -162,4 +165,62 @@ func (h *FileManagerHandler) Delete(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+}
+
+// maxUploadSize must stay in sync with agent/filemanager.maxUploadSize.
+// We enforce it here to refuse oversized uploads early — without this
+// guard a 1 GB request would fully buffer in memory before the agent
+// could reject it.
+const maxUploadSize = 64 << 20 // 64 MiB
+
+// Upload accepts a multipart/form-data POST with a "file" part and a
+// "path" form value (the destination directory inside the user's home).
+// We base64-encode the bytes before forwarding to the agent because the
+// agent's JSON socket can't transport binary safely. The encoding inflates
+// the in-memory copy ~33%; that's the cost of going through the agent's
+// security jail instead of letting the API write directly to the user's
+// home (which would bypass the path-resolution check).
+func (h *FileManagerHandler) Upload(c *gin.Context) {
+	username, ok := h.caller(c)
+	if !ok {
+		return
+	}
+
+	destDir := c.PostForm("path")
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing file: " + err.Error()})
+		return
+	}
+	defer file.Close()
+
+	if header.Size > maxUploadSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file exceeds 64 MiB limit"})
+		return
+	}
+
+	// LimitReader caps memory even if Content-Length lied to us.
+	data, err := io.ReadAll(io.LimitReader(file, maxUploadSize+1))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "read upload: " + err.Error()})
+		return
+	}
+	if int64(len(data)) > maxUploadSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file exceeds 64 MiB limit"})
+		return
+	}
+
+	uploadPath := path.Join(destDir, header.Filename)
+	encoded := base64.StdEncoding.EncodeToString(data)
+
+	err = agent.NewClient(h.agentSock).Call("filemanager.upload", map[string]interface{}{
+		"username": username,
+		"path":     uploadPath,
+		"data_b64": encoded,
+	}, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "uploaded", "path": uploadPath, "size": header.Size})
 }

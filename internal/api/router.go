@@ -72,6 +72,11 @@ func (r *Router) Setup() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	e := gin.New()
 	e.Use(gin.Logger(), gin.Recovery())
+	// Cap multipart payloads at 64 MiB so a runaway upload can't eat all
+	// the API's memory before the handler's own size guard kicks in.
+	// Must stay in sync with handlers.maxUploadSize and
+	// agent/filemanager.maxUploadSize.
+	e.MaxMultipartMemory = 64 << 20
 
 	// public routes
 	// Login is rate-limited per IP. Prefer the Redis-backed limiter when
@@ -168,6 +173,7 @@ func (r *Router) Setup() *gin.Engine {
 		api.POST("/files/mkdir", r.files.Mkdir)
 		api.PUT("/files/rename", r.files.Rename)
 		api.DELETE("/files", r.files.Delete)
+		api.POST("/files/upload", r.files.Upload)
 	}
 
 	// External API — authenticated via X-API-Key header. The endpoints
