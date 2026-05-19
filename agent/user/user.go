@@ -79,6 +79,15 @@ func Create(username string, uid int, homeBase string) (int, error) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return 0, fmt.Errorf("useradd failed: %w: %s", err, out)
 	}
+	// Make the home dir traversable by nginx (running as www-data) and
+	// PHP-FPM (running as the user). Default umask gives 0700, which
+	// blocks www-data from stat'ing files inside — every static-file
+	// request would fall through to PHP-FPM and 404 with "File not
+	// found." Mode 0711 lets others traverse without listing, so
+	// www-data can stat known paths but not enumerate $HOME.
+	if err := os.Chmod(homeDir, 0711); err != nil {
+		return 0, fmt.Errorf("chmod home: %w", err)
+	}
 	return chosen, nil
 }
 
