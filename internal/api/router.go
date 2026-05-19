@@ -106,6 +106,7 @@ func (r *Router) Setup() *gin.Engine {
 	api := e.Group("/api/v1", auth.JWTMiddleware(r.jwtSecret), audit)
 	{
 		api.GET("/auth/me", r.auth.Me)
+		api.GET("/auth/filebrowser", r.auth.FileBrowserAuth)
 
 		// users
 		api.GET("/users", auth.RequireRole("admin"), r.users.List)

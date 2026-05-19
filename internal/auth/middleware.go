@@ -18,12 +18,20 @@ const (
 
 func JWTMiddleware(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		header := c.GetHeader("Authorization")
-		if !strings.HasPrefix(header, "Bearer ") {
+		// Accept the JWT either in the Authorization header (axios path
+		// from the SPAs) or in the zenspanel_token cookie set by Login
+		// (used by browser-driven requests like the iframe to
+		// /filebrowser/, which don't carry custom headers).
+		var tokenStr string
+		if header := c.GetHeader("Authorization"); strings.HasPrefix(header, "Bearer ") {
+			tokenStr = strings.TrimPrefix(header, "Bearer ")
+		} else if cookie, err := c.Cookie("zenspanel_token"); err == nil && cookie != "" {
+			tokenStr = cookie
+		}
+		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
 			return
 		}
-		tokenStr := strings.TrimPrefix(header, "Bearer ")
 		claims, err := ValidateToken(tokenStr, secret)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})

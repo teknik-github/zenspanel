@@ -569,8 +569,49 @@ StandardError=append:${ZENSPANEL_LOG}/api-error.log
 WantedBy=multi-user.target
 EOF
 
-    # Permissions
-    chown -R zenspanel:zenspanel "$ZENSPANEL_DIR/bin"
+    # FileBrowser — third-party Go binary that gives panel users a
+    # full-featured file manager via iframe. Installed once, runs as
+    # root so it can chown uploads to the right Linux user via the
+    # proxy_auth user mapping FileBrowser maintains internally.
+    if [[ ! -x /usr/local/bin/filebrowser ]]; then
+        log_info "Installing FileBrowser..."
+        curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
+    fi
+
+    # Config — proxy auth + JSON DB + scoped to the panel home base.
+    cat > "$ZENSPANEL_CONF/filebrowser.json" <<EOF
+{
+  "port": 8081,
+  "baseURL": "/filebrowser",
+  "address": "127.0.0.1",
+  "log": "stdout",
+  "database": "${ZENSPANEL_DATA}/filebrowser.db",
+  "root": "${ZENSPANEL_DATA}/home",
+  "auth": {
+    "method": "proxy",
+    "header": "X-Auth-User"
+  },
+  "createUserDir": true
+}
+EOF
+
+    cat > /etc/systemd/system/zenspanel-filebrowser.service <<EOF
+[Unit]
+Description=ZensPanel FileBrowser
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/filebrowser --config ${ZENSPANEL_CONF}/filebrowser.json
+Restart=always
+RestartSec=5
+StandardOutput=append:${ZENSPANEL_LOG}/filebrowser.log
+StandardError=append:${ZENSPANEL_LOG}/filebrowser-error.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
     chown -R zenspanel:zenspanel "$ZENSPANEL_LOG"
     chown -R zenspanel:zenspanel "$ZENSPANEL_DATA"
     chmod 750 "$ZENSPANEL_DATA/home" "$ZENSPANEL_DATA/backups"
@@ -580,7 +621,7 @@ EOF
     chown root:zenspanel "$ZENSPANEL_CONF/config.yaml"
 
     systemctl daemon-reload
-    systemctl enable zenspanel-agent zenspanel-api --quiet
+    systemctl enable zenspanel-agent zenspanel-api zenspanel-filebrowser --quiet
 
     log_info "Starting zenspanel-agent..."
     systemctl start zenspanel-agent
@@ -589,6 +630,10 @@ EOF
     log_info "Starting zenspanel-api..."
     systemctl start zenspanel-api
     sleep 3
+
+    log_info "Starting zenspanel-filebrowser..."
+    systemctl start zenspanel-filebrowser
+    sleep 1
 
     # Verify both services are running
     if systemctl is-active --quiet zenspanel-agent; then
@@ -650,6 +695,37 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_set_header Host \$host;
         proxy_read_timeout 3600;
+    }
+
+    # FileBrowser auth bridge — internal endpoint nginx hits to learn
+    # which panel user is on the other end of the request. The handler
+    # validates the JWT cookie set at login and replies with
+    # X-Auth-User; we forward that header to FileBrowser, which is
+    # configured for proxy auth.
+    location = /api/v1/auth/filebrowser {
+        internal;
+        proxy_pass http://127.0.0.1:8080;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Original-URI \$request_uri;
+        proxy_set_header Cookie \$http_cookie;
+    }
+
+    # FileBrowser — full-featured file manager iframed into the User
+    # Panel. auth_request gates access; without a valid panel session
+    # the request never reaches the FileBrowser process.
+    location /filebrowser/ {
+        auth_request /api/v1/auth/filebrowser;
+        auth_request_set \$fb_user \$upstream_http_x_auth_user;
+        proxy_pass http://127.0.0.1:8081/filebrowser/;
+        proxy_set_header X-Auth-User \$fb_user;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        client_max_body_size 1024M;
     }
 
     # phpMyAdmin
