@@ -3,3 +3,14 @@ config.yaml
 /bin/
 /tmp/
 .air.toml.tmp
+
+# Stray binaries from manual `go build` at repo root (use bin/ instead).
+# Anchored to repo root only; we do NOT want to ignore agent/ source dir.
+/api
+/zenspanel-api
+/zenspanel-agent
+/zenspanel-cli
+
+# Local plan/spec scratch dirs
+/.superpowers/
+/docs/superpowers/

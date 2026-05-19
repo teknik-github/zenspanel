@@ -119,8 +119,26 @@ collect_config() {
     done
 
     echo ""
-    read -rp "Let's Encrypt email [${ADMIN_EMAIL}]: " LE_EMAIL
-    LE_EMAIL="${LE_EMAIL:-$ADMIN_EMAIL}"
+    # Let's Encrypt rejects reserved/example domains as account contact
+    # emails (example.com, test.com, localhost, …). Catch the obvious
+    # placeholders here so the operator doesn't hit a 500 later when they
+    # click "Issue SSL" in the panel.
+    while true; do
+        read -rp "Let's Encrypt email [${ADMIN_EMAIL}]: " LE_EMAIL
+        LE_EMAIL="${LE_EMAIL:-$ADMIN_EMAIL}"
+        case "${LE_EMAIL,,}" in
+            *@example.com|*@example.net|*@example.org|*@test.com|*@localhost|*@invalid|*@localdomain)
+                log_warn "Let's Encrypt rejects '${LE_EMAIL##*@}' as a contact email domain. Use a real domain you control."
+                continue
+                ;;
+            *@*.*)
+                break
+                ;;
+            *)
+                log_warn "'${LE_EMAIL}' is not a valid email address."
+                ;;
+        esac
+    done
 
     log_info "Configuration collected ✓"
 }
@@ -441,6 +459,9 @@ paths:
   ssl_base: "/etc/nginx/ssl/zenspanel"
   backup_base: "${ZENSPANEL_DATA}/backups"
   php_pool_base: "/etc/php"
+  src_dir: "${ZENSPANEL_DIR}/src"
+  bin_dir: "${ZENSPANEL_DIR}/bin"
+  frontend_dir: "${ZENSPANEL_DIR}/frontend"
 
 letsencrypt:
   email: "${LE_EMAIL}"
@@ -807,6 +828,90 @@ setup_cgroups() {
 }
 
 # =============================================================================
+# STEP 14b: Setup filesystem disk quota
+# =============================================================================
+# Linux quota subsystem enforces a hard limit at the kernel level — once a
+# user hits package.disk_quota bytes, every write returns EDQUOT. The panel's
+# du-based metric is just for display; this is the actual fence.
+#
+# Setup is per-filesystem: the device that homeBase lives on must be
+# mounted with usrquota, and (for ext4) initialised with quotacheck +
+# quotaon. XFS has quota built into the filesystem, so quotacheck is a
+# no-op there. Idempotent — safe to re-run.
+setup_quota() {
+    log_section "Setting up filesystem disk quota"
+
+    # Resolve the filesystem mount point that holds homeBase. Walk up
+    # until findmnt recognises the path as a mountpoint — homeBase
+    # itself almost certainly isn't one.
+    local home_base="${ZENSPANEL_DATA}/home"
+    local fs_mount
+    fs_mount=$(df --output=target "$home_base" | tail -n1)
+    local fs_type
+    fs_type=$(findmnt -n -o FSTYPE "$fs_mount")
+    local fs_dev
+    fs_dev=$(findmnt -n -o SOURCE "$fs_mount")
+
+    log_info "homeBase=$home_base → mount=$fs_mount ($fs_type on $fs_dev)"
+
+    case "$fs_type" in
+        ext4|ext3|ext2)
+            local mount_opt="usrquota"
+            ;;
+        xfs)
+            # XFS quota is enabled at mount time; remount-with-option
+            # only works at boot. We add to fstab so reboots take
+            # effect; the running mount stays as-is and quotas activate
+            # on next boot. setquota still works on running XFS that
+            # was mounted with uquota or pquota.
+            local mount_opt="uquota"
+            ;;
+        *)
+            log_warn "Filesystem $fs_type on $fs_mount — disk quota enforcement may not be supported. Skipping."
+            return 0
+            ;;
+    esac
+
+    # Add usrquota (or uquota for XFS) to the fstab entry for this
+    # mountpoint, only if not already present. We anchor on the device
+    # column so we don't accidentally rewrite some other entry.
+    if grep -E "^\s*${fs_dev//\//\\/}\s" /etc/fstab | grep -q "$mount_opt"; then
+        log_info "fstab already has $mount_opt for $fs_dev ✓"
+    else
+        log_info "Adding $mount_opt to fstab for $fs_dev"
+        # Backup before mutating
+        cp /etc/fstab "/etc/fstab.bak.$(date +%s)"
+        # Append ,$mount_opt to the options column (4th field) of the
+        # matching device line. awk lets us touch only that line.
+        awk -v dev="$fs_dev" -v opt="$mount_opt" '
+            $1 == dev {
+                if ($4 == "defaults") { $4 = "defaults,"opt }
+                else if (index($4, opt) == 0) { $4 = $4","opt }
+                print; next
+            }
+            { print }
+        ' /etc/fstab > /etc/fstab.new && mv /etc/fstab.new /etc/fstab
+    fi
+
+    # ext4: remount live + quotacheck + quotaon. quotacheck needs
+    # exclusive read on the filesystem, so on root mounts it warns
+    # but still produces aquota.user; that's why the -m (mounted) flag
+    # is there. Failures are non-fatal — admin can fix manually after.
+    if [[ "$fs_type" =~ ^ext ]]; then
+        log_info "Remounting $fs_mount with usrquota..."
+        mount -o "remount,$mount_opt" "$fs_mount" || log_warn "remount failed (you may need to reboot for fstab changes to apply)"
+
+        log_info "Running quotacheck (this may take a moment)..."
+        quotacheck -cum "$fs_mount" 2>/dev/null || quotacheck -ucm "$fs_mount" 2>/dev/null || log_warn "quotacheck reported issues — quota may not be fully active until reboot"
+
+        log_info "Enabling quota..."
+        quotaon -u "$fs_mount" 2>/dev/null || log_warn "quotaon failed (this is fine if quota is already on or filesystem needs a reboot)"
+    fi
+
+    log_info "Disk quota setup complete ✓"
+}
+
+# =============================================================================
 # STEP 15: Setup log rotation
 # =============================================================================
 setup_logrotate() {
@@ -917,6 +1022,7 @@ BANNER
     setup_nginx
     setup_firewall
     setup_cgroups
+    setup_quota
     setup_logrotate
     save_install_info
     print_summary
