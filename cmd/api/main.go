@@ -73,7 +73,7 @@ func main() {
 	sslH := handlers.NewSSLHandler(domainStore, cfg.Agent.Socket, cfg.LetsEncrypt.Email, cfg.LetsEncrypt.Staging)
 	backupsH := handlers.NewBackupHandler(backupStore, userStore, databaseStore, cfg.Paths.HomeBase, cfg.Paths.BackupBase, cfg.Agent.Socket)
 	filesH := handlers.NewFileManagerHandler(userStore, cfg.Agent.Socket)
-	systemH := handlers.NewSystemHandler(userStore, domainStore, databaseStore)
+	systemH := handlers.NewSystemHandler(userStore, domainStore, databaseStore, cfg.Agent.Socket)
 
 	// router
 	router := api.NewRouter(

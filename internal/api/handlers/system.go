@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/zenspanel/zenspanel/internal/agent"
 	"github.com/zenspanel/zenspanel/internal/store"
 )
 
@@ -18,10 +19,47 @@ type SystemHandler struct {
 	users     *store.UserStore
 	domains   *store.DomainStore
 	databases *store.DatabaseStore
+	agentSock string
 }
 
-func NewSystemHandler(users *store.UserStore, domains *store.DomainStore, databases *store.DatabaseStore) *SystemHandler {
-	return &SystemHandler{users: users, domains: domains, databases: databases}
+func NewSystemHandler(users *store.UserStore, domains *store.DomainStore, databases *store.DatabaseStore, agentSock string) *SystemHandler {
+	return &SystemHandler{users: users, domains: domains, databases: databases, agentSock: agentSock}
+}
+
+// CheckUpdate asks the agent to fetch the remote and report whether the
+// installed source tree is behind. The handler is a thin shim; the
+// actual git work happens in the agent because the API process can't
+// write to /opt/zenspanel/src.
+func (h *SystemHandler) CheckUpdate(c *gin.Context) {
+	var resp interface{}
+	if err := agent.NewClient(h.agentSock).Call("update.check", nil, &resp); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// RunUpdate kicks off the async update on the agent. The agent runs
+// at most one update at a time; concurrent calls return the in-flight
+// status instead of starting a second run.
+func (h *SystemHandler) RunUpdate(c *gin.Context) {
+	var resp interface{}
+	if err := agent.NewClient(h.agentSock).Call("update.run", nil, &resp); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusAccepted, resp)
+}
+
+// UpdateStatus is what the UI polls every few seconds to render the
+// progress bar and log tail.
+func (h *SystemHandler) UpdateStatus(c *gin.Context) {
+	var resp interface{}
+	if err := agent.NewClient(h.agentSock).Call("update.status", nil, &resp); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // Stats returns host-level metrics for the admin dashboard. CPU and RAM

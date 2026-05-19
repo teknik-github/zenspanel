@@ -15,6 +15,7 @@ import (
 	agentphpfpm "github.com/zenspanel/zenspanel/agent/phpfpm"
 	agentssl "github.com/zenspanel/zenspanel/agent/ssl"
 	agentterminal "github.com/zenspanel/zenspanel/agent/terminal"
+	agentupdater "github.com/zenspanel/zenspanel/agent/updater"
 	agentuser "github.com/zenspanel/zenspanel/agent/user"
 	"github.com/zenspanel/zenspanel/internal/config"
 )
@@ -278,6 +279,20 @@ func main() {
 		return nil, agentuser.Delete(p.Username)
 	})
 
+	// updater — self-update of the panel itself, all root-only ops
+	// (git pull, go build, systemctl restart) routed through the agent
+	// because the API runs as a non-root user.
+	srv.Register("update.check", func(params json.RawMessage) (interface{}, error) {
+		return agentupdater.Check(cfg.Paths.SrcDir)
+	})
+	srv.Register("update.run", func(params json.RawMessage) (interface{}, error) {
+		err := agentupdater.Run(cfg.Paths.SrcDir, cfg.Paths.BinDir, cfg.Paths.FrontendDir)
+		return map[string]interface{}{"started": err == nil, "error": errMsg(err)}, nil
+	})
+	srv.Register("update.status", func(params json.RawMessage) (interface{}, error) {
+		return agentupdater.Status(), nil
+	})
+
 	// backup restore
 	srv.Register("backup.restore_files", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
@@ -407,4 +422,13 @@ func main() {
 	if err := srv.Listen(); err != nil {
 		log.Fatalf("agent listen: %v", err)
 	}
+}
+
+// errMsg returns err.Error() or "" — used for RPC return shapes that
+// surface a string error field even on success.
+func errMsg(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

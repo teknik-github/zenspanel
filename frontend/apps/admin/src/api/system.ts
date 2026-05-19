@@ -11,6 +11,26 @@ export interface SystemStats {
   uptime_seconds: number
 }
 
+export interface UpdateInfo {
+  current_sha: string
+  latest_sha: string
+  behind_by: number
+  changelog: string
+  current_branch: string
+}
+
+export interface UpdateStatus {
+  phase: string
+  log: string[]
+  done: boolean
+  error: string
+  started_at: string
+  finished_at: string
+}
+
 export const systemApi = {
-  stats: () => client.get<SystemStats>('/system/stats'),
+  stats:        () => client.get<SystemStats>('/system/stats'),
+  checkUpdate:  () => client.get<UpdateInfo>('/system/update/check'),
+  runUpdate:    () => client.post<{ started: boolean; error: string }>('/system/update/run', {}),
+  updateStatus: () => client.get<UpdateStatus>('/system/update/status'),
 }

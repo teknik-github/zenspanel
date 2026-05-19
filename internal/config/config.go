@@ -47,6 +47,9 @@ type PathsConfig struct {
 	SSLBase     string `mapstructure:"ssl_base"`
 	BackupBase  string `mapstructure:"backup_base"`
 	PHPPoolBase string `mapstructure:"php_pool_base"`
+	SrcDir      string `mapstructure:"src_dir"`
+	BinDir      string `mapstructure:"bin_dir"`
+	FrontendDir string `mapstructure:"frontend_dir"`
 }
 
 type LetsEncryptConfig struct {
@@ -72,6 +75,9 @@ func Load() (*Config, error) {
 	viper.SetDefault("paths.ssl_base", "/etc/nginx/ssl/zenspanel")
 	viper.SetDefault("paths.backup_base", "/var/backups/zenspanel")
 	viper.SetDefault("paths.php_pool_base", "/etc/php")
+	viper.SetDefault("paths.src_dir", "/opt/zenspanel/src")
+	viper.SetDefault("paths.bin_dir", "/opt/zenspanel/bin")
+	viper.SetDefault("paths.frontend_dir", "/opt/zenspanel/frontend")
 	viper.SetDefault("jwt.expiry", "24h")
 	viper.SetDefault("jwt.refresh_expiry", "720h")
 	viper.SetDefault("letsencrypt.staging", false)
