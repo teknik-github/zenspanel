@@ -48,20 +48,22 @@ type modifyUserReq struct {
 	Data *fbUser `json:"data"`
 }
 
-// CreateUser provisions a FileBrowser user record scoped to
-// <homeBase>/<username>/. Idempotent: re-creating an existing user
-// returns success.
+// CreateUser provisions a FileBrowser user record scoped to the
+// username's directory under FileBrowser's configured Root. The scope
+// is the username itself (relative), not the absolute path: FileBrowser
+// joins Root + scope internally, and an absolute scope would
+// double-prefix into a path that doesn't exist on disk.
 func CreateUser(username, homeBase string) error {
 	if err := safe.Username(username); err != nil {
 		return err
 	}
-	scope := homeBase + "/" + username
+	_ = homeBase // kept in signature for symmetry with the other agent.* calls
 	body, _ := json.Marshal(modifyUserReq{
 		What: "user",
 		Data: &fbUser{
 			Username: username,
 			Password: username + "-no-login", // unused under proxy auth
-			Scope:    scope,
+			Scope:    username,                // relative to Root
 			LockPass: false,
 			Perm: fbPerm{
 				Create: true, Rename: true, Modify: true,
