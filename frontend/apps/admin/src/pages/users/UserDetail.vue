@@ -44,6 +44,13 @@ async function deleteUser() {
   await usersApi.delete(user.value.id)
   router.push('/users')
 }
+
+async function loginAs() {
+  const res = await usersApi.impersonate(user.value.id)
+  const token = res.data.token
+  const url = `${window.location.origin}/user/#impersonate=${encodeURIComponent(token)}`
+  window.open(url, '_blank')
+}
 </script>
 
 <template>
@@ -108,6 +115,10 @@ async function deleteUser() {
           {{ loading ? 'Saving...' : 'Save Changes' }}
         </button>
         <span v-if="saved" class="text-green-600 text-xs">Saved!</span>
+        <button @click="loginAs"
+          class="text-sm text-purple-600 border border-purple-200 px-4 py-2 rounded-md hover:bg-purple-50">
+          Login as User
+        </button>
         <button @click="confirmDelete = true"
           class="ml-auto text-sm text-red-600 border border-red-200 px-4 py-2 rounded-md hover:bg-red-50">
           Delete User

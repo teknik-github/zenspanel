@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	osuser "os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -60,7 +62,9 @@ func nextFreeUID(preferred int) (int, error) {
 // Create provisions a Linux user. The caller proposes a UID; we accept it
 // if it's free, otherwise we pick the next free one in the panel range and
 // return it via the result tuple so the API can update its DB row.
-func Create(username string, uid int, homeBase string) (int, error) {
+// phpVersion seeds ~/bin/php and ~/bin/composer so the terminal shell
+// picks up the user's configured PHP — not the system default.
+func Create(username string, uid int, homeBase, phpVersion string) (int, error) {
 	if err := safe.Username(username); err != nil {
 		return 0, err
 	}
@@ -88,7 +92,68 @@ func Create(username string, uid int, homeBase string) (int, error) {
 	if err := os.Chmod(homeDir, 0711); err != nil {
 		return 0, fmt.Errorf("chmod home: %w", err)
 	}
+	if phpVersion != "" {
+		if err := SetupBin(username, homeBase, phpVersion); err != nil {
+			return 0, fmt.Errorf("setup bin: %w", err)
+		}
+	}
 	return chosen, nil
+}
+
+// SetupBin populates ~/bin with a php symlink and a composer wrapper
+// pinned to the user's chosen PHP version. The terminal shell's PATH
+// starts with ~/bin (set by useradd's default profile + rbash), so
+// `php` and `composer` invocations resolve to the version set here
+// regardless of which PHP is the system default.
+//
+// Idempotent — safe to call on every php_version change. Removes any
+// existing php symlink before recreating; rewrites the composer
+// wrapper unconditionally.
+func SetupBin(username, homeBase, phpVersion string) error {
+	if err := safe.Username(username); err != nil {
+		return err
+	}
+	if err := safe.PHPVersion(phpVersion); err != nil {
+		return err
+	}
+	binDir := filepath.Join(homeBase, username, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		return fmt.Errorf("mkdir bin: %w", err)
+	}
+
+	// Resolve uid/gid so the dir + wrapper are owned by the panel user.
+	// Without this, MkdirAll runs as root and the user can't drop new
+	// binaries into their own ~/bin later.
+	var uid, gid int = -1, -1
+	if u, err := osuser.Lookup(username); err == nil {
+		uid, _ = strconv.Atoi(u.Uid)
+		gid, _ = strconv.Atoi(u.Gid)
+		_ = os.Chown(binDir, uid, gid)
+	}
+
+	phpBin := fmt.Sprintf("/usr/bin/php%s", phpVersion)
+	phpLink := filepath.Join(binDir, "php")
+	_ = os.Remove(phpLink)
+	if err := os.Symlink(phpBin, phpLink); err != nil {
+		return fmt.Errorf("symlink php: %w", err)
+	}
+	if uid >= 0 {
+		_ = os.Lchown(phpLink, uid, gid)
+	}
+
+	composerWrapper := fmt.Sprintf("#!/bin/sh\nexec %s /usr/local/bin/composer.phar \"$@\"\n", phpBin)
+	composerPath := filepath.Join(binDir, "composer")
+	if err := os.WriteFile(composerPath, []byte(composerWrapper), 0755); err != nil {
+		return fmt.Errorf("write composer wrapper: %w", err)
+	}
+	// WriteFile honors umask — re-chmod to ensure executable bit survives.
+	if err := os.Chmod(composerPath, 0755); err != nil {
+		return fmt.Errorf("chmod composer: %w", err)
+	}
+	if uid >= 0 {
+		_ = os.Chown(composerPath, uid, gid)
+	}
+	return nil
 }
 
 func Delete(username string) error {

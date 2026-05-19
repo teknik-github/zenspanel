@@ -119,6 +119,7 @@ func (r *Router) Setup() *gin.Engine {
 	{
 		api.GET("/auth/me", r.auth.Me)
 		api.GET("/auth/filebrowser", r.auth.FileBrowserAuth)
+		api.POST("/users/:id/impersonate", auth.RequireRole("admin"), r.auth.Impersonate)
 
 		// users
 		api.GET("/users", auth.RequireRole("admin"), r.users.List)

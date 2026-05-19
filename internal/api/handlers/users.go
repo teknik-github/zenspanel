@@ -150,6 +150,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		PackageID       uint64 `json:"package_id"`
 		TerminalEnabled bool   `json:"terminal_enabled"`
 		BackupEnabled   bool   `json:"backup_enabled"`
+		PHPVersion      string `json:"php_version"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -159,6 +160,13 @@ func (h *UserHandler) Create(c *gin.Context) {
 	if err := ValidateUsername(req.Username); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Default to 8.3 — the version the installer auto-starts. Without
+	// this, an admin who omits php_version would land on a PHP-FPM
+	// socket that doesn't exist and every domain request would 502.
+	if req.PHPVersion == "" {
+		req.PHPVersion = "8.3"
 	}
 
 	hash, err := store.HashPassword(req.Password)
@@ -179,6 +187,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		Status:          "active",
 		TerminalEnabled: req.TerminalEnabled,
 		BackupEnabled:   req.BackupEnabled,
+		PHPVersion:      req.PHPVersion,
 	}
 	if req.PackageID > 0 {
 		user.PackageID.Int64 = int64(req.PackageID)
@@ -201,8 +210,9 @@ func (h *UserHandler) Create(c *gin.Context) {
 		UID int `json:"uid"`
 	}
 	if err := agentClient.Call("user.create", map[string]interface{}{
-		"username": user.Username,
-		"uid":      user.LinuxUID,
+		"username":    user.Username,
+		"uid":         user.LinuxUID,
+		"php_version": user.PHPVersion,
 	}, &createResp); err != nil {
 		_ = h.users.Delete(user.ID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "provision linux user: " + err.Error()})
@@ -241,7 +251,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 			}
 			if err := agentClient.Call("phpfpm.create_pool", map[string]interface{}{
 				"username":    user.Username,
-				"php_version": "8.3",
+				"php_version": user.PHPVersion,
 			}, nil); err != nil {
 				provisionWarnings = append(provisionWarnings, "phpfpm: "+err.Error())
 			}
@@ -270,6 +280,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		"status":           user.Status,
 		"terminal_enabled": user.TerminalEnabled,
 		"backup_enabled":   user.BackupEnabled,
+		"php_version":      user.PHPVersion,
 		"created_at":       user.CreatedAt,
 	}
 	if len(provisionWarnings) > 0 {
@@ -289,9 +300,29 @@ func (h *UserHandler) Update(c *gin.Context) {
 	delete(fields, "id")
 	delete(fields, "linux_uid")
 	delete(fields, "password_hash")
+
+	// Capture php_version intent BEFORE the DB write, so we can re-seed
+	// ~/bin/php after the row is updated. allowedUserUpdate gates the
+	// DB write; the agent call is a side effect we trigger ourselves.
+	newPHPVersion, _ := fields["php_version"].(string)
+
 	if err := h.users.Update(id, fields); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	if newPHPVersion != "" {
+		user, uerr := h.users.GetByID(id)
+		if uerr == nil {
+			agentClient := agent.NewClient(h.agentSock)
+			// Re-seed ~/bin/php so the terminal shell tracks the new
+			// version. Best-effort — Update returning 200 with a stale
+			// symlink is better than 500 on a successful row update.
+			_ = agentClient.Call("user.setup_bin", map[string]interface{}{
+				"username":    user.Username,
+				"php_version": user.PHPVersion,
+			}, nil)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "updated"})
 }

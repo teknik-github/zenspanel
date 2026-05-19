@@ -200,6 +200,17 @@ install_dependencies() {
     debconf-set-selections <<< "phpmyadmin phpmyadmin/reconfigure-webserver multiselect none"
     apt-get install -y -qq phpmyadmin || log_warn "phpMyAdmin install had issues, continuing..."
 
+    # Composer phar lives at a stable path; the agent's per-user
+    # ~/bin/composer wrapper execs it via the user's pinned PHP. Without
+    # this file, `composer` in the terminal returns "command not found".
+    if [[ ! -f /usr/local/bin/composer.phar ]]; then
+        log_info "Installing Composer..."
+        curl -sS https://getcomposer.org/installer | php -- \
+            --install-dir=/usr/local/bin --filename=composer.phar --quiet \
+            || log_warn "Composer install failed, continuing..."
+        chmod +x /usr/local/bin/composer.phar 2>/dev/null || true
+    fi
+
     log_info "Dependencies installed ✓"
 }
 

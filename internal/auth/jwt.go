@@ -8,19 +8,27 @@ import (
 )
 
 type Claims struct {
-	UserID uint64 `json:"user_id"`
-	Role   string `json:"role"`
+	UserID         uint64 `json:"user_id"`
+	Role           string `json:"role"`
+	ImpersonatedBy uint64 `json:"impersonated_by,omitempty"`
 	jwt.RegisteredClaims
 }
 
 func GenerateToken(userID uint64, role, secret, expiry string) (string, error) {
+	return GenerateTokenAs(userID, role, 0, secret, expiry)
+}
+
+// GenerateTokenAs mints a token for userID/role. When impersonatedBy > 0
+// the claim is embedded so audit logs can trace who initiated the session.
+func GenerateTokenAs(userID uint64, role string, impersonatedBy uint64, secret, expiry string) (string, error) {
 	dur, err := time.ParseDuration(expiry)
 	if err != nil {
 		return "", fmt.Errorf("parse expiry: %w", err)
 	}
 	claims := Claims{
-		UserID: userID,
-		Role:   role,
+		UserID:         userID,
+		Role:           role,
+		ImpersonatedBy: impersonatedBy,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(dur)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

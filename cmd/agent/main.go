@@ -278,13 +278,20 @@ func main() {
 	// user
 	srv.Register("user.create", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
-			Username string `json:"username"`
-			UID      int    `json:"uid"`
+			Username   string `json:"username"`
+			UID        int    `json:"uid"`
+			PHPVersion string `json:"php_version"`
 		}
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		chosen, err := agentuser.Create(p.Username, p.UID, cfg.Paths.HomeBase)
+		// Default to 8.3 if API didn't specify — matches the installer's
+		// auto-started FPM pool, so the symlink resolves to a binary that
+		// actually exists.
+		if p.PHPVersion == "" {
+			p.PHPVersion = "8.3"
+		}
+		chosen, err := agentuser.Create(p.Username, p.UID, cfg.Paths.HomeBase, p.PHPVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -299,6 +306,21 @@ func main() {
 			return nil, err
 		}
 		return nil, agentuser.Delete(p.Username)
+	})
+
+	// user.setup_bin — re-seed ~/bin/php and ~/bin/composer for the user.
+	// Called both at create time (via user.create) and whenever the API
+	// updates a user's php_version, so the terminal shell always tracks
+	// the configured version.
+	srv.Register("user.setup_bin", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username   string `json:"username"`
+			PHPVersion string `json:"php_version"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentuser.SetupBin(p.Username, cfg.Paths.HomeBase, p.PHPVersion)
 	})
 
 	// quota — filesystem-level disk quota enforcement. Hard limit comes

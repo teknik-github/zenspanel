@@ -115,6 +115,17 @@ async function unsuspend(id: number) {
   await fetchUsers()
 }
 
+async function loginAs(id: number) {
+  const res = await usersApi.impersonate(id)
+  const token = res.data.token
+  // Open the user panel in a new tab. The panel reads the token from
+  // the URL hash on mount so we don't have to touch the admin's own
+  // localStorage. The hash is stripped by the browser after the SPA
+  // reads it — it never reaches the server.
+  const url = `${window.location.origin}/user/#impersonate=${encodeURIComponent(token)}`
+  window.open(url, '_blank')
+}
+
 async function deleteUser(id: number) {
   await usersApi.delete(id)
   confirmDelete.value = null
@@ -209,6 +220,8 @@ async function deleteUser(id: number) {
                 <div class="flex items-center gap-2">
                   <button @click="router.push(`/users/${u.id}`)" title="View user details"
                     class="text-xs text-indigo-600 border border-indigo-200 px-2 py-1 rounded hover:bg-indigo-50 transition-colors">View</button>
+                  <button @click="loginAs(u.id)" title="Login as this user in User Panel"
+                    class="text-xs text-purple-600 border border-purple-200 px-2 py-1 rounded hover:bg-purple-50 transition-colors">Login as</button>
                   <button v-if="u.status === 'active'" @click="suspend(u.id)" title="Suspend user"
                     class="text-xs text-amber-600 border border-amber-200 px-2 py-1 rounded hover:bg-amber-50 transition-colors">Suspend</button>
                   <button v-else @click="unsuspend(u.id)" title="Unsuspend user"

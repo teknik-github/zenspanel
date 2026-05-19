@@ -12,6 +12,7 @@ export const useAuthStore = defineStore('auth', () => {
     terminal_enabled: boolean
     backup_enabled: boolean
     package_id: number | null
+    php_version: string
   } | null>(null)
 
   async function login(username: string, password: string) {

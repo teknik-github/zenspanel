@@ -13,6 +13,7 @@ var allowedUserUpdate = map[string]struct{}{
 	"status":           {},
 	"terminal_enabled": {},
 	"backup_enabled":   {},
+	"php_version":      {},
 }
 
 // allowedDomainUpdate lists columns the API may update on the domains table.

@@ -10,4 +10,5 @@ export const usersApi = {
   unsuspend: (id: number) => client.put(`/users/${id}/unsuspend`),
   changePackage: (id: number, packageId: number) => client.put(`/users/${id}/package`, { package_id: packageId }),
   getUsage: (id: number) => client.get(`/users/${id}/usage`),
+  impersonate: (id: number) => client.post(`/users/${id}/impersonate`),
 }

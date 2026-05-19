@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -74,6 +75,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			"role":             user.Role,
 			"terminal_enabled": user.TerminalEnabled,
 			"backup_enabled":   user.BackupEnabled,
+			"package_id":       user.PackageID,
+			"php_version":      user.PHPVersion,
 		},
 	})
 }
@@ -93,6 +96,59 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		"terminal_enabled": user.TerminalEnabled,
 		"backup_enabled":   user.BackupEnabled,
 		"package_id":       user.PackageID,
+		"php_version":      user.PHPVersion,
+	})
+}
+
+// Impersonate mints a short-lived token for the target user on behalf of
+// the calling admin. The token carries an ImpersonatedBy claim so audit
+// logs can trace the session back to the admin who initiated it.
+// Only admins may call this; the route is gated by RequireRole("admin").
+func (h *AuthHandler) Impersonate(c *gin.Context) {
+	targetID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	target, err := h.users.GetByID(targetID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	if target.Status == "suspended" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "target account is suspended"})
+		return
+	}
+	// Prevent impersonating another admin — admins should log in normally.
+	if target.Role == "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot impersonate admin accounts"})
+		return
+	}
+
+	adminID := auth.GetUserID(c)
+	// Short TTL — 1 hour is enough for a support session; the admin can
+	// re-impersonate if they need longer. Using a fixed duration rather
+	// than the global expiry so a long-lived admin token doesn't produce
+	// an equally long-lived impersonation token.
+	token, err := auth.GenerateTokenAs(target.ID, target.Role, adminID, h.secret, "1h")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token generation failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"user": gin.H{
+			"id":               target.ID,
+			"username":         target.Username,
+			"email":            target.Email,
+			"role":             target.Role,
+			"terminal_enabled": target.TerminalEnabled,
+			"backup_enabled":   target.BackupEnabled,
+			"package_id":       target.PackageID,
+			"php_version":      target.PHPVersion,
+		},
 	})
 }
 
