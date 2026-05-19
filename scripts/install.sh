@@ -619,6 +619,21 @@ EOF
         --branding.disableUsedPercentage=true >/dev/null 2>&1 || \
         log_warn "FileBrowser config set returned non-zero (continuing)"
 
+    # Make sure an admin user exists so the agent's HTTP API calls
+    # (POST /api/users with X-Auth-User: admin) succeed. `config init`
+    # creates an admin only on the very first DB init; if the DB was
+    # already there, OR if the proxy-auth scope was set without an
+    # explicit admin record, the agent ends up hitting 401.
+    # `users add` errors out if the user exists — we swallow that and
+    # always run `users update` afterward to guarantee perm.admin=true
+    # and a / scope so the panel-user API works.
+    FB_ADMIN_PW=$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
+    /usr/local/bin/filebrowser --database "$FB_DB" users add admin "$FB_ADMIN_PW" \
+        --perm.admin=true --scope / >/dev/null 2>&1 || true
+    /usr/local/bin/filebrowser --database "$FB_DB" users update admin \
+        --perm.admin=true --scope / >/dev/null 2>&1 || \
+        log_warn "FileBrowser admin upsert failed — File Manager provisioning will fail with HTTP 401"
+
     cat > /etc/systemd/system/zenspanel-filebrowser.service <<EOF
 [Unit]
 Description=ZensPanel FileBrowser
@@ -896,16 +911,41 @@ setup_quota() {
     # ext4: remount live + quotacheck + quotaon. quotacheck needs
     # exclusive read on the filesystem, so on root mounts it warns
     # but still produces aquota.user; that's why the -m (mounted) flag
-    # is there. Failures are non-fatal — admin can fix manually after.
+    # is there. Failures are surfaced to the operator (not silenced)
+    # because a quota that's "on but not really" leads to confusing
+    # 500s when create-user calls setquota later.
     if [[ "$fs_type" =~ ^ext ]]; then
+        # Make sure the kernel module is loaded. On stock Ubuntu/Debian
+        # quota_v2 is built-in but on minimal images it can be a module.
+        modprobe quota_v2 2>/dev/null || true
+
         log_info "Remounting $fs_mount with usrquota..."
-        mount -o "remount,$mount_opt" "$fs_mount" || log_warn "remount failed (you may need to reboot for fstab changes to apply)"
+        if ! mount -o "remount,$mount_opt" "$fs_mount"; then
+            log_warn "Live remount failed. Quota will activate after reboot once /etc/fstab is honoured."
+            log_warn "Skipping quotacheck/quotaon — they would fail without an active quota mount."
+            return 0
+        fi
+
+        # Verify the remount actually picked up the option. On some
+        # kernels remount silently ignores quota flags on the rootfs
+        # and only a real reboot enables them. Check before quotacheck.
+        if ! mount | grep -q "on $fs_mount type $fs_type.*$mount_opt"; then
+            log_warn "Mount $fs_mount is not advertising $mount_opt yet. A reboot is required to activate the quota subsystem on this filesystem."
+            log_warn "After reboot, re-run: quotacheck -cum $fs_mount && quotaon -u $fs_mount"
+            return 0
+        fi
 
         log_info "Running quotacheck (this may take a moment)..."
-        quotacheck -cum "$fs_mount" 2>/dev/null || quotacheck -ucm "$fs_mount" 2>/dev/null || log_warn "quotacheck reported issues — quota may not be fully active until reboot"
+        if ! quotacheck -cum "$fs_mount" 2>&1 | tee -a "${ZENSPANEL_LOG}/install.log"; then
+            log_warn "quotacheck reported issues — see ${ZENSPANEL_LOG}/install.log"
+        fi
 
         log_info "Enabling quota..."
-        quotaon -u "$fs_mount" 2>/dev/null || log_warn "quotaon failed (this is fine if quota is already on or filesystem needs a reboot)"
+        if quotaon -u "$fs_mount" 2>&1; then
+            log_info "Quota enabled on $fs_mount ✓"
+        else
+            log_warn "quotaon failed. Run 'quotaon -u $fs_mount' manually after reboot."
+        fi
     fi
 
     log_info "Disk quota setup complete ✓"
