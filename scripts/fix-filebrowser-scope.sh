@@ -54,8 +54,12 @@ for d in "$HOME_BASE"/*; do
         echo "    update $u → scope=$u"
         filebrowser --database "$DB" users update "$u" --scope "$u" >/dev/null
     else
+        # Generate a 32-char random password. The user never logs in
+        # with it (proxy auth replaces that), but FileBrowser enforces
+        # a 12-char minimum on add.
+        RANDPW=$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
         echo "    add    $u → scope=$u"
-        filebrowser --database "$DB" users add "$u" "${u}-no-login" \
+        filebrowser --database "$DB" users add "$u" "$RANDPW" \
             --scope "$u" \
             --perm.admin=false >/dev/null
     fi
@@ -66,9 +70,12 @@ done
 # the elevation flag required for /api/users mutations.
 if ! filebrowser --database "$DB" users ls 2>/dev/null | awk '{print $2}' | grep -Fxq "admin"; then
     echo "==> Adding admin user (for agent API access)..."
-    filebrowser --database "$DB" users add admin admin \
+    ADMINPW=$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
+    filebrowser --database "$DB" users add admin "$ADMINPW" \
         --perm.admin=true \
         --scope / >/dev/null
+    echo "    admin password set to: $ADMINPW"
+    echo "    (the agent uses proxy auth, so the password is rarely needed)"
 fi
 
 echo "==> Resulting users:"

@@ -2,6 +2,8 @@ package filebrowser
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -58,12 +60,23 @@ func CreateUser(username, homeBase string) error {
 		return err
 	}
 	_ = homeBase // kept in signature for symmetry with the other agent.* calls
+
+	// FileBrowser enforces a 12-char minimum on the password column
+	// even under proxy auth where the password is never used. We
+	// generate a 32-char random hex string so any username length is
+	// safe without leaking a guessable pattern.
+	pw := make([]byte, 16)
+	if _, err := rand.Read(pw); err != nil {
+		return fmt.Errorf("rand: %w", err)
+	}
+	password := hex.EncodeToString(pw)
+
 	body, _ := json.Marshal(modifyUserReq{
 		What: "user",
 		Data: &fbUser{
 			Username: username,
-			Password: username + "-no-login", // unused under proxy auth
-			Scope:    username,                // relative to Root
+			Password: password, // unused under proxy auth, just satisfies the column
+			Scope:    username, // relative to Root
 			LockPass: false,
 			Perm: fbPerm{
 				Create: true, Rename: true, Modify: true,
