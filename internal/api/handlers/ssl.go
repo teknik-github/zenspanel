@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -57,6 +58,14 @@ func (h *SSLHandler) Issue(c *gin.Context) {
 	agentClient := agent.NewClient(h.agentSock)
 	switch req.Type {
 	case "letsencrypt":
+		// Pre-flight: catch the most common operator misconfigurations
+		// before the request even reaches certbot. The ACME server
+		// rejects forbidden TLDs with a generic 500 from our agent
+		// otherwise — this surfaces a clear 400 instead.
+		if msg := validateLEEmail(h.leEmail); msg != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			return
+		}
 		if err := agentClient.Call("ssl.issue_letsencrypt", map[string]interface{}{
 			"domain":  domain.Domain,
 			"email":   h.leEmail,
@@ -153,3 +162,39 @@ var errInvalidPEM = &pemError{}
 type pemError struct{}
 
 func (e *pemError) Error() string { return "invalid PEM" }
+
+// leForbiddenEmailDomains lists email domains the ACME server rejects
+// outright when used as an account contact. These are reserved by the
+// IANA spec or by Let's Encrypt's own policy. The check is best-effort
+// — if a new domain gets added to the deny-list upstream, certbot will
+// still surface its own error message; this just catches the obvious
+// install-time placeholders before we even round-trip to the agent.
+var leForbiddenEmailDomains = map[string]struct{}{
+	"example.com":  {},
+	"example.net":  {},
+	"example.org":  {},
+	"test.com":     {},
+	"localhost":    {},
+	"invalid":      {},
+	"localdomain":  {},
+}
+
+// validateLEEmail returns a user-facing reason why the configured
+// `letsencrypt.email` value won't work, or an empty string if the email
+// looks acceptable to ACME. Doesn't validate format strictly — certbot
+// will catch that with its own clearer message.
+func validateLEEmail(email string) string {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return "Let's Encrypt email is not configured. Set `letsencrypt.email` in /etc/zenspanel/config.yaml to a real email address you control, then restart the API."
+	}
+	at := strings.LastIndex(email, "@")
+	if at < 1 || at == len(email)-1 {
+		return "Let's Encrypt email is malformed. Set `letsencrypt.email` in /etc/zenspanel/config.yaml to a valid address (e.g. admin@yourdomain.com)."
+	}
+	domain := strings.ToLower(email[at+1:])
+	if _, bad := leForbiddenEmailDomains[domain]; bad {
+		return "Let's Encrypt rejects '" + domain + "' as a contact email domain. Set `letsencrypt.email` in /etc/zenspanel/config.yaml to a real email address you control (not a reserved/example domain), then restart the API."
+	}
+	return ""
+}

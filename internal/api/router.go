@@ -24,6 +24,7 @@ type Router struct {
 	backups       *handlers.BackupHandler
 	files         *handlers.FileManagerHandler
 	system        *handlers.SystemHandler
+	terminal      *handlers.TerminalHandler
 	apiKeyStore   *store.APIKeyStore
 	auditLogStore *store.AuditLogStore
 	redis         *redis.Client // nil → fall back to in-memory rate limiter
@@ -43,6 +44,7 @@ func NewRouter(
 	backupsH *handlers.BackupHandler,
 	filesH *handlers.FileManagerHandler,
 	systemH *handlers.SystemHandler,
+	terminalH *handlers.TerminalHandler,
 	apiKeyStore *store.APIKeyStore,
 	auditLogStore *store.AuditLogStore,
 	rdb *redis.Client,
@@ -61,6 +63,7 @@ func NewRouter(
 		backups:       backupsH,
 		files:         filesH,
 		system:        systemH,
+		terminal:      terminalH,
 		apiKeyStore:   apiKeyStore,
 		auditLogStore: auditLogStore,
 		redis:         rdb,
@@ -96,6 +99,12 @@ func (r *Router) Setup() *gin.Engine {
 	// browser opens this in a new tab where the JWT bearer header isn't
 	// sent. The token is one-time-use and expires in 60 seconds.
 	e.GET("/api/v1/phpmyadmin/sso/:token", r.databases.RedeemPHPMyAdmin)
+
+	// Terminal WebSocket — same pattern as phpMyAdmin SSO. Browsers
+	// can't attach JWT headers to WebSocket handshakes from page JS, so
+	// the user mints a one-time token via the JWT-protected
+	// /terminal/token endpoint and passes it as a query string here.
+	e.GET("/ws/terminal", r.terminal.Connect)
 
 	// audit middleware records mutating requests on both protected and
 	// external groups so the audit_logs table covers admin actions and
@@ -182,6 +191,10 @@ func (r *Router) Setup() *gin.Engine {
 		api.POST("/files/copy", r.files.Copy)
 		api.POST("/files/compress", r.files.Compress)
 		api.POST("/files/extract", r.files.Extract)
+
+		// terminal — token endpoint is JWT-gated; the WS endpoint that
+		// redeems the token is registered above outside this group.
+		api.POST("/terminal/token", r.terminal.GetToken)
 	}
 
 	// External API — authenticated via X-API-Key header. The endpoints

@@ -15,6 +15,7 @@ import (
 	agentmysql "github.com/zenspanel/zenspanel/agent/mysql"
 	agentnginx "github.com/zenspanel/zenspanel/agent/nginx"
 	agentphpfpm "github.com/zenspanel/zenspanel/agent/phpfpm"
+	agentquota "github.com/zenspanel/zenspanel/agent/quota"
 	agentssl "github.com/zenspanel/zenspanel/agent/ssl"
 	agentterminal "github.com/zenspanel/zenspanel/agent/terminal"
 	agentupdater "github.com/zenspanel/zenspanel/agent/updater"
@@ -255,6 +256,25 @@ func main() {
 		return map[string]interface{}{"pid": session.Cmd.Process.Pid}, nil
 	})
 
+	// terminal.stream — spawn a PTY and expose it on a one-shot Unix
+	// socket. The API process dials the returned path and bridges it to
+	// the browser WebSocket. Spawning happens here (root) because the
+	// API runs as a non-root user and can't fork a shell as the panel
+	// user directly.
+	srv.Register("terminal.stream", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		sockPath, err := agentterminal.Stream(p.Username, cfg.Paths.HomeBase)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"sock_path": sockPath}, nil
+	})
+
 	// user
 	srv.Register("user.create", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
@@ -279,6 +299,48 @@ func main() {
 			return nil, err
 		}
 		return nil, agentuser.Delete(p.Username)
+	})
+
+	// quota — filesystem-level disk quota enforcement. Hard limit comes
+	// from package.disk_quota; kernel blocks writes past it with EDQUOT.
+	// homeBase is passed as the filesystem identifier — setquota/repquota
+	// resolve it to the mounted device automatically.
+	srv.Register("quota.set", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username  string `json:"username"`
+			HardBytes int64  `json:"hard_bytes"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentquota.SetQuota(p.Username, cfg.Paths.HomeBase, p.HardBytes)
+	})
+
+	srv.Register("quota.delete", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentquota.DeleteQuota(p.Username, cfg.Paths.HomeBase)
+	})
+
+	srv.Register("quota.read", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		used, hard, err := agentquota.ReadQuota(p.Username, cfg.Paths.HomeBase)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{
+			"used_bytes": used,
+			"hard_bytes": hard,
+		}, nil
 	})
 
 	// filebrowser user management — keep records in FileBrowser's DB

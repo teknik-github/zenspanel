@@ -228,6 +228,18 @@ func (h *UserHandler) Create(c *gin.Context) {
 			}, nil); err != nil {
 				provisionWarnings = append(provisionWarnings, "phpfpm: "+err.Error())
 			}
+			// Filesystem-level disk quota — kernel blocks writes past
+			// the hard limit with EDQUOT. Soft-fail because the panel
+			// is still usable without it; admin can re-trigger by
+			// reassigning the package.
+			if pkg.DiskQuota > 0 {
+				if err := agentClient.Call("quota.set", map[string]interface{}{
+					"username":   user.Username,
+					"hard_bytes": pkg.DiskQuota,
+				}, nil); err != nil {
+					provisionWarnings = append(provisionWarnings, "quota: "+err.Error())
+				}
+			}
 		}
 	}
 
@@ -269,9 +281,19 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 func (h *UserHandler) Delete(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	// Look up the username before deleting the row so we can tell the
+	// agent which quota entry to clear. Failure to clear quota is
+	// non-fatal — the row is still removed.
+	user, _ := h.users.GetByID(id)
 	if err := h.users.Delete(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if user != nil && user.Username != "" {
+		agentClient := agent.NewClient(h.agentSock)
+		_ = agentClient.Call("quota.delete", map[string]interface{}{
+			"username": user.Username,
+		}, nil)
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
@@ -306,6 +328,25 @@ func (h *UserHandler) ChangePackage(c *gin.Context) {
 	if err := h.users.Update(id, map[string]interface{}{"package_id": req.PackageID}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	// Push the new package's resource limits to the agent so cgroup +
+	// disk quota match the package the user is now on. Failures are
+	// non-fatal — the row was already updated, admin can retry.
+	user, _ := h.users.GetByID(id)
+	pkg, _ := h.packages.GetByID(req.PackageID)
+	if user != nil && pkg != nil {
+		agentClient := agent.NewClient(h.agentSock)
+		_ = agentClient.Call("cgroups.update_slice", map[string]interface{}{
+			"username":     user.Username,
+			"cpu_quota":    pkg.CPUQuota,
+			"memory_limit": pkg.MemoryLimit,
+		}, nil)
+		if pkg.DiskQuota > 0 {
+			_ = agentClient.Call("quota.set", map[string]interface{}{
+				"username":   user.Username,
+				"hard_bytes": pkg.DiskQuota,
+			}, nil)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "package updated"})
 }

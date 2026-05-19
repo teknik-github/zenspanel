@@ -1,9 +1,14 @@
 package terminal
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/creack/pty"
 
@@ -42,4 +47,74 @@ func (s *Session) Close() error {
 		s.Cmd.Process.Kill()
 	}
 	return s.PTY.Close()
+}
+
+// Stream spawns a PTY for the user, creates a one-shot Unix socket the
+// API can connect to, and returns the socket path. The caller (agent
+// RPC) returns this path to the API; the API then dials it and bridges
+// raw bytes between that socket and the WebSocket the browser is
+// connected to.
+//
+// The socket accepts exactly one connection then unlinks itself —
+// short-lived, per-session, no shared state.
+func Stream(username, homeBase string) (string, error) {
+	sess, err := SpawnSession(username, homeBase)
+	if err != nil {
+		return "", err
+	}
+
+	// Random suffix avoids collisions if two users connect at the same
+	// instant before the listener is created. /tmp because it needs to
+	// be writable by the agent (root) and connectable by the API user.
+	rb := make([]byte, 8)
+	if _, err := rand.Read(rb); err != nil {
+		sess.Close()
+		return "", err
+	}
+	sockPath := filepath.Join("/tmp", "zp-pty-"+hex.EncodeToString(rb)+".sock")
+	_ = os.Remove(sockPath) // tear down stale socket from a crashed prior run
+
+	ln, err := net.Listen("unix", sockPath)
+	if err != nil {
+		sess.Close()
+		return "", fmt.Errorf("listen unix: %w", err)
+	}
+	// 0666 so the API user (non-root) can connect. Path is unguessable
+	// (random hex) and torn down right after the single accept.
+	if err := os.Chmod(sockPath, 0666); err != nil {
+		ln.Close()
+		_ = os.Remove(sockPath)
+		sess.Close()
+		return "", fmt.Errorf("chmod sock: %w", err)
+	}
+
+	go func() {
+		defer os.Remove(sockPath)
+		defer sess.Close()
+
+		conn, err := ln.Accept()
+		ln.Close() // one shot; close the listener regardless
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		// Bidirectional copy. Either side closing tears everything down
+		// because the io.Copy on the closed half returns and signals
+		// `done`, which lets the goroutine exit and runs the deferred
+		// `sess.Close()` (which kills the shell and closes the PTY,
+		// which makes the OTHER io.Copy also return).
+		done := make(chan struct{}, 2)
+		go func() {
+			io.Copy(conn, sess.PTY)
+			done <- struct{}{}
+		}()
+		go func() {
+			io.Copy(sess.PTY, conn)
+			done <- struct{}{}
+		}()
+		<-done
+	}()
+
+	return sockPath, nil
 }

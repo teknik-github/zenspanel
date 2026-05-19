@@ -74,11 +74,12 @@ func main() {
 	backupsH := handlers.NewBackupHandler(backupStore, userStore, databaseStore, cfg.Paths.HomeBase, cfg.Paths.BackupBase, cfg.Agent.Socket)
 	filesH := handlers.NewFileManagerHandler(userStore, cfg.Agent.Socket)
 	systemH := handlers.NewSystemHandler(userStore, domainStore, databaseStore, cfg.Agent.Socket)
+	terminalH := handlers.NewTerminalHandler(userStore, cfg.Agent.Socket)
 
 	// router
 	router := api.NewRouter(
 		authH, usersH, packagesH, domainsH, databasesH,
-		phpVersionsH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH,
+		phpVersionsH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH, terminalH,
 		apiKeyStore, auditLogStore,
 		rdb,
 		cfg.JWT.Secret,

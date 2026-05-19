@@ -12,7 +12,7 @@ type User struct {
 	PasswordHash    string        `db:"password_hash" json:"-"`
 	Role            string        `db:"role" json:"role"`
 	LinuxUID        int           `db:"linux_uid" json:"linux_uid"`
-	PackageID       sql.NullInt64 `db:"package_id" json:"package_id"`
+	PackageID       NullInt64 `db:"package_id" json:"package_id"`
 	Status          string        `db:"status" json:"status"`
 	TerminalEnabled bool          `db:"terminal_enabled" json:"terminal_enabled"`
 	BackupEnabled   bool          `db:"backup_enabled" json:"backup_enabled"`
