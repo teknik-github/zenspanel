@@ -50,9 +50,7 @@ jobs:
 
       - name: Install frontend deps
         working-directory: frontend
-        run: |
-          pnpm config set onlyBuiltDependencies esbuild,vue-demi
-          pnpm install --no-frozen-lockfile
+        run: pnpm install --ignore-scripts
 
       - name: Build frontend
         working-directory: frontend
