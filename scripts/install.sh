@@ -578,22 +578,24 @@ EOF
         curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
     fi
 
-    # Config — proxy auth + JSON DB + scoped to the panel home base.
-    cat > "$ZENSPANEL_CONF/filebrowser.json" <<EOF
-{
-  "port": 8081,
-  "baseURL": "/filebrowser",
-  "address": "127.0.0.1",
-  "log": "stdout",
-  "database": "${ZENSPANEL_DATA}/filebrowser.db",
-  "root": "${ZENSPANEL_DATA}/home",
-  "auth": {
-    "method": "proxy",
-    "header": "X-Auth-User"
-  },
-  "createUserDir": true
-}
-EOF
+    # FileBrowser stores its config inside the SQLite DB, not a JSON
+    # file. We initialise the DB once with `config init` then bake in
+    # the proxy auth + scoped root settings via `config set`. Idempotent:
+    # config set is a no-op when the DB already has matching values.
+    FB_DB="${ZENSPANEL_DATA}/filebrowser.db"
+    if [[ ! -f "$FB_DB" ]]; then
+        log_info "Initialising FileBrowser DB at $FB_DB..."
+        /usr/local/bin/filebrowser --database "$FB_DB" config init >/dev/null 2>&1 || true
+    fi
+
+    /usr/local/bin/filebrowser --database "$FB_DB" config set \
+        --address 127.0.0.1 \
+        --port 8081 \
+        --baseurl /filebrowser \
+        --root "${ZENSPANEL_DATA}/home" \
+        --auth.method=proxy \
+        --auth.header=X-Auth-User >/dev/null 2>&1 || \
+        log_warn "FileBrowser config set returned non-zero (continuing)"
 
     cat > /etc/systemd/system/zenspanel-filebrowser.service <<EOF
 [Unit]
@@ -603,7 +605,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/filebrowser --config ${ZENSPANEL_CONF}/filebrowser.json
+ExecStart=/usr/local/bin/filebrowser --database ${FB_DB}
 Restart=always
 RestartSec=5
 StandardOutput=append:${ZENSPANEL_LOG}/filebrowser.log
