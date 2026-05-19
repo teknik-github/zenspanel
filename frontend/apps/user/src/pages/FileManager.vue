@@ -14,8 +14,12 @@ const route = useRoute()
 const ready = ref(false)
 
 const src = computed(() => {
+  // FileBrowser's root URL `/filebrowser/` triggers an internal redirect
+  // to `/files/` that crashes its Vue Router on some versions
+  // ("catchAll is not iterable"). Going straight to /files/ skips that
+  // redirect and lands on the file listing immediately.
   const p = typeof route.query.path === 'string' ? route.query.path : ''
-  return p ? `/filebrowser/files/${p}` : '/filebrowser/'
+  return `/filebrowser/files/${p}`
 })
 
 onMounted(() => {
