@@ -20,6 +20,7 @@ type Router struct {
 	databases     *handlers.DatabaseHandler
 	phpVersions   *handlers.PHPVersionHandler
 	phpExtensions *handlers.PHPExtensionHandler
+	cronJobs      *handlers.CronJobHandler
 	apiKeys       *handlers.APIKeyHandler
 	auditLogs     *handlers.AuditLogHandler
 	ssl           *handlers.SSLHandler
@@ -29,7 +30,7 @@ type Router struct {
 	terminal      *handlers.TerminalHandler
 	apiKeyStore   *store.APIKeyStore
 	auditLogStore *store.AuditLogStore
-	redis         *redis.Client // nil → fall back to in-memory rate limiter
+	redis         *redis.Client
 	jwtSecret     string
 }
 
@@ -42,6 +43,7 @@ func NewRouter(
 	databasesH *handlers.DatabaseHandler,
 	phpVersionsH *handlers.PHPVersionHandler,
 	phpExtensionsH *handlers.PHPExtensionHandler,
+	cronJobsH *handlers.CronJobHandler,
 	apiKeysH *handlers.APIKeyHandler,
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
@@ -63,6 +65,7 @@ func NewRouter(
 		databases:     databasesH,
 		phpVersions:   phpVersionsH,
 		phpExtensions: phpExtensionsH,
+		cronJobs:      cronJobsH,
 		apiKeys:       apiKeysH,
 		auditLogs:     auditLogsH,
 		ssl:           sslH,
@@ -184,6 +187,12 @@ func (r *Router) Setup() *gin.Engine {
 		api.PUT("/admin/php-extensions/:id", auth.RequireRole("admin"), r.phpExtensions.AdminUpdate)
 		api.GET("/php-extensions", r.phpExtensions.UserList)
 		api.PUT("/php-extensions", r.phpExtensions.UserUpdate)
+
+		// cron jobs
+		api.GET("/cron-jobs", r.cronJobs.List)
+		api.POST("/cron-jobs", r.cronJobs.Create)
+		api.PUT("/cron-jobs/:id", r.cronJobs.Update)
+		api.DELETE("/cron-jobs/:id", r.cronJobs.Delete)
 
 		// api keys
 		api.GET("/api-keys", auth.RequireRole("admin"), r.apiKeys.List)

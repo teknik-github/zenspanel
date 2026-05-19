@@ -10,6 +10,7 @@ import (
 	"github.com/zenspanel/zenspanel/agent"
 	agentbackup "github.com/zenspanel/zenspanel/agent/backup"
 	agentcgroups "github.com/zenspanel/zenspanel/agent/cgroups"
+	agentcron "github.com/zenspanel/zenspanel/agent/cron"
 	agentfilebrowser "github.com/zenspanel/zenspanel/agent/filebrowser"
 	agentfilemanager "github.com/zenspanel/zenspanel/agent/filemanager"
 	agentmysql "github.com/zenspanel/zenspanel/agent/mysql"
@@ -351,12 +352,26 @@ func main() {
 		return nil, agentuser.SetupBin(p.Username, cfg.Paths.HomeBase, p.PHPVersion)
 	})
 
+	// cron.sync — atomically rewrites the user's crontab. All jobs are
+	// validated (expression + command) before any write (V23, V24).
+	// Disabled jobs are written as commented lines so they survive
+	// re-enable without data loss (V26).
+	srv.Register("cron.sync", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string          `json:"username"`
+			Jobs     []agentcron.Job `json:"jobs"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentcron.Sync(p.Username, p.Jobs)
+	})
+
 	// quota — filesystem-level disk quota enforcement. Hard limit comes
 	// from package.disk_quota; kernel blocks writes past it with EDQUOT.
 	// homeBase is passed as the filesystem identifier — setquota/repquota
 	// resolve it to the mounted device automatically.
-	srv.Register("quota.set", func(params json.RawMessage) (interface{}, error) {
-		var p struct {
+	srv.Register("quota.set", func(params json.RawMessage) (interface{}, error) {		var p struct {
 			Username  string `json:"username"`
 			HardBytes int64  `json:"hard_bytes"`
 		}

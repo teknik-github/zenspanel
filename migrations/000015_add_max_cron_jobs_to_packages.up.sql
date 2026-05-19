@@ -1,0 +1,1 @@
+ALTER TABLE packages ADD COLUMN max_cron_jobs INT NOT NULL DEFAULT 10;

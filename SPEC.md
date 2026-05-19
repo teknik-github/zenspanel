@@ -94,6 +94,35 @@ CREATE TABLE user_php_extensions (
 - `frontend/apps/admin/src/pages/PhpExtensions.vue`: table of all exts grouped by php version, toggle per row
 - `frontend/apps/user/src/pages/PhpSettings.vue`: "Extensions" section — toggle per ext (admin-allowed only)
 
+### cron jobs
+
+- `GET /api/v1/cron-jobs` user JWT → 200 `{data: [{id, expression, command, enabled, last_run_at}]}`
+- `POST /api/v1/cron-jobs` user JWT body `{expression, command, enabled?}` → 201 | 400 | 429 (quota)
+- `PUT /api/v1/cron-jobs/:id` user JWT body `{expression?, command?, enabled?}` → 200
+- `DELETE /api/v1/cron-jobs/:id` user JWT → 200
+- agent rpc `cron.sync {username, jobs:[{expression,command,enabled}]}` — rewrites user crontab atomically
+
+### 2fa
+
+- `POST /api/v1/auth/2fa/setup` JWT → 200 `{secret, qr_url, recovery_codes[8]}`
+- `POST /api/v1/auth/2fa/confirm` JWT body `{code}` → 200 (activates 2FA) | 400 bad code
+- `DELETE /api/v1/auth/2fa` JWT body `{code}` → 200 (disables 2FA)
+- `POST /api/v1/auth/login` — if user has 2FA: return `{requires_2fa: true, temp_token}` instead of full JWT; client must POST `{temp_token, code}` to `/auth/2fa/verify` → full JWT
+- `POST /api/v1/auth/2fa/verify` public body `{temp_token, code}` → 200 `{token, user}` | 401
+- `POST /api/v1/auth/2fa/recover` public body `{temp_token, recovery_code}` → 200 `{token, user}` | 401
+
+### logs
+
+- `GET /api/v1/domains/:id/logs?type=nginx|fpm&lines=100` JWT → 200 `{lines: [str]}`
+- agent rpc `logs.tail {log_path, lines}` → `{lines: [str]}`
+
+### installer
+
+- `GET /api/v1/installer/apps` JWT → 200 `{data: [{id, name, version, description}]}`
+- `POST /api/v1/installer/install` JWT body `{app_id, domain_id, db_name?, db_user?, db_pass?, overwrite?}` → 202 `{job_id}`
+- `GET /api/v1/installer/status/:job_id` JWT → 200 `{phase, log, done, error}`
+- agent rpc `installer.run {app_id, username, docroot, db_name, db_user, db_pass}` — async, streams status via sync.Map
+
 ## §V INVARIANTS
 
 V1: ∀ subdomain create → parent_domain.user_id == requester.user_id (! admin bypass)
@@ -118,6 +147,17 @@ V19: ext enable/disable ! validate ext name `^[a-z0-9_]+$`. ⊥ shell injection 
 V20: admin-disabled ext ! user cannot re-enable. user toggle ⊂ admin-allowed set
 V21: ext change → php-fpm pool reload (! restart). ⊥ kill live requests
 V22: ext state stored per-user per-phpver in DB. agent reads DB state on pool create/reload
+V23: cron job command ! shell metachar injection. validate: printable ASCII only, no `; & | > < ` $ ( ) { }` outside quotes
+V24: cron expr ! validated server-side (5-field standard cron). ⊥ accept free-form string
+V25: max_cron_jobs per user ≤ package.max_cron_jobs. 0 = unlimited
+V26: disabled cron job → commented out in crontab (`#`-prefix). ! deleted. re-enable restores
+V27: 2FA TOTP secret stored encrypted @ rest (AES-256-GCM, key from config). ⊥ plaintext in DB
+V28: 2FA enforce: if user has 2FA enabled → every login requires valid TOTP code. ⊥ bypass via API key
+V29: 2FA recovery codes: 8 single-use codes generated at setup. each code hashed in DB (bcrypt). consumed on use
+V30: log viewer ! serve files outside `/var/log/nginx/` (nginx) or `/var/log/php<ver>-fpm/` (fpm). path jail
+V31: log viewer ! tail only (last N lines). ⊥ stream full file. max 500 lines per request
+V32: installer ! overwrite existing files in docroot w/o explicit `overwrite=true`. ⊥ silent data loss
+V33: installer runs as Linux user (agent drops privs via `su -s /bin/sh -c ... <user>`). ⊥ root-owned files in home
 
 ## §T TASKS
 
@@ -156,6 +196,29 @@ V22: ext state stored per-user per-phpver in DB. agent reads DB state on pool cr
 | T31 | x | admin panel: PHP Extensions page — table of all known exts, per-version enable/disable toggle | I.frontend |
 | T32 | x | user panel: PHP Settings page — add "Extensions" section below shell PHP card, per-ext toggle (only admin-allowed exts shown) | I.frontend |
 | T33 | x | `make build` + `pnpm -r build` clean | — |
+| T34 | x | migration 000014: `cron_jobs` table (id, user_id, expression, command, enabled, last_run_at) | I.db |
+| T35 | x | `internal/store/cronjobs.go`: CronJob model + store (List, Create, GetByID, Update, Delete, ListByUserID) | I.db,V25 |
+| T36 | x | `agent/cron/cron.go`: `Sync(username string, jobs []Job)` — build crontab lines, validate each (V23,V24), write via `crontab -u <user>` | V23,V24,V26 |
+| T37 | x | register `cron.sync` RPC @ `cmd/agent/main.go` | V23 |
+| T38 | x | `internal/api/handlers/cronjobs.go`: List/Create/Update/Delete — ownership check, quota check (V25), call `cron.sync` after every mutation | I.api,V25,V26 |
+| T39 | x | wire cron routes + construct CronJobHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T40 | x | user panel: Cron Jobs page — table + add/edit modal (expression builder or free-form + validate), enable/disable toggle | I.frontend,V24 |
+| T41 | . | migration 000015: add `totp_secret_enc`, `totp_enabled`, `totp_recovery_codes` (JSON array of bcrypt hashes) to `users` table | I.db |
+| T42 | . | `internal/store/users.go`: add SetTOTP, GetTOTPSecret, ConsumeRecoveryCode methods | I.db,V27,V29 |
+| T43 | . | `internal/api/handlers/auth.go`: Setup/Confirm/Disable 2FA handlers; modify Login to return `requires_2fa+temp_token`; add Verify + Recover handlers | I.api,V27,V28,V29 |
+| T44 | . | wire 2FA routes @ `internal/api/router.go` (public: verify, recover; JWT: setup, confirm, disable) | I.api |
+| T45 | . | user panel: 2FA setup flow — QR code display, confirm code input, recovery codes download; login page: TOTP step after password | I.frontend,V28 |
+| T46 | . | `agent/logs/logs.go`: `Tail(logPath string, lines int) ([]string, error)` — path jail (V30), max 500 lines (V31) | V30,V31 |
+| T47 | . | register `logs.tail` RPC @ `cmd/agent/main.go` | V30 |
+| T48 | . | `internal/api/handlers/logs.go`: `DomainLogs` handler — resolve nginx + fpm log paths from domain row, call agent `logs.tail` | I.api,V30,V31 |
+| T49 | . | wire `GET /api/v1/domains/:id/logs` route | I.api |
+| T50 | . | user panel: Logs viewer — per-domain dropdown (nginx/fpm), line count selector, auto-refresh toggle | I.frontend |
+| T51 | . | `agent/installer/installer.go`: app catalog (WordPress, Laravel skeleton, plain HTML); `Run(appID, username, docroot, db*)` — download, extract, configure, chown (V32,V33) | V32,V33 |
+| T52 | . | register `installer.run` + `installer.status` RPCs @ `cmd/agent/main.go` | V33 |
+| T53 | . | `internal/api/handlers/installer.go`: ListApps, Install (async → job_id), Status — ownership check, domain lookup | I.api,V32 |
+| T54 | . | wire installer routes + construct InstallerHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T55 | . | user panel: Website Installer page — app cards (WP, Laravel, HTML), domain select, DB fields, install progress log | I.frontend,V32 |
+| T56 | . | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 

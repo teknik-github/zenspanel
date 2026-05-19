@@ -29,6 +29,7 @@ type Package struct {
 	DiskQuota          int64     `db:"disk_quota" json:"disk_quota"`
 	MaxDomains         int       `db:"max_domains" json:"max_domains"`
 	MaxDatabases       int       `db:"max_databases" json:"max_databases"`
+	MaxCronJobs        int       `db:"max_cron_jobs" json:"max_cron_jobs"`
 	PHPVersionsAllowed string    `db:"php_versions_allowed" json:"php_versions_allowed"`
 	TerminalEnabled    bool      `db:"terminal_enabled" json:"terminal_enabled"`
 	BackupEnabled      bool      `db:"backup_enabled" json:"backup_enabled"`

@@ -50,7 +50,12 @@ var allowedUserSort = map[string]struct{}{
 	"status":     {},
 }
 
-// filterAllowed returns a new map containing only the keys present in the
+// allowedCronJobUpdate lists columns the API may update on the cron_jobs table.
+var allowedCronJobUpdate = map[string]struct{}{
+	"expression": {},
+	"command":    {},
+	"enabled":    {},
+}
 // allowlist. Used to sanitize attacker-controlled JSON before it lands in
 // dynamic SQL.
 func filterAllowed(fields map[string]interface{}, allowed map[string]struct{}) map[string]interface{} {

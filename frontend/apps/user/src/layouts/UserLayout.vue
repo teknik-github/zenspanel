@@ -58,6 +58,7 @@ const navGroups = computed(() => [
     label: 'Files & Tools',
     items: [
       { path: '/file-manager', label: 'File Manager', icon: 'folder', show: true, external: true },
+      { path: '/cron-jobs', label: 'Cron Jobs', icon: 'clock', show: true },
       { path: '/terminal', label: 'Terminal', icon: 'terminal', show: auth.user?.terminal_enabled },
       { path: '/backups', label: 'Backups', icon: 'upload-cloud', show: auth.user?.backup_enabled },
     ],
@@ -75,6 +76,7 @@ const pageTitle = computed(() => {
     '/php-settings': 'PHP Settings',
     '/databases': 'Databases',
     '/file-manager': 'File Manager',
+    '/cron-jobs': 'Cron Jobs',
     '/terminal': 'Terminal',
     '/backups': 'Backups',
   }
@@ -180,6 +182,9 @@ const pageTitle = computed(() => {
               </svg>
               <svg v-else-if="item.icon === 'terminal'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+              </svg>
+              <svg v-else-if="item.icon === 'clock'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
               </svg>
               <svg v-else-if="item.icon === 'upload-cloud'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
