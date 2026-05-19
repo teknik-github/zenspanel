@@ -75,13 +75,27 @@ func (h *PackageHandler) Delete(c *gin.Context) {
 
 // UserHandler
 type UserHandler struct {
-	users    *store.UserStore
-	packages *store.PackageStore
+	users     *store.UserStore
+	packages  *store.PackageStore
+	domains   *store.DomainStore
+	databases *store.DatabaseStore
 	agentSock string
 }
 
-func NewUserHandler(users *store.UserStore, packages *store.PackageStore, agentSock string) *UserHandler {
-	return &UserHandler{users: users, packages: packages, agentSock: agentSock}
+func NewUserHandler(
+	users *store.UserStore,
+	packages *store.PackageStore,
+	domains *store.DomainStore,
+	databases *store.DatabaseStore,
+	agentSock string,
+) *UserHandler {
+	return &UserHandler{
+		users:     users,
+		packages:  packages,
+		domains:   domains,
+		databases: databases,
+		agentSock: agentSock,
+	}
 }
 
 func (h *UserHandler) List(c *gin.Context) {
@@ -281,21 +295,101 @@ func (h *UserHandler) Update(c *gin.Context) {
 
 func (h *UserHandler) Delete(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	// Look up the username before deleting the row so we can tell the
-	// agent which quota entry to clear. Failure to clear quota is
-	// non-fatal — the row is still removed.
-	user, _ := h.users.GetByID(id)
-	if err := h.users.Delete(id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// Look up everything we need to tear down BEFORE deleting the row,
+	// otherwise we lose the username + the FK joins that let us
+	// enumerate the user's domains/databases.
+	user, err := h.users.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
-	if user != nil && user.Username != "" {
-		agentClient := agent.NewClient(h.agentSock)
-		_ = agentClient.Call("quota.delete", map[string]interface{}{
-			"username": user.Username,
+
+	agentClient := agent.NewClient(h.agentSock)
+	warnings := []string{}
+
+	// 1. Tear down every domain the user owns. Each one removes the
+	//    nginx vhost via the agent; we keep going on errors so a
+	//    half-broken vhost doesn't block the whole delete.
+	domains, _ := h.domains.ListByUserID(id)
+	for _, d := range domains {
+		if err := agentClient.Call("nginx.delete_vhost", map[string]interface{}{
+			"domain": d.Domain,
+		}, nil); err != nil {
+			warnings = append(warnings, "nginx.delete_vhost "+d.Domain+": "+err.Error())
+		}
+		if err := agentClient.Call("ssl.remove_cert", map[string]interface{}{
+			"domain": d.Domain,
+		}, nil); err != nil {
+			warnings = append(warnings, "ssl.remove_cert "+d.Domain+": "+err.Error())
+		}
+	}
+
+	// 2. Tear down every database the user owns. The agent drops both
+	//    the schema and the MySQL user grant.
+	dbs, _ := h.databases.ListByUserID(id)
+	for _, db := range dbs {
+		if err := agentClient.Call("mysql.drop_database", map[string]interface{}{
+			"db_name": db.DBName,
+			"db_user": db.DBUser,
+		}, nil); err != nil {
+			warnings = append(warnings, "mysql.drop_database "+db.DBName+": "+err.Error())
+		}
+	}
+
+	// 3. PHP-FPM pool. We don't know which versions the user had pools
+	//    for; try every supported version. DeletePool is idempotent and
+	//    a no-op when the pool file doesn't exist.
+	for _, ver := range []string{"8.3", "8.2", "8.1"} {
+		_ = agentClient.Call("phpfpm.delete_pool", map[string]interface{}{
+			"username":    user.Username,
+			"php_version": ver,
 		}, nil)
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+
+	// 4. cgroup slice — RAM/CPU limits.
+	if err := agentClient.Call("cgroups.delete_slice", map[string]interface{}{
+		"username": user.Username,
+	}, nil); err != nil {
+		warnings = append(warnings, "cgroups.delete_slice: "+err.Error())
+	}
+
+	// 5. Filesystem-level quota.
+	_ = agentClient.Call("quota.delete", map[string]interface{}{
+		"username": user.Username,
+	}, nil)
+
+	// 6. FileBrowser record.
+	if err := agentClient.Call("filebrowser.user_delete", map[string]interface{}{
+		"username": user.Username,
+	}, nil); err != nil {
+		warnings = append(warnings, "filebrowser.user_delete: "+err.Error())
+	}
+
+	// 7. Linux user. This is the one that actually unblocks recreate
+	//    with the same username — `useradd` refuses to create a user
+	//    that's already in /etc/passwd. `userdel -r` also removes the
+	//    home dir + mail spool. If this fails we DO surface it because
+	//    leaving the Linux user behind is the bug the operator
+	//    reported.
+	if err := agentClient.Call("user.delete", map[string]interface{}{
+		"username": user.Username,
+	}, nil); err != nil {
+		warnings = append(warnings, "user.delete: "+err.Error())
+	}
+
+	// 8. DB row last — by now every external system the row points
+	//    into has been cleaned up, so a row delete failure is the only
+	//    thing that would leave residue.
+	if err := h.users.Delete(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete row: " + err.Error()})
+		return
+	}
+
+	resp := gin.H{"message": "deleted"}
+	if len(warnings) > 0 {
+		resp["warnings"] = warnings
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *UserHandler) Suspend(c *gin.Context) {
