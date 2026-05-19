@@ -15,9 +15,10 @@ const loading = ref(false)
 const confirmDelete = ref<number | null>(null)
 
 function manageFiles(domain: string) {
-  // Deep-link into the File Manager at the domain's docroot. The path
-  // mirrors what the agent creates: <home>/public_html/<domain>/.
-  router.push({ path: '/file-manager', query: { path: `public_html/${domain}` } })
+  // Open FileBrowser in a new tab at the domain's docroot. Same origin
+  // means the panel session cookie travels with the request and the
+  // auth_request bridge logs the user in automatically.
+  window.open(`/filebrowser/files/public_html/${domain}/`, '_blank', 'noopener')
 }
 
 onMounted(async () => {

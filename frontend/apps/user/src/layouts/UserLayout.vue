@@ -36,7 +36,7 @@ const navGroups = computed(() => [
   {
     label: 'Files & Tools',
     items: [
-      { path: '/file-manager', label: 'File Manager', icon: 'folder', show: true },
+      { path: '/file-manager', label: 'File Manager', icon: 'folder', show: true, external: true },
       { path: '/terminal', label: 'Terminal', icon: 'terminal', show: auth.user?.terminal_enabled },
       { path: '/backups', label: 'Backups', icon: 'upload-cloud', show: auth.user?.backup_enabled },
     ],
@@ -64,11 +64,15 @@ const navGroups = computed(() => [
             {{ group.label }}
           </div>
           <template v-for="item in group.items" :key="item.path">
-            <router-link
+            <component
               v-if="item.show"
-              :to="item.path"
+              :is="item.external ? 'a' : 'router-link'"
+              :to="item.external ? undefined : item.path"
+              :href="item.external ? '/filebrowser/files/' : undefined"
+              :target="item.external ? '_blank' : undefined"
+              :rel="item.external ? 'noopener' : undefined"
               class="flex items-center gap-2 px-4 py-2 text-gray-500 border-l-[3px] border-transparent hover:bg-gray-50 hover:text-gray-700 transition-colors"
-              :class="route.path === item.path ? 'bg-indigo-50 border-indigo-600 text-indigo-600 font-medium' : ''"
+              :class="!item.external && route.path === item.path ? 'bg-indigo-50 border-indigo-600 text-indigo-600 font-medium' : ''"
             >
               <svg v-if="item.icon === 'grid'" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
@@ -95,7 +99,7 @@ const navGroups = computed(() => [
                 <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
               </svg>
               {{ item.label }}
-            </router-link>
+            </component>
           </template>
         </template>
       </nav>
