@@ -96,7 +96,7 @@ func (h *BackupHandler) Download(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "backup not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && row.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && row.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -121,7 +121,7 @@ func (h *BackupHandler) Restore(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "backup not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && row.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && row.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -191,7 +191,7 @@ func (h *BackupHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "backup not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && row.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && row.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}

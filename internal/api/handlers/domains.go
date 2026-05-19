@@ -59,7 +59,7 @@ func (h *DomainHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "domain not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && domain.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && domain.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -140,7 +140,7 @@ func (h *DomainHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "domain not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && domain.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && domain.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -213,7 +213,7 @@ func (h *DomainHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "domain not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && domain.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && domain.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}

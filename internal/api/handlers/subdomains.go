@@ -57,7 +57,7 @@ func (h *SubdomainHandler) List(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "parent domain not found"})
 			return
 		}
-		if role != "admin" && parent.UserID != userID {
+		if role == "user" && parent.UserID != userID {
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 			return
 		}
@@ -91,7 +91,7 @@ func (h *SubdomainHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "subdomain not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && sub.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && sub.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -131,7 +131,7 @@ func (h *SubdomainHandler) Create(c *gin.Context) {
 	}
 	// V1: ownership check. Admin bypass kept consistent w/ DomainHandler.
 	requesterID := auth.GetUserID(c)
-	if auth.GetRole(c) != "admin" && parent.UserID != requesterID {
+	if auth.GetRole(c) == "user" && parent.UserID != requesterID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -241,7 +241,7 @@ func (h *SubdomainHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "subdomain not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && sub.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && sub.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -255,6 +255,30 @@ func (h *SubdomainHandler) Update(c *gin.Context) {
 	delete(fields, "parent_domain_id")
 	delete(fields, "subdomain")
 	delete(fields, "fqdn")
+
+	// V15: re-validate doc_root jail on every Update that touches the
+	// field. Create-only validation is not enough — a non-admin could
+	// otherwise PUT {document_root: "/etc/..."} directly. We resolve
+	// the user's home dir and ensure the cleaned path stays under it,
+	// then write the cleaned form back so the row never holds the
+	// raw input.
+	if newDocRoot, ok := fields["document_root"].(string); ok {
+		owner, uerr := h.users.GetByID(sub.UserID)
+		if uerr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup user: " + uerr.Error()})
+			return
+		}
+		userHome := filepath.Clean(h.homeBase + "/" + owner.Username)
+		cleaned := filepath.Clean(newDocRoot)
+		if !filepath.IsAbs(cleaned) {
+			cleaned = filepath.Clean(userHome + "/" + cleaned)
+		}
+		if !strings.HasPrefix(cleaned+"/", userHome+"/") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "doc_root must be under user home"})
+			return
+		}
+		fields["document_root"] = cleaned
+	}
 
 	if err := h.subdomains.Update(id, fields); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -305,7 +329,7 @@ func (h *SubdomainHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "subdomain not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && sub.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && sub.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}

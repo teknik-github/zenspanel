@@ -130,7 +130,7 @@ func (h *UserHandler) List(c *gin.Context) {
 func (h *UserHandler) Get(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 	// non-admin can only get own profile
-	if auth.GetRole(c) != "admin" && auth.GetUserID(c) != id {
+	if auth.GetRole(c) == "user" && auth.GetUserID(c) != id {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -470,6 +470,14 @@ func (h *UserHandler) ChangePackage(c *gin.Context) {
 // briefly unreachable.
 func (h *UserHandler) GetUsage(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+
+	// Ownership check — without this, any logged-in user can iterate
+	// :id and read every other user's quota + live cgroup metrics.
+	// Mirrors the pattern in users.Get.
+	if auth.GetRole(c) == "user" && id != auth.GetUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
 
 	user, err := h.users.GetByID(id)
 	if err != nil {

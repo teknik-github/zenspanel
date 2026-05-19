@@ -114,7 +114,7 @@ func (h *DatabaseHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "database not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && db.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && db.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -146,7 +146,7 @@ func (h *DatabaseHandler) GetPHPMyAdminToken(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "database not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && db.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && db.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -210,7 +210,7 @@ func (h *DatabaseHandler) LaunchPHPMyAdmin(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "database not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && db.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && db.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}

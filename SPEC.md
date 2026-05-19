@@ -77,6 +77,12 @@ V8: SSL issue → Let's Encrypt rate-aware. ! per-fqdn cert (no wildcard yet)
 V9: php_version ! ∈ enabled list (`php_versions` where `enabled=true`)
 V10: agent nginx.delete_vhost failure on subdomain delete → row stays (! orphan row block recreate)
 V11: subdomain status flip → suspended/active via existing `nginx.suspend_vhost` (parity w/ parent domains)
+V12: ∀ JWT route on `/users/:id/*` → ! ownership check `role=="admin" | id==self`. ! exception `users.GetUsage`
+V13: cookie auth `zenspanel_token` ! `Secure=true` & `SameSite=Strict` (HTTP plain ⊥ in prod)
+V14: WS upgrader `CheckOrigin` ! same-origin (Host header == r.Host) | explicit allowlist. ⊥ `return true`
+V15: Update handlers w/ free-form fields ! re-validate jail/safety on every mutating field (ex: `document_root` jail check ! Create-only)
+V16: ownership pattern ! `role == "user" && id != self → 403`. ⊥ `role != "admin"` (api_key falls through w/ id=0)
+V17: `/terminal/token` ! per-user rate limit (≥ 1 req/sec/user)
 
 ## §T TASKS
 
@@ -100,8 +106,20 @@ V11: subdomain status flip → suspended/active via existing `nginx.suspend_vhos
 | T16 | x | extend SSL Manager page to show subdomains alongside parent domains | V8 |
 | T17 | . | add subdomain count to user usage / package limits (optional, gate behind package.max_subdomains) | C |
 | T18 | x | end-to-end test: create user → parent domain → subdomain → curl FQDN → 200 OK | V1-V10 |
+| T19 | x | fix `users.GetUsage` IDOR: add `role=="admin" \| id==self` ownership check @ `internal/api/handlers/users.go:GetUsage` | V12 |
+| T20 | x | fix WS CSWSH: tighten `upgrader.CheckOrigin` @ `internal/api/handlers/terminal.go` to same-host (compare Origin → r.Host) | V14 |
+| T21 | x | fix subdomain Update jail bypass: re-run docroot-jail check when `document_root` ∈ payload @ `internal/api/handlers/subdomains.go:Update` | V15 |
+| T22 | x | harden cookie: set `Secure=true` (when scheme=https) + `SameSite=Strict` @ `internal/api/handlers/auth.go:Login` cookie set | V13 |
+| T23 | x | rate-limit `/terminal/token`: per-user limiter (sync.Map or Redis), 1 req/sec/user, 429 on exceed | V17 |
+| T24 | x | refactor ownership pattern: replace `role != "admin"` w/ explicit `role == "user" && id != self` across all handlers | V16 |
 
 ## §B BUGS
 
 | id | date | cause | fix |
 |----|------|-------|-----|
+| B1 | 2026-05-19 | `users.GetUsage` ! ownership check ∴ ∀ user can read other users' RAM/disk/CPU/quota via `:id` enumeration. CRITICAL IDOR | V12 |
+| B2 | 2026-05-19 | WS `upgrader.CheckOrigin: return true` + cookie auth ∴ cross-origin shell hijack possible (CSWSH). HIGH | V14 |
+| B3 | 2026-05-19 | subdomain `Update` accepts free-form `document_root` w/o re-running jail check ∴ DB drift to `/etc/...`; later php_version change writes vhost outside user home. MEDIUM | V15 |
+| B4 | 2026-05-19 | login cookie `Secure=false` & `SameSite=Lax` ∴ JWT exposed on plain-HTTP & cross-site state-changing requests reachable. HIGH | V13 |
+| B5 | 2026-05-19 | `/terminal/token` ! rate limit ∴ token enumeration / spam possible. MEDIUM | V17 |
+| B6 | 2026-05-19 | ownership pattern `role != "admin"` ∴ api_key callers (id=0) fall through to "owner" branch on future routes. brittle, current routes safe-by-accident. MEDIUM | V16 |

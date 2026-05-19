@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,15 +30,25 @@ type tokenEntry struct {
 }
 
 var (
-	tokenStore sync.Map // map[string]tokenEntry
+	tokenStore     sync.Map // map[string]tokenEntry
+	tokenRateStore sync.Map // map[uint64]time.Time — last mint time per userID
 	upgrader   = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		// Same-origin only — both panels are served from the same host
-		// as the API, so an explicit Origin check would force us to
-		// hardcode hosts at install time. Gin already runs behind nginx
-		// which terminates TLS and validates Host.
-		CheckOrigin: func(r *http.Request) bool { return true },
+		// Same-origin check. The previous `return true` allowed any
+		// page on any origin to upgrade with the victim's cookie-
+		// auth'd token, leading to cross-site WebSocket hijack
+		// (CSWSH). We now compare the Origin header to r.Host. Empty
+		// Origin (curl, native WS clients) is allowed because they
+		// can't be tricked by a malicious page.
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true
+			}
+			return origin == "http://"+r.Host || origin == "https://"+r.Host ||
+				strings.HasSuffix(origin, "://"+r.Host)
+		},
 	}
 )
 
@@ -54,8 +65,19 @@ func NewTerminalHandler(users *store.UserStore, agentSock string) *TerminalHandl
 // Caller must have terminal_enabled — package is a soft feature flag and
 // admins toggle it per-user. Token TTL is 60s; the WS handshake should
 // happen immediately after this returns.
+//
+// Rate-limited per-user (V17) to 1 mint per 5 seconds. Cheap defence
+// against an attacker who got a stolen JWT and is trying to spawn a
+// shell mid-session — without the limiter they could keep retrying
+// against any future race in the redeem path. 5 s is well above the
+// time a legitimate user needs (token → ws upgrade is sub-second).
 func (h *TerminalHandler) GetToken(c *gin.Context) {
 	uid := auth.GetUserID(c)
+	if !checkTokenRate(uid) {
+		c.Header("Retry-After", "5")
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many token requests, wait 5 seconds"})
+		return
+	}
 	user, err := h.users.GetByID(uid)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
@@ -77,6 +99,24 @@ func (h *TerminalHandler) GetToken(c *gin.Context) {
 		expiresAt: time.Now().Add(60 * time.Second),
 	})
 	c.JSON(http.StatusOK, gin.H{"token": token})
+}
+
+// checkTokenRate is a per-user 5-second sliding-window check. Returns
+// true if the caller may mint a token now and updates the timestamp;
+// false if a previous mint is still inside the cooldown.
+//
+// In-process map — fine for single-API-instance deploys. Multi-instance
+// deploys should swap this for Redis (same Lua trick the login limiter
+// uses), but ZensPanel's terminal is per-server anyway.
+func checkTokenRate(userID uint64) bool {
+	now := time.Now()
+	if last, ok := tokenRateStore.Load(userID); ok {
+		if now.Sub(last.(time.Time)) < 5*time.Second {
+			return false
+		}
+	}
+	tokenRateStore.Store(userID, now)
+	return true
 }
 
 // redeemToken does a one-time, atomic load+delete plus an expiry check.

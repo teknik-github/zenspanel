@@ -47,7 +47,7 @@ func (h *SSLHandler) Issue(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "domain not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && domain.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && domain.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -123,7 +123,7 @@ func (h *SSLHandler) Remove(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "domain not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && domain.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && domain.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -159,7 +159,7 @@ func (h *SSLHandler) IssueForSubdomain(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "subdomain not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && sub.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && sub.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -231,7 +231,7 @@ func (h *SSLHandler) RemoveForSubdomain(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "subdomain not found"})
 		return
 	}
-	if auth.GetRole(c) != "admin" && sub.UserID != auth.GetUserID(c) {
+	if auth.GetRole(c) == "user" && sub.UserID != auth.GetUserID(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}

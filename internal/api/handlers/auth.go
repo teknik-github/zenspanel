@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zenspanel/zenspanel/internal/auth"
@@ -50,8 +51,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// without the SPA having to inject the Bearer header. The Bearer
 	// path stays the canonical one for axios; this cookie is just a
 	// fallback that nginx/auth_request can reach.
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("zenspanel_token", token, 24*60*60, "/", "", false, true)
+	//
+	// Hardening (V13):
+	//  - SameSite=Strict so cross-origin POST/PUT/DELETE with the cookie
+	//    can't be triggered from a malicious page (CSRF defence).
+	//  - Secure=true when the request arrived over TLS so the cookie
+	//    only travels on HTTPS. We detect HTTPS via the X-Forwarded-Proto
+	//    header (nginx terminates TLS) or c.Request.TLS != nil (direct).
+	//    On plain HTTP dev installs the cookie won't be set; the Bearer
+	//    path still works because axios sends Authorization regardless.
+	secure := c.Request.TLS != nil ||
+		strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("zenspanel_token", token, 24*60*60, "/", "", secure, true)
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
