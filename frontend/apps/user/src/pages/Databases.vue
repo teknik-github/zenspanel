@@ -11,13 +11,17 @@ const newDBPassword = ref(generatePassword())
 const loading = ref(false)
 const confirmDelete = ref<number | null>(null)
 const createdCreds = ref<{ db_name: string; db_user: string; db_password: string } | null>(null)
+const loaded = ref(false)
 
 function generatePassword() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$'
   return Array.from({ length: 16 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 }
 
-onMounted(() => databasesStore.fetch())
+onMounted(async () => {
+  await databasesStore.fetch()
+  loaded.value = true
+})
 
 async function createDatabase() {
   loading.value = true
@@ -72,10 +76,13 @@ function copyToClipboard(text: string) {
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-gray-800">Databases</h1>
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <h1 class="text-lg font-semibold text-gray-800">Databases</h1>
+        <p class="text-xs text-gray-400 mt-0.5 hidden sm:block">MySQL databases for your applications</p>
+      </div>
       <button @click="showModal = true; newDBPassword = generatePassword()"
-        class="flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-2 rounded-md hover:bg-indigo-700">
+        class="flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-2 rounded-md hover:bg-indigo-700 transition-colors flex-shrink-0">
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
@@ -83,36 +90,60 @@ function copyToClipboard(text: string) {
       </button>
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <table class="w-full text-xs">
-        <thead class="bg-gray-50 border-b border-gray-200">
-          <tr class="text-gray-500">
-            <th class="text-left px-4 py-3 font-medium">Database</th>
-            <th class="text-left px-4 py-3 font-medium">User</th>
-            <th class="text-left px-4 py-3 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="db in databasesStore.databases" :key="db.id" class="border-b border-gray-50 hover:bg-gray-50">
-            <td class="px-4 py-3 font-medium text-gray-700">{{ db.db_name }}</td>
-            <td class="px-4 py-3 text-gray-500">{{ db.db_user }}</td>
-            <td class="px-4 py-3 flex items-center gap-2">
-              <button @click="openPHPMyAdmin(db.id)"
-                class="text-xs text-indigo-600 hover:text-indigo-800 border border-indigo-200 px-2 py-1 rounded">
-                phpMyAdmin
-              </button>
-              <button @click="confirmDelete = db.id" class="text-red-400 hover:text-red-600">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                </svg>
-              </button>
-            </td>
-          </tr>
-          <tr v-if="!databasesStore.databases.length">
-            <td colspan="3" class="px-4 py-8 text-center text-gray-400">No databases yet.</td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-if="!loaded" class="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
+      <div v-for="i in 3" :key="i" class="h-8 bg-gray-50 rounded animate-pulse" />
+    </div>
+
+    <div v-else-if="!databasesStore.databases.length"
+      class="bg-white border border-gray-200 rounded-lg flex flex-col items-center justify-center py-12 text-center px-4">
+      <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center mb-3">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+        </svg>
+      </div>
+      <p class="text-sm font-medium text-gray-700">No databases yet</p>
+      <p class="text-xs text-gray-400 mt-1">Create your first MySQL database for your application</p>
+      <button @click="showModal = true; newDBPassword = generatePassword()"
+        class="mt-4 flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-2 rounded-md hover:bg-indigo-700 transition-colors">
+        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        New Database
+      </button>
+    </div>
+
+    <div v-else class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs min-w-[480px]">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr class="text-gray-500">
+              <th class="text-left px-4 py-3 font-medium">Database</th>
+              <th class="text-left px-4 py-3 font-medium">User</th>
+              <th class="text-left px-4 py-3 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="db in databasesStore.databases" :key="db.id" class="border-b border-gray-50 hover:bg-gray-50">
+              <td class="px-4 py-3 font-medium text-gray-700">{{ db.db_name }}</td>
+              <td class="px-4 py-3 text-gray-500">{{ db.db_user }}</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <button @click="openPHPMyAdmin(db.id)"
+                    title="Open in phpMyAdmin"
+                    class="text-xs text-indigo-600 hover:text-indigo-800 border border-indigo-200 px-2 py-1 rounded hover:bg-indigo-50 transition-colors">
+                    phpMyAdmin
+                  </button>
+                  <button @click="confirmDelete = db.id" title="Drop database" class="text-red-400 hover:text-red-600 transition-colors">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Create Modal -->

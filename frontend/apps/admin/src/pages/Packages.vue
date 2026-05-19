@@ -7,6 +7,7 @@ const showModal = ref(false)
 const editingPackage = ref<any>(null)
 const form = ref<any>({})
 const loading = ref(false)
+const loaded = ref(false)
 const confirmDelete = ref<number | null>(null)
 
 const defaultForm = () => ({
@@ -22,8 +23,12 @@ const defaultForm = () => ({
 })
 
 onMounted(async () => {
-  const res = await packagesApi.list()
-  packages.value = res.data.data || []
+  try {
+    const res = await packagesApi.list()
+    packages.value = res.data.data || []
+  } finally {
+    loaded.value = true
+  }
 })
 
 function openCreate() {
@@ -69,10 +74,13 @@ function formatBytes(bytes: number) {
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-gray-800">Packages</h1>
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <h1 class="text-lg font-semibold text-gray-800">Packages</h1>
+        <p class="text-xs text-gray-400 mt-0.5 hidden sm:block">Resource limits assigned to user accounts</p>
+      </div>
       <button @click="openCreate"
-        class="flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-2 rounded-md hover:bg-indigo-700">
+        class="flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-2 rounded-md hover:bg-indigo-700 transition-colors flex-shrink-0">
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
@@ -80,18 +88,43 @@ function formatBytes(bytes: number) {
       </button>
     </div>
 
-    <div class="grid grid-cols-3 gap-4">
+    <div v-if="!loaded" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div v-for="i in 3" :key="i" class="bg-white border border-gray-200 rounded-lg p-4 animate-pulse space-y-2">
+        <div class="h-4 w-24 bg-gray-100 rounded" />
+        <div v-for="j in 5" :key="j" class="h-3 bg-gray-50 rounded mt-2" />
+      </div>
+    </div>
+
+    <div v-else-if="!packages.length"
+      class="bg-white border border-gray-200 rounded-lg flex flex-col items-center justify-center py-12 text-center px-4">
+      <div class="w-12 h-12 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center mb-3">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+        </svg>
+      </div>
+      <p class="text-sm font-medium text-gray-700">No packages yet</p>
+      <p class="text-xs text-gray-400 mt-1">Define hosting tiers (CPU, RAM, disk, limits) before creating users</p>
+      <button @click="openCreate"
+        class="mt-4 flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-2 rounded-md hover:bg-indigo-700 transition-colors">
+        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        New Package
+      </button>
+    </div>
+
+    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <div v-for="pkg in packages" :key="pkg.id"
-        class="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+        class="bg-white border border-gray-200 rounded-lg p-4 space-y-3 hover:shadow-sm transition-shadow">
         <div class="flex items-start justify-between">
           <h3 class="font-semibold text-gray-800">{{ pkg.name }}</h3>
           <div class="flex gap-1">
-            <button @click="openEdit(pkg)" class="text-gray-400 hover:text-indigo-600">
+            <button @click="openEdit(pkg)" title="Edit package" class="text-gray-400 hover:text-indigo-600 transition-colors">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
             </button>
-            <button @click="confirmDelete = pkg.id" class="text-gray-400 hover:text-red-500">
+            <button @click="confirmDelete = pkg.id" title="Delete package" class="text-gray-400 hover:text-red-500 transition-colors">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
               </svg>
@@ -105,13 +138,10 @@ function formatBytes(bytes: number) {
           <div class="flex justify-between"><span>Domains</span><span class="font-medium text-gray-700">{{ pkg.max_domains }}</span></div>
           <div class="flex justify-between"><span>Databases</span><span class="font-medium text-gray-700">{{ pkg.max_databases }}</span></div>
         </div>
-        <div class="flex gap-2 text-[10px]">
+        <div class="flex gap-2 text-[10px] flex-wrap">
           <span v-if="pkg.terminal_enabled" class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">Terminal</span>
           <span v-if="pkg.backup_enabled" class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">Backup</span>
         </div>
-      </div>
-      <div v-if="!packages.length" class="col-span-3 py-12 text-center text-gray-400 text-sm">
-        No packages yet. Create your first package.
       </div>
     </div>
 

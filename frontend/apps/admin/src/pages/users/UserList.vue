@@ -13,6 +13,7 @@ const statusFilter = ref('')
 const packageFilter = ref('')
 const page = ref(1)
 const loading = ref(false)
+const loaded = ref(false)
 const confirmDelete = ref<number | null>(null)
 
 const showCreate = ref(false)
@@ -95,9 +96,13 @@ async function createUser() {
 }
 
 onMounted(async () => {
-  await fetchUsers()
-  const res = await packagesApi.list()
-  packages.value = res.data.data || []
+  try {
+    await fetchUsers()
+    const res = await packagesApi.list()
+    packages.value = res.data.data || []
+  } finally {
+    loaded.value = true
+  }
 })
 
 async function suspend(id: number) {
@@ -119,10 +124,13 @@ async function deleteUser(id: number) {
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-gray-800">Users</h1>
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <h1 class="text-lg font-semibold text-gray-800">Users</h1>
+        <p class="text-xs text-gray-400 mt-0.5 hidden sm:block">Manage panel accounts and resource packages</p>
+      </div>
       <button @click="openCreate"
-        class="flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-2 rounded-md hover:bg-indigo-700">
+        class="flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-2 rounded-md hover:bg-indigo-700 transition-colors flex-shrink-0">
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
@@ -130,10 +138,11 @@ async function deleteUser(id: number) {
       </button>
     </div>
 
-    <!-- Filters -->
-    <div class="flex gap-3">
+    <!-- Filters wrap on small screens so the search input doesn't get
+         squeezed below readable width. -->
+    <div class="flex flex-wrap gap-3">
       <input v-model="search" @input="fetchUsers" type="text" placeholder="Search username or email..."
-        class="border border-gray-200 rounded-md px-3 py-2 text-xs w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        class="border border-gray-200 rounded-md px-3 py-2 text-xs flex-1 min-w-[180px] sm:max-w-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" />
       <select v-model="statusFilter" @change="fetchUsers"
         class="border border-gray-200 rounded-md px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
         <option value="">All Status</option>
@@ -147,47 +156,74 @@ async function deleteUser(id: number) {
       </select>
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <table class="w-full text-xs">
-        <thead class="bg-gray-50 border-b border-gray-200">
-          <tr class="text-gray-500">
-            <th class="text-left px-4 py-3 font-medium">Username</th>
-            <th class="text-left px-4 py-3 font-medium">Email</th>
-            <th class="text-left px-4 py-3 font-medium">Package</th>
-            <th class="text-left px-4 py-3 font-medium">Status</th>
-            <th class="text-left px-4 py-3 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="u in users" :key="u.id" class="border-b border-gray-50 hover:bg-gray-50">
-            <td class="px-4 py-3 font-medium text-gray-700">{{ u.username }}</td>
-            <td class="px-4 py-3 text-gray-500">{{ u.email }}</td>
-            <td class="px-4 py-3 text-gray-500">{{ u.package_id || '—' }}</td>
-            <td class="px-4 py-3">
-              <span class="px-2 py-0.5 rounded text-[10px] font-medium"
-                :class="u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'">
-                {{ u.status }}
-              </span>
-            </td>
-            <td class="px-4 py-3 flex items-center gap-2">
-              <button @click="router.push(`/users/${u.id}`)"
-                class="text-xs text-indigo-600 border border-indigo-200 px-2 py-1 rounded hover:bg-indigo-50">View</button>
-              <button v-if="u.status === 'active'" @click="suspend(u.id)"
-                class="text-xs text-amber-600 border border-amber-200 px-2 py-1 rounded hover:bg-amber-50">Suspend</button>
-              <button v-else @click="unsuspend(u.id)"
-                class="text-xs text-green-600 border border-green-200 px-2 py-1 rounded hover:bg-green-50">Unsuspend</button>
-              <button @click="confirmDelete = u.id" class="text-red-400 hover:text-red-600">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                </svg>
-              </button>
-            </td>
-          </tr>
-          <tr v-if="!users.length">
-            <td colspan="5" class="px-4 py-8 text-center text-gray-400">No users found.</td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-if="!loaded" class="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
+      <div v-for="i in 4" :key="i" class="h-8 bg-gray-50 rounded animate-pulse" />
+    </div>
+
+    <div v-else-if="!users.length"
+      class="bg-white border border-gray-200 rounded-lg flex flex-col items-center justify-center py-12 text-center px-4">
+      <div class="w-12 h-12 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center mb-3">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <p class="text-sm font-medium text-gray-700">
+        {{ search || statusFilter || packageFilter ? 'No matching users' : 'No users yet' }}
+      </p>
+      <p class="text-xs text-gray-400 mt-1">
+        {{ search || statusFilter || packageFilter ? 'Try clearing the filters' : 'Create your first hosting account' }}
+      </p>
+      <button v-if="!search && !statusFilter && !packageFilter" @click="openCreate"
+        class="mt-4 flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-2 rounded-md hover:bg-indigo-700 transition-colors">
+        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Add User
+      </button>
+    </div>
+
+    <div v-else class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs min-w-[640px]">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr class="text-gray-500">
+              <th class="text-left px-4 py-3 font-medium">Username</th>
+              <th class="text-left px-4 py-3 font-medium">Email</th>
+              <th class="text-left px-4 py-3 font-medium">Package</th>
+              <th class="text-left px-4 py-3 font-medium">Status</th>
+              <th class="text-left px-4 py-3 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="u in users" :key="u.id" class="border-b border-gray-50 hover:bg-gray-50">
+              <td class="px-4 py-3 font-medium text-gray-700">{{ u.username }}</td>
+              <td class="px-4 py-3 text-gray-500">{{ u.email }}</td>
+              <td class="px-4 py-3 text-gray-500">{{ u.package_id || '—' }}</td>
+              <td class="px-4 py-3">
+                <span class="px-2 py-0.5 rounded text-[10px] font-medium"
+                  :class="u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'">
+                  {{ u.status }}
+                </span>
+              </td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <button @click="router.push(`/users/${u.id}`)" title="View user details"
+                    class="text-xs text-indigo-600 border border-indigo-200 px-2 py-1 rounded hover:bg-indigo-50 transition-colors">View</button>
+                  <button v-if="u.status === 'active'" @click="suspend(u.id)" title="Suspend user"
+                    class="text-xs text-amber-600 border border-amber-200 px-2 py-1 rounded hover:bg-amber-50 transition-colors">Suspend</button>
+                  <button v-else @click="unsuspend(u.id)" title="Unsuspend user"
+                    class="text-xs text-green-600 border border-green-200 px-2 py-1 rounded hover:bg-green-50 transition-colors">Unsuspend</button>
+                  <button @click="confirmDelete = u.id" title="Delete user" class="text-red-400 hover:text-red-600 transition-colors">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div class="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">
         {{ total }} total users
       </div>
