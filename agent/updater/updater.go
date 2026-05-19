@@ -17,10 +17,11 @@ import (
 // changelog is a small excerpt of CHANGELOG.md from the remote so the
 // admin can see what's about to ship before clicking Apply.
 type UpdateInfo struct {
-	CurrentSHA string `json:"current_sha"`
-	LatestSHA  string `json:"latest_sha"`
-	BehindBy   int    `json:"behind_by"`
-	Changelog  string `json:"changelog"`
+	CurrentSHA    string `json:"current_sha"`
+	LatestSHA     string `json:"latest_sha"`
+	BehindBy      int    `json:"behind_by"`
+	Changelog     string `json:"changelog"`
+	CurrentBranch string `json:"current_branch"`
 }
 
 // UpdateStatus is what update.status returns while a Run is in progress
@@ -128,11 +129,23 @@ func Check(srcDir string) (UpdateInfo, error) {
 	if out, err := runIn(srcDir, "git", "show", "origin/main:CHANGELOG.md"); err == nil {
 		changelog = clipLines(out, 60)
 	}
+
+	// Get the active branch name so the UI can show "on main" / "on
+	// dev". Fallback to "main" if the working tree is detached.
+	branch := "main"
+	if out, err := runIn(srcDir, "git", "rev-parse", "--abbrev-ref", "HEAD"); err == nil {
+		b := strings.TrimSpace(out)
+		if b != "" && b != "HEAD" {
+			branch = b
+		}
+	}
+
 	return UpdateInfo{
-		CurrentSHA: strings.TrimSpace(cur),
-		LatestSHA:  strings.TrimSpace(latest),
-		BehindBy:   behind,
-		Changelog:  changelog,
+		CurrentSHA:    strings.TrimSpace(cur),
+		LatestSHA:     strings.TrimSpace(latest),
+		BehindBy:      behind,
+		Changelog:     changelog,
+		CurrentBranch: branch,
 	}, nil
 }
 
@@ -215,11 +228,36 @@ func runUpdate(srcDir, binDir, frontendDir string) {
 	finish(nil)
 }
 
+// extendedPATH is the PATH we set on every command runner in this
+// package. systemd starts the agent with a near-empty PATH; without
+// this, `go` and `pnpm` aren't found and update.run fails immediately
+// with "executable file not found in $PATH". We include the standard
+// locations + Go's default install location + a likely user-installed
+// pnpm bin so the operator doesn't have to edit the systemd unit.
+const extendedPATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/go/bin:/snap/bin:/root/.local/share/pnpm:/root/.npm-global/bin"
+
+// withPathEnv copies the current environment and overrides PATH with
+// extendedPATH. We keep other env vars (GOPATH, HOME, etc.) so the
+// build cache lives where the operator expects.
+func withPathEnv() []string {
+	env := os.Environ()
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	out = append(out, "PATH="+extendedPATH)
+	return out
+}
+
 // runIn runs a command in dir and returns its combined output. Used for
 // short read-only git commands during Check.
 func runIn(dir, name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	cmd.Env = withPathEnv()
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -233,6 +271,7 @@ func runStreaming(dir, name string, args ...string) error {
 	if dir != "" {
 		cmd.Dir = dir
 	}
+	cmd.Env = withPathEnv()
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
