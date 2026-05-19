@@ -80,9 +80,22 @@ func CreateVhost(nginxConf, domain, username, phpVersion, docRoot string) error 
 // first hit serves a friendly "coming soon" page instead of an nginx
 // default 404. Re-running on an existing vhost is safe — we only write
 // the placeholder when the directory has no index file.
+//
+// Permissions are set explicitly via os.Chmod after every create
+// because os.MkdirAll / os.WriteFile pass the mode through the process
+// umask: agent inherits umask from systemd (often 0027 on Ubuntu),
+// which silently strips the read bit for "others" — turning 0755 into
+// 0750 and 0644 into 0640. Nginx as www-data then can't traverse or
+// read the file, surfacing as "Access denied" / "File not found.".
 func ensureDocRoot(docRoot, domain, username string) error {
 	if err := os.MkdirAll(docRoot, 0755); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
+	}
+	// Override umask: every dir on the chain (docroot itself + parents
+	// up to public_html) needs 0755 so others have read+traverse for
+	// listing static assets via nginx autoindex if enabled.
+	if err := os.Chmod(docRoot, 0755); err != nil {
+		return fmt.Errorf("chmod docroot: %w", err)
 	}
 	uid, gid := -1, -1
 	if u, err := osuser.Lookup(username); err == nil {
@@ -132,6 +145,10 @@ Upload your files via the panel File Manager to replace this page.</div>
 	indexPath := filepath.Join(docRoot, "index.html")
 	if err := os.WriteFile(indexPath, []byte(indexHTML), 0644); err != nil {
 		return fmt.Errorf("write index.html: %w", err)
+	}
+	// Bypass umask — see comment at top of function.
+	if err := os.Chmod(indexPath, 0644); err != nil {
+		return fmt.Errorf("chmod index.html: %w", err)
 	}
 	if uid >= 0 && gid >= 0 {
 		_ = os.Chown(indexPath, uid, gid)
