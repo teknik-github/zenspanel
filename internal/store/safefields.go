@@ -24,6 +24,19 @@ var allowedDomainUpdate = map[string]struct{}{
 	"status":         {},
 }
 
+// allowedSubdomainUpdate mirrors allowedDomainUpdate — subdomains share the
+// same mutable surface (PHP version, docroot, SSL state, status). subdomain
+// label and parent_domain_id are intentionally not in this list: changing
+// them would invalidate the fqdn and detach the row from its parent's
+// cascade-delete chain.
+var allowedSubdomainUpdate = map[string]struct{}{
+	"php_version":    {},
+	"document_root":  {},
+	"ssl_type":       {},
+	"ssl_expires_at": {},
+	"status":         {},
+}
+
 // allowedUserSort lists columns the API may use in ORDER BY for the users
 // list endpoint. ORDER BY identifiers cannot be parameterized; whitelisting
 // is the only safe option.

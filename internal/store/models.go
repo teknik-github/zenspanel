@@ -48,6 +48,26 @@ type Domain struct {
 	UpdatedAt    time.Time    `db:"updated_at" json:"updated_at"`
 }
 
+// Subdomain is a child of Domain. fqdn = subdomain + "." + parent.Domain
+// is materialised at create time so listing/lookup don't have to JOIN.
+// Same shape as Domain otherwise — own nginx vhost, own document root,
+// own SSL state — but borrows the parent's PHP-FPM pool (pools are
+// per-user, not per-vhost).
+type Subdomain struct {
+	ID             uint64       `db:"id" json:"id"`
+	UserID         uint64       `db:"user_id" json:"user_id"`
+	ParentDomainID uint64       `db:"parent_domain_id" json:"parent_domain_id"`
+	Subdomain      string       `db:"subdomain" json:"subdomain"`
+	FQDN           string       `db:"fqdn" json:"fqdn"`
+	DocumentRoot   string       `db:"document_root" json:"document_root"`
+	PHPVersion     string       `db:"php_version" json:"php_version"`
+	SSLType        string       `db:"ssl_type" json:"ssl_type"`
+	SSLExpiresAt   sql.NullTime `db:"ssl_expires_at" json:"ssl_expires_at"`
+	Status         string       `db:"status" json:"status"`
+	CreatedAt      time.Time    `db:"created_at" json:"created_at"`
+	UpdatedAt      time.Time    `db:"updated_at" json:"updated_at"`
+}
+
 type Database struct {
 	ID        uint64    `db:"id" json:"id"`
 	UserID    uint64    `db:"user_id" json:"user_id"`

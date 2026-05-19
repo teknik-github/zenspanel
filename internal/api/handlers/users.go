@@ -75,26 +75,29 @@ func (h *PackageHandler) Delete(c *gin.Context) {
 
 // UserHandler
 type UserHandler struct {
-	users     *store.UserStore
-	packages  *store.PackageStore
-	domains   *store.DomainStore
-	databases *store.DatabaseStore
-	agentSock string
+	users      *store.UserStore
+	packages   *store.PackageStore
+	domains    *store.DomainStore
+	subdomains *store.SubdomainStore
+	databases  *store.DatabaseStore
+	agentSock  string
 }
 
 func NewUserHandler(
 	users *store.UserStore,
 	packages *store.PackageStore,
 	domains *store.DomainStore,
+	subdomains *store.SubdomainStore,
 	databases *store.DatabaseStore,
 	agentSock string,
 ) *UserHandler {
 	return &UserHandler{
-		users:     users,
-		packages:  packages,
-		domains:   domains,
-		databases: databases,
-		agentSock: agentSock,
+		users:      users,
+		packages:   packages,
+		domains:    domains,
+		subdomains: subdomains,
+		databases:  databases,
+		agentSock:  agentSock,
 	}
 }
 
@@ -309,8 +312,23 @@ func (h *UserHandler) Delete(c *gin.Context) {
 
 	// 1. Tear down every domain the user owns. Each one removes the
 	//    nginx vhost via the agent; we keep going on errors so a
-	//    half-broken vhost doesn't block the whole delete.
+	//    half-broken vhost doesn't block the whole delete. Subdomains
+	//    are torn down before the parent so their .conf files come off
+	//    nginx before the parent vhost goes away.
 	domains, _ := h.domains.ListByUserID(id)
+	subs, _ := h.subdomains.ListByUserID(id)
+	for _, s := range subs {
+		if err := agentClient.Call("nginx.delete_vhost", map[string]interface{}{
+			"domain": s.FQDN,
+		}, nil); err != nil {
+			warnings = append(warnings, "nginx.delete_vhost subdomain "+s.FQDN+": "+err.Error())
+		}
+		if err := agentClient.Call("ssl.remove_cert", map[string]interface{}{
+			"domain": s.FQDN,
+		}, nil); err != nil {
+			warnings = append(warnings, "ssl.remove_cert subdomain "+s.FQDN+": "+err.Error())
+		}
+	}
 	for _, d := range domains {
 		if err := agentClient.Call("nginx.delete_vhost", map[string]interface{}{
 			"domain": d.Domain,

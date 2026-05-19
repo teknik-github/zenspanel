@@ -15,18 +15,25 @@ import (
 )
 
 type SSLHandler struct {
-	domains   *store.DomainStore
-	agentSock string
-	leEmail   string
-	leStaging bool
+	domains    *store.DomainStore
+	subdomains *store.SubdomainStore
+	agentSock  string
+	leEmail    string
+	leStaging  bool
 }
 
-func NewSSLHandler(domains *store.DomainStore, agentSock, leEmail string, leStaging bool) *SSLHandler {
+func NewSSLHandler(
+	domains *store.DomainStore,
+	subdomains *store.SubdomainStore,
+	agentSock, leEmail string,
+	leStaging bool,
+) *SSLHandler {
 	return &SSLHandler{
-		domains:   domains,
-		agentSock: agentSock,
-		leEmail:   leEmail,
-		leStaging: leStaging,
+		domains:    domains,
+		subdomains: subdomains,
+		agentSock:  agentSock,
+		leEmail:    leEmail,
+		leStaging:  leStaging,
 	}
 }
 
@@ -140,11 +147,110 @@ func (h *SSLHandler) Remove(c *gin.Context) {
 	c.JSON(http.StatusOK, updated)
 }
 
-// certNotAfter parses a PEM bundle and returns the NotAfter of the first
-// CERTIFICATE block found. The agent already validates the bundle starts
-// with BEGIN CERTIFICATE, so anything that lands here should parse — but
-// we surface parse errors so the caller can decide whether to record an
-// expiry.
+// IssueForSubdomain mirrors Issue but loads the FQDN from the
+// subdomains table. The agent treats subdomain FQDNs identically to
+// parent domains (one .conf file per FQDN, one cert per FQDN), so we
+// just route to the same RPCs with the subdomain row's fqdn as the
+// "domain" param.
+func (h *SSLHandler) IssueForSubdomain(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	sub, err := h.subdomains.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "subdomain not found"})
+		return
+	}
+	if auth.GetRole(c) != "admin" && sub.UserID != auth.GetUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
+	var req struct {
+		Type    string `json:"type" binding:"required"`
+		CertPEM string `json:"cert_pem"`
+		KeyPEM  string `json:"key_pem"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	agentClient := agent.NewClient(h.agentSock)
+	switch req.Type {
+	case "letsencrypt":
+		if msg := validateLEEmail(h.leEmail); msg != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			return
+		}
+		if err := agentClient.Call("ssl.issue_letsencrypt", map[string]interface{}{
+			"domain":  sub.FQDN,
+			"email":   h.leEmail,
+			"staging": h.leStaging,
+		}, nil); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "issue letsencrypt: " + err.Error()})
+			return
+		}
+		expires := time.Now().AddDate(0, 0, 90).Format("2006-01-02 15:04:05")
+		_ = h.subdomains.Update(sub.ID, map[string]interface{}{
+			"ssl_type":       "letsencrypt",
+			"ssl_expires_at": expires,
+		})
+	case "custom":
+		if req.CertPEM == "" || req.KeyPEM == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cert_pem and key_pem are required for custom"})
+			return
+		}
+		if err := agentClient.Call("ssl.write_custom_cert", map[string]interface{}{
+			"domain":   sub.FQDN,
+			"cert_pem": req.CertPEM,
+			"key_pem":  req.KeyPEM,
+		}, nil); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "write custom cert: " + err.Error()})
+			return
+		}
+		fields := map[string]interface{}{"ssl_type": "custom"}
+		if exp, err := certNotAfter(req.CertPEM); err == nil {
+			fields["ssl_expires_at"] = exp.Format("2006-01-02 15:04:05")
+		}
+		_ = h.subdomains.Update(sub.ID, fields)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "type must be 'letsencrypt' or 'custom'"})
+		return
+	}
+
+	updated, _ := h.subdomains.GetByID(sub.ID)
+	c.JSON(http.StatusOK, updated)
+}
+
+// RemoveForSubdomain is the subdomain analogue of Remove. Same agent
+// RPC, just clears the SSL state on the subdomains row instead of
+// domains.
+func (h *SSLHandler) RemoveForSubdomain(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	sub, err := h.subdomains.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "subdomain not found"})
+		return
+	}
+	if auth.GetRole(c) != "admin" && sub.UserID != auth.GetUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
+	agentClient := agent.NewClient(h.agentSock)
+	if err := agentClient.Call("ssl.remove_cert", map[string]interface{}{
+		"domain": sub.FQDN,
+	}, nil); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "remove cert: " + err.Error()})
+		return
+	}
+
+	_ = h.subdomains.Update(sub.ID, map[string]interface{}{
+		"ssl_type":       "none",
+		"ssl_expires_at": nil,
+	})
+	updated, _ := h.subdomains.GetByID(sub.ID)
+	c.JSON(http.StatusOK, updated)
+}
 func certNotAfter(pemData string) (time.Time, error) {
 	block, _ := pem.Decode([]byte(pemData))
 	if block == nil {

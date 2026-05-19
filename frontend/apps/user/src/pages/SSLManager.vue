@@ -1,24 +1,70 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { domainsApi } from '@/api/domains'
 import { sslApi } from '@/api/ssl'
+import { subdomainsApi } from '@/api/subdomains'
+
+// Both lists merged into a single rendered table. Each row carries a
+// `kind` discriminator so action handlers can route SSL calls through
+// either /domains/:id/ssl or /subdomains/:id/ssl. Backend endpoints
+// take the same JSON body shape, so the only branch needed is the URL.
+type SSLRow = {
+  kind: 'domain' | 'subdomain'
+  id: number
+  name: string          // .domain for parents, .fqdn for subdomains
+  ssl_type: string
+  ssl_expires_at: string | null
+  parent?: string       // FQDN's parent domain — only set for subdomains, used for indent display
+}
 
 const domains = ref<any[]>([])
+const subdomains = ref<any[]>([])
 const showUploadModal = ref(false)
-const selectedDomain = ref<any>(null)
+const selectedRow = ref<SSLRow | null>(null)
 const certPEM = ref('')
 const keyPEM = ref('')
 const loaded = ref(false)
-// Per-row pending-state map keyed by domain ID. The previous
-// implementation had a single shared `loading` flag, which disabled every
-// SSL action across every row whenever any one of them was in flight.
-const pending = ref<Record<number, string>>({})
-const confirmRemove = ref<any>(null)
+// Per-row pending-state map keyed by `<kind>:<id>` so a domain and a
+// subdomain with overlapping IDs don't collide.
+const pending = ref<Record<string, string>>({})
+const confirmRemove = ref<SSLRow | null>(null)
 const uploading = ref(false)
 
+function rowKey(r: SSLRow) {
+  return `${r.kind}:${r.id}`
+}
+
+const rows = computed<SSLRow[]>(() => {
+  const out: SSLRow[] = []
+  // Render each parent followed immediately by its subdomains so the UI
+  // mirrors the Domains page grouping. Subdomain `parent` is only used
+  // for display indent — sorting is done by parent's domain field.
+  const parentsByDomain = new Map<string, any>()
+  for (const d of domains.value) parentsByDomain.set(d.domain, d)
+  for (const d of domains.value) {
+    out.push({
+      kind: 'domain', id: d.id, name: d.domain,
+      ssl_type: d.ssl_type, ssl_expires_at: d.ssl_expires_at,
+    })
+    for (const s of subdomains.value) {
+      if (s.parent_domain_id === d.id) {
+        out.push({
+          kind: 'subdomain', id: s.id, name: s.fqdn, parent: d.domain,
+          ssl_type: s.ssl_type, ssl_expires_at: s.ssl_expires_at,
+        })
+      }
+    }
+  }
+  return out
+})
+
 async function refresh() {
-  const res = await domainsApi.list()
-  domains.value = res.data.data || []
+  const [dRes, sRes] = await Promise.all([
+    domainsApi.list(),
+    subdomainsApi.list().catch(() => ({ data: { data: [] } })),
+  ])
+  domains.value = dRes.data.data || []
+  subdomains.value = sRes.data.data || []
 }
 
 onMounted(async () => {
@@ -29,23 +75,32 @@ onMounted(async () => {
   }
 })
 
-async function issueLetsEncrypt(domainId: number) {
-  pending.value[domainId] = 'issuing'
+async function issueLetsEncrypt(row: SSLRow) {
+  const k = rowKey(row)
+  pending.value[k] = 'issuing'
   try {
-    await sslApi.issueLetsEncrypt(domainId)
+    if (row.kind === 'domain') {
+      await sslApi.issueLetsEncrypt(row.id)
+    } else {
+      await subdomainsApi.issueLetsEncrypt(row.id)
+    }
     await refresh()
   } catch (e: any) {
     alert(e?.response?.data?.error || 'Failed to issue certificate')
   } finally {
-    delete pending.value[domainId]
+    delete pending.value[k]
   }
 }
 
 async function uploadCustomSSL() {
-  if (!selectedDomain.value) return
+  if (!selectedRow.value) return
   uploading.value = true
   try {
-    await sslApi.uploadCustom(selectedDomain.value.id, certPEM.value, keyPEM.value)
+    if (selectedRow.value.kind === 'domain') {
+      await sslApi.uploadCustom(selectedRow.value.id, certPEM.value, keyPEM.value)
+    } else {
+      await subdomainsApi.uploadCustomSSL(selectedRow.value.id, certPEM.value, keyPEM.value)
+    }
     showUploadModal.value = false
     certPEM.value = ''
     keyPEM.value = ''
@@ -57,20 +112,25 @@ async function uploadCustomSSL() {
   }
 }
 
-async function removeSSL(domainId: number) {
-  pending.value[domainId] = 'removing'
+async function removeSSL(row: SSLRow) {
+  const k = rowKey(row)
+  pending.value[k] = 'removing'
   try {
-    await sslApi.remove(domainId)
+    if (row.kind === 'domain') {
+      await sslApi.remove(row.id)
+    } else {
+      await subdomainsApi.removeSSL(row.id)
+    }
     confirmRemove.value = null
     await refresh()
   } catch (e: any) {
     alert(e?.response?.data?.error || 'Failed to remove certificate')
   } finally {
-    delete pending.value[domainId]
+    delete pending.value[k]
   }
 }
 
-function isExpiringSoon(expiresAt: string) {
+function isExpiringSoon(expiresAt: string | null) {
   if (!expiresAt) return false
   return new Date(expiresAt).getTime() - Date.now() < 30 * 24 * 60 * 60 * 1000
 }
@@ -80,14 +140,14 @@ function isExpiringSoon(expiresAt: string) {
   <div class="space-y-4">
     <div>
       <h1 class="text-lg font-semibold text-gray-800">SSL Manager</h1>
-      <p class="text-xs text-gray-400 mt-0.5 hidden sm:block">Issue Let's Encrypt or upload custom certificates</p>
+      <p class="text-xs text-gray-400 mt-0.5 hidden sm:block">Issue Let's Encrypt or upload custom certificates for domains & subdomains</p>
     </div>
 
     <div v-if="!loaded" class="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
       <div v-for="i in 3" :key="i" class="h-8 bg-gray-50 rounded animate-pulse" />
     </div>
 
-    <div v-else-if="!domains.length"
+    <div v-else-if="!rows.length"
       class="bg-white border border-gray-200 rounded-lg flex flex-col items-center justify-center py-12 text-center px-4">
       <div class="w-12 h-12 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-3">
         <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -104,7 +164,7 @@ function isExpiringSoon(expiresAt: string) {
 
     <div v-else class="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="w-full text-xs min-w-[640px]">
+        <table class="w-full text-xs min-w-[680px]">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr class="text-gray-500">
               <th class="text-left px-4 py-3 font-medium">Domain</th>
@@ -114,36 +174,41 @@ function isExpiringSoon(expiresAt: string) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="d in domains" :key="d.id" class="border-b border-gray-50 hover:bg-gray-50">
-              <td class="px-4 py-3 font-medium text-gray-700">{{ d.domain }}</td>
+            <tr v-for="r in rows" :key="rowKey(r)"
+              class="border-b border-gray-50 hover:bg-gray-50"
+              :class="r.kind === 'subdomain' ? 'bg-gray-50/40' : ''">
+              <td class="px-4 py-3 font-medium text-gray-700">
+                <span v-if="r.kind === 'subdomain'" class="text-gray-300 mr-1">└</span>
+                {{ r.name }}
+              </td>
               <td class="px-4 py-3">
                 <span class="px-2 py-0.5 rounded text-[10px] font-medium"
-                  :class="d.ssl_type === 'none' ? 'bg-gray-100 text-gray-500' : d.ssl_type === 'letsencrypt' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'">
-                  {{ d.ssl_type === 'none' ? 'No SSL' : d.ssl_type }}
+                  :class="r.ssl_type === 'none' ? 'bg-gray-100 text-gray-500' : r.ssl_type === 'letsencrypt' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'">
+                  {{ r.ssl_type === 'none' ? 'No SSL' : r.ssl_type }}
                 </span>
               </td>
               <td class="px-4 py-3">
-                <span v-if="d.ssl_expires_at"
+                <span v-if="r.ssl_expires_at"
                   class="px-2 py-0.5 rounded text-[10px] font-medium"
-                  :class="isExpiringSoon(d.ssl_expires_at) ? 'bg-amber-100 text-amber-700' : 'text-gray-400'">
-                  {{ new Date(d.ssl_expires_at).toLocaleDateString() }}
-                  {{ isExpiringSoon(d.ssl_expires_at) ? '⚠ Expiring soon' : '' }}
+                  :class="isExpiringSoon(r.ssl_expires_at) ? 'bg-amber-100 text-amber-700' : 'text-gray-400'">
+                  {{ new Date(r.ssl_expires_at).toLocaleDateString() }}
+                  {{ isExpiringSoon(r.ssl_expires_at) ? '⚠ Expiring soon' : '' }}
                 </span>
                 <span v-else class="text-gray-400">—</span>
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <button @click="issueLetsEncrypt(d.id)" :disabled="!!pending[d.id]"
+                  <button @click="issueLetsEncrypt(r)" :disabled="!!pending[rowKey(r)]"
                     class="text-xs text-green-600 border border-green-200 px-2 py-1 rounded hover:bg-green-50 disabled:opacity-50 transition-colors">
-                    {{ pending[d.id] === 'issuing' ? 'Issuing…' : "Let's Encrypt" }}
+                    {{ pending[rowKey(r)] === 'issuing' ? 'Issuing…' : "Let's Encrypt" }}
                   </button>
-                  <button @click="selectedDomain = d; showUploadModal = true" :disabled="!!pending[d.id]"
+                  <button @click="selectedRow = r; showUploadModal = true" :disabled="!!pending[rowKey(r)]"
                     class="text-xs text-blue-600 border border-blue-200 px-2 py-1 rounded hover:bg-blue-50 disabled:opacity-50 transition-colors">
                     Upload Custom
                   </button>
-                  <button v-if="d.ssl_type !== 'none'" @click="confirmRemove = d" :disabled="!!pending[d.id]"
+                  <button v-if="r.ssl_type !== 'none'" @click="confirmRemove = r" :disabled="!!pending[rowKey(r)]"
                     class="text-xs text-red-500 border border-red-200 px-2 py-1 rounded hover:bg-red-50 disabled:opacity-50 transition-colors">
-                    {{ pending[d.id] === 'removing' ? 'Removing…' : 'Remove' }}
+                    {{ pending[rowKey(r)] === 'removing' ? 'Removing…' : 'Remove' }}
                   </button>
                 </div>
               </td>
@@ -157,7 +222,7 @@ function isExpiringSoon(expiresAt: string) {
     <div v-if="showUploadModal" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 class="font-semibold text-gray-800 mb-1">Upload Custom SSL</h2>
-        <p class="text-xs text-gray-400 mb-4">{{ selectedDomain?.domain }}</p>
+        <p class="text-xs text-gray-400 mb-4">{{ selectedRow?.name }}</p>
         <div class="space-y-3">
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">Certificate (PEM)</label>
@@ -185,16 +250,17 @@ function isExpiringSoon(expiresAt: string) {
     <div v-if="confirmRemove" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-2">Remove SSL?</h2>
-        <p class="text-sm text-gray-500 mb-4">This will remove the SSL certificate from <span class="font-mono">{{ confirmRemove.domain }}</span>. The site will fall back to HTTP only.</p>
+        <p class="text-sm text-gray-500 mb-4">This will remove the SSL certificate from <span class="font-mono">{{ confirmRemove.name }}</span>. The site will fall back to HTTP only.</p>
         <div class="flex gap-2">
           <button @click="confirmRemove = null"
             class="flex-1 border border-gray-200 text-gray-600 rounded-md py-2 text-sm hover:bg-gray-50">Cancel</button>
-          <button @click="removeSSL(confirmRemove.id)" :disabled="!!pending[confirmRemove.id]"
+          <button @click="removeSSL(confirmRemove)" :disabled="!!pending[rowKey(confirmRemove)]"
             class="flex-1 bg-red-600 text-white rounded-md py-2 text-sm hover:bg-red-700 disabled:opacity-50">
-            {{ pending[confirmRemove.id] === 'removing' ? 'Removing…' : 'Remove' }}
+            {{ pending[rowKey(confirmRemove)] === 'removing' ? 'Removing…' : 'Remove' }}
           </button>
         </div>
       </div>
     </div>
   </div>
 </template>
+

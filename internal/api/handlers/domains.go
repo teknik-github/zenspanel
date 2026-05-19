@@ -12,14 +12,26 @@ import (
 )
 
 type DomainHandler struct {
-	domains   *store.DomainStore
-	users     *store.UserStore
-	agentSock string
-	homeBase  string
+	domains    *store.DomainStore
+	subdomains *store.SubdomainStore
+	users      *store.UserStore
+	agentSock  string
+	homeBase   string
 }
 
-func NewDomainHandler(domains *store.DomainStore, users *store.UserStore, agentSock, homeBase string) *DomainHandler {
-	return &DomainHandler{domains: domains, users: users, agentSock: agentSock, homeBase: homeBase}
+func NewDomainHandler(
+	domains *store.DomainStore,
+	subdomains *store.SubdomainStore,
+	users *store.UserStore,
+	agentSock, homeBase string,
+) *DomainHandler {
+	return &DomainHandler{
+		domains:    domains,
+		subdomains: subdomains,
+		users:      users,
+		agentSock:  agentSock,
+		homeBase:   homeBase,
+	}
 }
 
 func (h *DomainHandler) List(c *gin.Context) {
@@ -206,10 +218,34 @@ func (h *DomainHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	agentClient := agent.NewClient(h.agentSock)
+
+	// Tear down every subdomain that hangs off this parent first. The
+	// FK is ON DELETE CASCADE so the rows would disappear anyway when
+	// we drop the parent — but the kernel knows nothing about the
+	// nginx .conf files, and a CASCADE'd row leaves the .conf orphaned
+	// (nginx reload then errors on the next change). Walk subdomains
+	// explicitly, ask the agent to remove vhost + SSL per child, then
+	// let the FK handle the row delete.
+	if h.subdomains != nil {
+		subs, _ := h.subdomains.ListByParentID(id)
+		for _, s := range subs {
+			if err := agentClient.Call("nginx.delete_vhost", map[string]interface{}{
+				"domain": s.FQDN,
+			}, nil); err != nil {
+				log.Printf("nginx.delete_vhost subdomain %s: %v", s.FQDN, err)
+			}
+			if err := agentClient.Call("ssl.remove_cert", map[string]interface{}{
+				"domain": s.FQDN,
+			}, nil); err != nil {
+				log.Printf("ssl.remove_cert subdomain %s: %v", s.FQDN, err)
+			}
+		}
+	}
+
 	// Ask the agent to remove the nginx vhost first. If it fails we still
 	// want to delete the panel row — leaving an orphan row is worse than
 	// leaving an orphan .conf because the row blocks recreate.
-	agentClient := agent.NewClient(h.agentSock)
 	if err := agentClient.Call("nginx.delete_vhost", map[string]interface{}{
 		"domain": domain.Domain,
 	}, nil); err != nil {

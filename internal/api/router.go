@@ -16,6 +16,7 @@ type Router struct {
 	users         *handlers.UserHandler
 	packages      *handlers.PackageHandler
 	domains       *handlers.DomainHandler
+	subdomains    *handlers.SubdomainHandler
 	databases     *handlers.DatabaseHandler
 	phpVersions   *handlers.PHPVersionHandler
 	apiKeys       *handlers.APIKeyHandler
@@ -36,6 +37,7 @@ func NewRouter(
 	usersH *handlers.UserHandler,
 	packagesH *handlers.PackageHandler,
 	domainsH *handlers.DomainHandler,
+	subdomainsH *handlers.SubdomainHandler,
 	databasesH *handlers.DatabaseHandler,
 	phpVersionsH *handlers.PHPVersionHandler,
 	apiKeysH *handlers.APIKeyHandler,
@@ -55,6 +57,7 @@ func NewRouter(
 		users:         usersH,
 		packages:      packagesH,
 		domains:       domainsH,
+		subdomains:    subdomainsH,
 		databases:     databasesH,
 		phpVersions:   phpVersionsH,
 		apiKeys:       apiKeysH,
@@ -145,6 +148,15 @@ func (r *Router) Setup() *gin.Engine {
 		// ssl (per-domain)
 		api.POST("/domains/:id/ssl", r.ssl.Issue)
 		api.DELETE("/domains/:id/ssl", r.ssl.Remove)
+
+		// subdomains
+		api.GET("/subdomains", r.subdomains.List)
+		api.POST("/subdomains", r.subdomains.Create)
+		api.GET("/subdomains/:id", r.subdomains.Get)
+		api.PUT("/subdomains/:id", r.subdomains.Update)
+		api.DELETE("/subdomains/:id", r.subdomains.Delete)
+		api.POST("/subdomains/:id/ssl", r.ssl.IssueForSubdomain)
+		api.DELETE("/subdomains/:id/ssl", r.ssl.RemoveForSubdomain)
 
 		// databases
 		api.GET("/databases", r.databases.List)

@@ -54,3 +54,32 @@ func ValidateDomain(d string) error {
 	}
 	return nil
 }
+
+// subdomainLabelRe matches a single DNS label per RFC 1035: 1–63 chars,
+// lowercase alphanumeric or hyphen, ! starts/ends with hyphen.
+var subdomainLabelRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// reservedSubdomainLabels are labels that conflict with conventional DNS
+// records (mail, _dmarc, etc.). Letting users register these as panel
+// subdomains would shadow legitimate infra-level records.
+var reservedSubdomainLabels = map[string]struct{}{
+	"www":  {}, "mail": {}, "smtp": {}, "imap": {}, "pop": {},
+	"ns": {}, "ns1": {}, "ns2": {},
+	"_dmarc": {}, "_domainkey": {},
+}
+
+// ValidateSubdomainLabel checks the leftmost label of a subdomain against
+// RFC 1035 and our reserved-label list. Caller is responsible for joining
+// it with the parent domain.
+func ValidateSubdomainLabel(label string) error {
+	if len(label) < 1 || len(label) > 63 {
+		return fmt.Errorf("subdomain label length must be 1-63 chars")
+	}
+	if !subdomainLabelRe.MatchString(label) {
+		return fmt.Errorf("subdomain label %q is not a valid DNS label (lowercase alphanumeric, hyphens, ! start/end w/ hyphen)", label)
+	}
+	if _, ok := reservedSubdomainLabels[label]; ok {
+		return fmt.Errorf("subdomain label %q is reserved", label)
+	}
+	return nil
+}

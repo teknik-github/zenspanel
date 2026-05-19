@@ -60,17 +60,19 @@ func main() {
 	apiKeyStore := store.NewAPIKeyStore(db)
 	auditLogStore := store.NewAuditLogStore(db)
 	backupStore := store.NewBackupStore(db)
+	subdomainStore := store.NewSubdomainStore(db)
 
 	// handlers
 	authH := handlers.NewAuthHandler(userStore, cfg.JWT.Secret, cfg.JWT.Expiry)
-	usersH := handlers.NewUserHandler(userStore, packageStore, domainStore, databaseStore, cfg.Agent.Socket)
+	usersH := handlers.NewUserHandler(userStore, packageStore, domainStore, subdomainStore, databaseStore, cfg.Agent.Socket)
 	packagesH := handlers.NewPackageHandler(packageStore)
-	domainsH := handlers.NewDomainHandler(domainStore, userStore, cfg.Agent.Socket, cfg.Paths.HomeBase)
+	domainsH := handlers.NewDomainHandler(domainStore, subdomainStore, userStore, cfg.Agent.Socket, cfg.Paths.HomeBase)
+	subdomainsH := handlers.NewSubdomainHandler(subdomainStore, domainStore, userStore, phpVersionStore, cfg.Agent.Socket, cfg.Paths.HomeBase)
 	databasesH := handlers.NewDatabaseHandler(databaseStore, cfg.Agent.Socket, rdb)
 	phpVersionsH := handlers.NewPHPVersionHandler(phpVersionStore)
 	apiKeysH := handlers.NewAPIKeyHandler(apiKeyStore)
 	auditLogsH := handlers.NewAuditLogHandler(auditLogStore)
-	sslH := handlers.NewSSLHandler(domainStore, cfg.Agent.Socket, cfg.LetsEncrypt.Email, cfg.LetsEncrypt.Staging)
+	sslH := handlers.NewSSLHandler(domainStore, subdomainStore, cfg.Agent.Socket, cfg.LetsEncrypt.Email, cfg.LetsEncrypt.Staging)
 	backupsH := handlers.NewBackupHandler(backupStore, userStore, databaseStore, cfg.Paths.HomeBase, cfg.Paths.BackupBase, cfg.Agent.Socket)
 	filesH := handlers.NewFileManagerHandler(userStore, cfg.Agent.Socket)
 	systemH := handlers.NewSystemHandler(userStore, domainStore, databaseStore, cfg.Agent.Socket)
@@ -78,7 +80,7 @@ func main() {
 
 	// router
 	router := api.NewRouter(
-		authH, usersH, packagesH, domainsH, databasesH,
+		authH, usersH, packagesH, domainsH, subdomainsH, databasesH,
 		phpVersionsH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH, terminalH,
 		apiKeyStore, auditLogStore,
 		rdb,
