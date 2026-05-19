@@ -196,11 +196,22 @@ func (h *UserHandler) Create(c *gin.Context) {
 		user.LinuxUID = createResp.UID
 	}
 
+	// Provision a FileBrowser user record scoped to the panel user's
+	// home. Without this, FileBrowser's proxy auth falls back to the
+	// global admin account and the panel user sees every other user's
+	// files. Failures are non-fatal — the user is still created and
+	// can be added to FileBrowser manually later.
+	provisionWarnings := []string{}
+	if err := agentClient.Call("filebrowser.user_create", map[string]interface{}{
+		"username": user.Username,
+	}, nil); err != nil {
+		provisionWarnings = append(provisionWarnings, "filebrowser: "+err.Error())
+	}
+
 	// Cgroup slice and PHP-FPM pool only make sense once a package picks the
 	// limits and PHP version. Failures here are logged into the response but
 	// do not roll back the row — the user can still log in, and an admin can
 	// retry by reassigning the package.
-	provisionWarnings := []string{}
 	if user.PackageID.Valid {
 		pkg, err := h.packages.GetByID(uint64(user.PackageID.Int64))
 		if err == nil {

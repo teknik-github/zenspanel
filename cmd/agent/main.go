@@ -10,6 +10,7 @@ import (
 	"github.com/zenspanel/zenspanel/agent"
 	agentbackup "github.com/zenspanel/zenspanel/agent/backup"
 	agentcgroups "github.com/zenspanel/zenspanel/agent/cgroups"
+	agentfilebrowser "github.com/zenspanel/zenspanel/agent/filebrowser"
 	agentfilemanager "github.com/zenspanel/zenspanel/agent/filemanager"
 	agentmysql "github.com/zenspanel/zenspanel/agent/mysql"
 	agentnginx "github.com/zenspanel/zenspanel/agent/nginx"
@@ -278,6 +279,29 @@ func main() {
 			return nil, err
 		}
 		return nil, agentuser.Delete(p.Username)
+	})
+
+	// filebrowser user management — keep records in FileBrowser's DB
+	// in sync with panel users so proxy auth maps each panel user to
+	// a scoped sandbox, not the global admin.
+	srv.Register("filebrowser.user_create", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfilebrowser.CreateUser(p.Username, cfg.Paths.HomeBase)
+	})
+
+	srv.Register("filebrowser.user_delete", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfilebrowser.DeleteUser(p.Username)
 	})
 
 	// updater — self-update of the panel itself, all root-only ops
