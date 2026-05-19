@@ -19,6 +19,7 @@ type Router struct {
 	subdomains    *handlers.SubdomainHandler
 	databases     *handlers.DatabaseHandler
 	phpVersions   *handlers.PHPVersionHandler
+	phpExtensions *handlers.PHPExtensionHandler
 	apiKeys       *handlers.APIKeyHandler
 	auditLogs     *handlers.AuditLogHandler
 	ssl           *handlers.SSLHandler
@@ -40,6 +41,7 @@ func NewRouter(
 	subdomainsH *handlers.SubdomainHandler,
 	databasesH *handlers.DatabaseHandler,
 	phpVersionsH *handlers.PHPVersionHandler,
+	phpExtensionsH *handlers.PHPExtensionHandler,
 	apiKeysH *handlers.APIKeyHandler,
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
@@ -60,6 +62,7 @@ func NewRouter(
 		subdomains:    subdomainsH,
 		databases:     databasesH,
 		phpVersions:   phpVersionsH,
+		phpExtensions: phpExtensionsH,
 		apiKeys:       apiKeysH,
 		auditLogs:     auditLogsH,
 		ssl:           sslH,
@@ -175,6 +178,12 @@ func (r *Router) Setup() *gin.Engine {
 		api.GET("/php-versions/enabled", r.phpVersions.ListEnabled)
 		api.PUT("/php-versions/:id/enable", auth.RequireRole("admin"), r.phpVersions.Enable)
 		api.PUT("/php-versions/:id/disable", auth.RequireRole("admin"), r.phpVersions.Disable)
+
+		// php extensions — admin manages global catalog, users toggle per-user overrides
+		api.GET("/admin/php-extensions", auth.RequireRole("admin"), r.phpExtensions.AdminList)
+		api.PUT("/admin/php-extensions/:id", auth.RequireRole("admin"), r.phpExtensions.AdminUpdate)
+		api.GET("/php-extensions", r.phpExtensions.UserList)
+		api.PUT("/php-extensions", r.phpExtensions.UserUpdate)
 
 		// api keys
 		api.GET("/api-keys", auth.RequireRole("admin"), r.apiKeys.List)

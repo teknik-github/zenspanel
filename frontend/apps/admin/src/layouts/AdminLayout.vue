@@ -48,6 +48,7 @@ const navGroups = [
     label: 'Server',
     items: [
       { path: '/php-versions', label: 'PHP Versions', icon: 'code' },
+      { path: '/php-extensions', label: 'PHP Extensions', icon: 'puzzle' },
       { path: '/ssl-manager', label: 'SSL Manager', icon: 'lock' },
       { path: '/backups', label: 'Backups', icon: 'upload-cloud' },
       { path: '/api-keys', label: 'API Keys', icon: 'key' },

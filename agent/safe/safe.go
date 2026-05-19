@@ -27,6 +27,11 @@ var domainRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]
 // php<ver>-fpm or interpolate into pool paths.
 var phpVersionRe = regexp.MustCompile(`^[0-9]\.[0-9]$`)
 
+// extNameRe matches PHP extension names we accept. Restricted to
+// lowercase alphanumeric + underscore — no dots, slashes, or spaces
+// that could escape the ini file or the filesystem path (V19).
+var extNameRe = regexp.MustCompile(`^[a-z0-9_]+$`)
+
 func Username(u string) error {
 	if !usernameRe.MatchString(u) {
 		return fmt.Errorf("agent: invalid username %q", u)
@@ -58,6 +63,13 @@ func Domain(d string) error {
 func PHPVersion(v string) error {
 	if !phpVersionRe.MatchString(v) {
 		return fmt.Errorf("agent: invalid php version %q", v)
+	}
+	return nil
+}
+
+func ExtName(e string) error {
+	if len(e) == 0 || len(e) > 64 || !extNameRe.MatchString(e) {
+		return fmt.Errorf("agent: invalid extension name %q", e)
 	}
 	return nil
 }

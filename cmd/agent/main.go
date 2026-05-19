@@ -103,6 +103,34 @@ func main() {
 		return nil, agentphpfpm.ReloadFPM(p.PHPVersion)
 	})
 
+	// phpfpm.enable_extension / phpfpm.disable_extension — write or remove
+	// a per-user extension ini snippet and reload the pool. ext_name is
+	// validated by safe.ExtName before any filesystem op (V19). Each user's
+	// snippets live in a dedicated dir so changes are isolated (V18).
+	srv.Register("phpfpm.enable_extension", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username   string `json:"username"`
+			PHPVersion string `json:"php_version"`
+			ExtName    string `json:"ext_name"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentphpfpm.EnableExtension(cfg.Paths.PHPPoolBase, p.Username, p.PHPVersion, p.ExtName)
+	})
+
+	srv.Register("phpfpm.disable_extension", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username   string `json:"username"`
+			PHPVersion string `json:"php_version"`
+			ExtName    string `json:"ext_name"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentphpfpm.DisableExtension(cfg.Paths.PHPPoolBase, p.Username, p.PHPVersion, p.ExtName)
+	})
+
 	// cgroups
 	srv.Register("cgroups.create_slice", func(params json.RawMessage) (interface{}, error) {
 		var p struct {

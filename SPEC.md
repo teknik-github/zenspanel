@@ -27,13 +27,19 @@ subdomain support: user create/manage `<sub>.<parent-domain>` via panel, reuse n
 - `GET /api/v1/subdomains/:id` JWT → 200 row | 404
 - `PUT /api/v1/subdomains/:id` JWT body `{php_version?, doc_root?}` → 200
 - `DELETE /api/v1/subdomains/:id` JWT → 200
+- `GET /api/v1/admin/php-extensions` admin JWT → 200 `{data: [{id, name, php_version, enabled}]}`
+- `PUT /api/v1/admin/php-extensions/:id` admin JWT body `{enabled: bool}` → 200
+- `GET /api/v1/php-extensions` user JWT → 200 `{data: [{name, php_version, admin_enabled, user_enabled}]}`
+- `PUT /api/v1/php-extensions` user JWT body `{name: str, php_version: str, enabled: bool}` → 200 | 403 admin-disabled
 
 ### agent rpc
 
-(reuse, no new RPCs)
+(reuse, no new RPCs for subdomains)
 - `nginx.create_vhost {domain, username, php_version, doc_root}`
 - `nginx.delete_vhost {domain}`
 - `ssl.issue_letsencrypt {domain, email, staging}`
+- `phpfpm.enable_extension {username, php_version, ext_name}` — write per-user ext ini, reload pool
+- `phpfpm.disable_extension {username, php_version, ext_name}` — remove per-user ext ini, reload pool
 
 ### db
 
@@ -58,11 +64,35 @@ CREATE TABLE subdomains (
 );
 ```
 
+migration `000013_php_extensions.up.sql`:
+```sql
+-- global catalog: admin controls which exts are available + default state
+CREATE TABLE php_extensions (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(64) NOT NULL,
+  php_version VARCHAR(8) NOT NULL,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  UNIQUE KEY uk_ext_ver (name, php_version)
+);
+-- per-user override: only rows where user differs from global default
+CREATE TABLE user_php_extensions (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  ext_id BIGINT UNSIGNED NOT NULL,
+  enabled BOOLEAN NOT NULL,
+  UNIQUE KEY uk_user_ext (user_id, ext_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (ext_id) REFERENCES php_extensions(id) ON DELETE CASCADE
+);
+```
+
 ### frontend
 
 - `frontend/apps/user/src/pages/Domains.vue`: per-row `+ Subdomain` button → modal
 - modal fields: `subdomain` (label only), `php_version` select, `doc_root` (default `public_html/<sub>.<parent>`)
 - per-row expandable subdomain list under each parent
+- `frontend/apps/admin/src/pages/PhpExtensions.vue`: table of all exts grouped by php version, toggle per row
+- `frontend/apps/user/src/pages/PhpSettings.vue`: "Extensions" section — toggle per ext (admin-allowed only)
 
 ## §V INVARIANTS
 
@@ -83,6 +113,11 @@ V14: WS upgrader `CheckOrigin` ! same-origin (Host header == r.Host) | explicit 
 V15: Update handlers w/ free-form fields ! re-validate jail/safety on every mutating field (ex: `document_root` jail check ! Create-only)
 V16: ownership pattern ! `role == "user" && id != self → 403`. ⊥ `role != "admin"` (api_key falls through w/ id=0)
 V17: `/terminal/token` ! per-user rate limit (≥ 1 req/sec/user)
+V18: php ext toggle ! affect only target php ver pool. ⊥ cross-user side-effect
+V19: ext enable/disable ! validate ext name `^[a-z0-9_]+$`. ⊥ shell injection via ext name
+V20: admin-disabled ext ! user cannot re-enable. user toggle ⊂ admin-allowed set
+V21: ext change → php-fpm pool reload (! restart). ⊥ kill live requests
+V22: ext state stored per-user per-phpver in DB. agent reads DB state on pool create/reload
 
 ## §T TASKS
 
@@ -112,6 +147,15 @@ V17: `/terminal/token` ! per-user rate limit (≥ 1 req/sec/user)
 | T22 | x | harden cookie: set `Secure=true` (when scheme=https) + `SameSite=Strict` @ `internal/api/handlers/auth.go:Login` cookie set | V13 |
 | T23 | x | rate-limit `/terminal/token`: per-user limiter (sync.Map or Redis), 1 req/sec/user, 429 on exceed | V17 |
 | T24 | x | refactor ownership pattern: replace `role != "admin"` w/ explicit `role == "user" && id != self` across all handlers | V16 |
+| T25 | x | migration 000013: `php_extensions` table (global catalog) + `user_php_extensions` table (per-user override state) | I.db |
+| T26 | x | `internal/store/phpextensions.go`: PHPExtension + UserPHPExtension models + store (List, SetGlobal, GetUserState, SetUserState) | I.db,V18,V20 |
+| T27 | x | `agent/phpfpm/phpfpm.go`: `EnableExtension(username, phpVer, extName)` + `DisableExtension(...)` — write per-user ext ini, reload pool | V18,V19,V21 |
+| T28 | x | register `phpfpm.enable_extension` + `phpfpm.disable_extension` RPCs @ `cmd/agent/main.go` | V19 |
+| T29 | x | `internal/api/handlers/phpextensions.go`: admin routes (global catalog CRUD) + user routes (per-user toggle, gated by admin-allowed) | I.api,V20 |
+| T30 | x | wire routes: `GET/PUT /api/v1/admin/php-extensions` (admin) + `GET/PUT /api/v1/php-extensions` (user, scoped to self) | I.api |
+| T31 | x | admin panel: PHP Extensions page — table of all known exts, per-version enable/disable toggle | I.frontend |
+| T32 | x | user panel: PHP Settings page — add "Extensions" section below shell PHP card, per-ext toggle (only admin-allowed exts shown) | I.frontend |
+| T33 | x | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 

@@ -19,6 +19,7 @@ const router = createRouter({
         { path: 'domains', component: () => import('@/pages/Domains.vue') },
         { path: 'databases', component: () => import('@/pages/Databases.vue') },
         { path: 'php-versions', component: () => import('@/pages/PhpVersions.vue') },
+        { path: 'php-extensions', component: () => import('@/pages/PhpExtensions.vue') },
         { path: 'ssl-manager', component: () => import('@/pages/SSLManager.vue') },
         { path: 'backups', component: () => import('@/pages/Backups.vue') },
         { path: 'api-keys', component: () => import('@/pages/ApiKeys.vue') },

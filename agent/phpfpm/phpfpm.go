@@ -119,3 +119,60 @@ func ReloadFPM(phpVersion string) error {
 	}
 	return nil
 }
+
+// extIniDir returns the per-user PHP extension override directory.
+// Each file in this dir is a snippet like "extension=redis.so" that
+// FPM picks up via the pool's php_admin_value[extension_dir] or via
+// a conf.d include. We use a dedicated dir per user+version so one
+// user's overrides never bleed into another user's pool (V18).
+func extIniDir(phpPoolBase, username, phpVersion string) string {
+	return filepath.Join(phpPoolBase, fmt.Sprintf("zenspanel-%s-%s-ext", username, phpVersion))
+}
+
+func extIniPath(phpPoolBase, username, phpVersion, extName string) string {
+	return filepath.Join(extIniDir(phpPoolBase, username, phpVersion), extName+".ini")
+}
+
+// EnableExtension writes a per-user extension ini snippet and reloads
+// the FPM pool. Idempotent — safe to call when already enabled (V21).
+// extName is validated against ^[a-z0-9_]+$ before any filesystem op (V19).
+func EnableExtension(phpPoolBase, username, phpVersion, extName string) error {
+	if err := safe.Username(username); err != nil {
+		return err
+	}
+	if err := safe.PHPVersion(phpVersion); err != nil {
+		return err
+	}
+	if err := safe.ExtName(extName); err != nil {
+		return err
+	}
+	dir := extIniDir(phpPoolBase, username, phpVersion)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("mkdir ext dir: %w", err)
+	}
+	iniPath := extIniPath(phpPoolBase, username, phpVersion, extName)
+	content := fmt.Sprintf("extension=%s\n", extName)
+	if err := os.WriteFile(iniPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("write ext ini: %w", err)
+	}
+	return ReloadFPM(phpVersion)
+}
+
+// DisableExtension removes the per-user extension ini snippet and
+// reloads the FPM pool. Idempotent — no error if file doesn't exist (V21).
+func DisableExtension(phpPoolBase, username, phpVersion, extName string) error {
+	if err := safe.Username(username); err != nil {
+		return err
+	}
+	if err := safe.PHPVersion(phpVersion); err != nil {
+		return err
+	}
+	if err := safe.ExtName(extName); err != nil {
+		return err
+	}
+	iniPath := extIniPath(phpPoolBase, username, phpVersion, extName)
+	if err := os.Remove(iniPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove ext ini: %w", err)
+	}
+	return ReloadFPM(phpVersion)
+}
