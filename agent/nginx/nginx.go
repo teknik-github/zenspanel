@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	osuser "os/user"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"text/template"
 )
 
@@ -67,7 +69,100 @@ func CreateVhost(nginxConf, domain, username, phpVersion, docRoot string) error 
 	if err := os.WriteFile(confPath(nginxConf, domain), buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("write vhost: %w", err)
 	}
+	if err := ensureDocRoot(docRoot, domain, username); err != nil {
+		return fmt.Errorf("ensure docroot: %w", err)
+	}
 	return ReloadNginx()
+}
+
+// ensureDocRoot creates the website's document root if it doesn't exist,
+// chowns it to the panel Linux user, and seeds an index.html so the very
+// first hit serves a friendly "coming soon" page instead of an nginx
+// default 404. Re-running on an existing vhost is safe — we only write
+// the placeholder when the directory has no index file.
+func ensureDocRoot(docRoot, domain, username string) error {
+	if err := os.MkdirAll(docRoot, 0755); err != nil {
+		return fmt.Errorf("mkdir: %w", err)
+	}
+	uid, gid := -1, -1
+	if u, err := osuser.Lookup(username); err == nil {
+		if v, err := strconv.Atoi(u.Uid); err == nil {
+			uid = v
+		}
+		if v, err := strconv.Atoi(u.Gid); err == nil {
+			gid = v
+		}
+	}
+	if uid >= 0 && gid >= 0 {
+		// Walk up to the user's home and chown each parent we created
+		// so the user can list and traverse them. We stop at home_base
+		// to avoid touching /home itself.
+		_ = chownTree(docRoot, uid, gid)
+	}
+
+	// Skip seeding if any index file already exists — operator may have
+	// uploaded their site already, or this is a vhost recreate after
+	// suspend/unsuspend and we don't want to clobber their files.
+	for _, name := range []string{"index.html", "index.htm", "index.php"} {
+		if _, err := os.Stat(filepath.Join(docRoot, name)); err == nil {
+			return nil
+		}
+	}
+
+	indexHTML := fmt.Sprintf(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>%s</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:#f9fafb;color:#374151;display:flex;align-items:center;
+    justify-content:center;height:100vh;margin:0}
+  .box{text-align:center;padding:2rem}
+  .domain{font-size:1.75rem;font-weight:700;color:#4f46e5;margin-bottom:.5rem}
+  .sub{color:#9ca3af;font-size:.95rem;line-height:1.5}
+  .hint{margin-top:1.5rem;font-size:.8rem;color:#d1d5db}
+</style></head>
+<body><div class="box">
+<div class="domain">%s</div>
+<div class="sub">Website coming soon.<br>
+Upload your files via the panel File Manager to replace this page.</div>
+<div class="hint">Powered by ZensPanel</div>
+</div></body></html>
+`, domain, domain)
+	indexPath := filepath.Join(docRoot, "index.html")
+	if err := os.WriteFile(indexPath, []byte(indexHTML), 0644); err != nil {
+		return fmt.Errorf("write index.html: %w", err)
+	}
+	if uid >= 0 && gid >= 0 {
+		_ = os.Chown(indexPath, uid, gid)
+	}
+	return nil
+}
+
+// chownTree walks docRoot and every ancestor up to (but not including)
+// the user's home base and chowns them to the user. We stop the walk
+// once we hit /home or a path component the user shouldn't own.
+func chownTree(docRoot string, uid, gid int) error {
+	// Chown the docroot itself first.
+	if err := os.Chown(docRoot, uid, gid); err != nil {
+		return err
+	}
+	// Walk up parents until we hit /home or /. Each parent gets chowned
+	// only if the user owns one level deeper — we don't want to chown
+	// /home/zenspanel/<username>'s parent, only the public_html branch.
+	for parent := filepath.Dir(docRoot); ; parent = filepath.Dir(parent) {
+		if parent == "/" || parent == "/home" || parent == filepath.Dir(parent) {
+			break
+		}
+		base := filepath.Base(parent)
+		if base == "public_html" {
+			_ = os.Chown(parent, uid, gid)
+			continue
+		}
+		// Stop at the user's home dir level.
+		break
+	}
+	return nil
 }
 
 func DeleteVhost(nginxConf, domain string) error {

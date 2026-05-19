@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { filesApi, type FileEntry } from '@/api/files'
 
 const cwd = ref('')
@@ -275,7 +276,17 @@ function onDrop(e: DragEvent) {
 }
 
 watch(cwd, () => refresh())
-onMounted(refresh)
+onMounted(() => {
+  // Allow other pages to deep-link us into a specific directory via
+  // ?path=public_html/<domain>. The Domains page uses this to send the
+  // user straight to a domain's docroot when they click "Files".
+  const route = useRoute()
+  const queryPath = route.query.path
+  if (typeof queryPath === 'string' && queryPath !== '') {
+    cwd.value = queryPath
+  }
+  refresh()
+})
 </script>
 
 <template>
