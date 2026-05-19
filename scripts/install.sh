@@ -271,7 +271,12 @@ build_zenspanel() {
     # tar would fail with permission denied on first run.
     if id zenspanel &>/dev/null; then
         chown -R zenspanel:zenspanel "$ZENSPANEL_DATA"
-        chmod 750 "$ZENSPANEL_DATA/home" "$ZENSPANEL_DATA/backups"
+        # home/ needs execute-for-others (x bit) so nginx (www-data) can
+        # traverse into per-user public_html dirs and serve static files —
+        # 0750 blocks www-data and every static request 404s with "File
+        # not found." 0751 allows traversal without listing.
+        chmod 751 "$ZENSPANEL_DATA/home"
+        chmod 750 "$ZENSPANEL_DATA/backups"
     fi
 
     local src="$ZENSPANEL_DIR/src"
@@ -653,7 +658,8 @@ WantedBy=multi-user.target
 EOF
     chown -R zenspanel:zenspanel "$ZENSPANEL_LOG"
     chown -R zenspanel:zenspanel "$ZENSPANEL_DATA"
-    chmod 750 "$ZENSPANEL_DATA/home" "$ZENSPANEL_DATA/backups"
+    chmod 751 "$ZENSPANEL_DATA/home"
+    chmod 750 "$ZENSPANEL_DATA/backups"
     chown zenspanel:zenspanel "$ZENSPANEL_CONF/config.yaml"
     # Agent needs to read config too
     chmod 640 "$ZENSPANEL_CONF/config.yaml"
