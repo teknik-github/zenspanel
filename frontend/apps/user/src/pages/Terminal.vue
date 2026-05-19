@@ -48,7 +48,16 @@ async function connect() {
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data)
-        if (msg.type === 'output') term.write(msg.data)
+        if (msg.type === 'output') {
+          // Server base64-encodes raw PTY bytes (so binary control
+          // sequences survive JSON encoding). atob → Latin1 string,
+          // which is what xterm.js expects: each char-code = one
+          // byte the kernel sent. UTF-8 multi-byte sequences are
+          // already split across base64-decoded chars by the time
+          // we hand them to write(), so xterm's own UTF-8 decoder
+          // reassembles them — we don't need TextDecoder here.
+          term.write(atob(msg.data))
+        }
       } catch { term.write(e.data) }
     }
     ws.onclose = () => { connected.value = false; disconnected.value = true; connecting.value = false }

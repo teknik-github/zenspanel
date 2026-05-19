@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Terminal "blank blue screen with base64 garbage": frontend `Terminal.vue` was passing `msg.data` directly to `term.write()`, but the API base64-encodes raw PTY bytes (so binary control sequences survive JSON transport). xterm.js was rendering the literal base64 string `G1s/MjAwNGgbXTA7…` instead of the decoded ANSI prompt. Added `atob(msg.data)` before `term.write` so the bytes are decoded back to Latin1 chars before xterm's UTF-8 decoder reassembles them.
+
 ### Security
 - **CRITICAL**: Fixed IDOR in `users.GetUsage` (`GET /api/v1/users/:id/usage`). The handler had no ownership check, so any logged-in user could read every other user's package limits + live RAM/disk/CPU/domain/db counters by iterating `:id`. Added `role=="user" && id!=self → 403` mirroring `users.Get`. (B1, V12)
 - **HIGH**: Fixed cross-site WebSocket hijack (CSWSH) on `/ws/terminal`. The Gorilla `upgrader.CheckOrigin` was `return true`, so any malicious page could complete the WS upgrade with the victim's cookie-auth'd token and own a shell. New check compares the `Origin` header to `r.Host` (allows http/https same-origin); empty Origin still passes for native non-browser clients. (B2, V14)
