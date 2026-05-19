@@ -30,11 +30,16 @@ systemctl stop "$SERVICE" 2>/dev/null || true
 sleep 1
 
 # Make sure the auth method is proxy and the header is X-Auth-User.
-# These persist in the DB so re-running is fine.
+# These persist in the DB so re-running is fine. Also turn off the
+# disk-usage percentage widget — it shows the host filesystem size
+# (e.g. "5.5 GiB of 58 GiB"), not the panel-level quota the operator
+# configured, and is more confusing than useful next to the panel's
+# own quota readout in the User Dashboard.
 echo "==> Setting auth.method=proxy + auth.header=X-Auth-User..."
 filebrowser --database "$DB" config set \
     --auth.method=proxy \
-    --auth.header=X-Auth-User >/dev/null
+    --auth.header=X-Auth-User \
+    --branding.disableUsedPercentage=true >/dev/null
 
 # Walk every Linux user under HOME_BASE; if they have a matching
 # FileBrowser record, rewrite scope to the relative form (just the

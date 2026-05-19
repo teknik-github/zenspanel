@@ -594,7 +594,8 @@ EOF
         --baseurl /filebrowser \
         --root "${ZENSPANEL_DATA}/home" \
         --auth.method=proxy \
-        --auth.header=X-Auth-User >/dev/null 2>&1 || \
+        --auth.header=X-Auth-User \
+        --branding.disableUsedPercentage=true >/dev/null 2>&1 || \
         log_warn "FileBrowser config set returned non-zero (continuing)"
 
     cat > /etc/systemd/system/zenspanel-filebrowser.service <<EOF
