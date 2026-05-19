@@ -2,9 +2,12 @@ package handlers
 
 import (
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"path"
+	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -223,4 +226,159 @@ func (h *FileManagerHandler) Upload(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "uploaded", "path": uploadPath, "size": header.Size})
+}
+
+// Chmod changes permission bits on a file or directory. Mode comes in
+// as either an octal string ("0755") or a plain decimal — we normalize
+// here so the frontend can send whichever is convenient.
+func (h *FileManagerHandler) Chmod(c *gin.Context) {
+	username, ok := h.caller(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		Path string `json:"path" binding:"required"`
+		Mode string `json:"mode" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	mode, err := parseMode(req.Mode)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	err = agent.NewClient(h.agentSock).Call("filemanager.chmod", map[string]interface{}{
+		"username": username,
+		"path":     req.Path,
+		"mode":     mode,
+	}, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "permissions updated"})
+}
+
+// parseMode accepts "0755" / "755" / "rwxr-xr-x" and returns the
+// numeric mode. Octal is the canonical form; the rwx form is convenient
+// when round-tripping the value the file list already shows.
+func parseMode(s string) (uint32, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty mode")
+	}
+	// Strip a leading file-type char if the operator pasted "drwxr-xr-x".
+	if len(s) == 10 {
+		s = s[1:]
+	}
+	if len(s) == 9 {
+		var m uint32
+		for i, r := range s {
+			bit := uint32(0)
+			switch r {
+			case 'r':
+				bit = 4
+			case 'w':
+				bit = 2
+			case 'x':
+				bit = 1
+			case '-':
+				bit = 0
+			default:
+				return 0, fmt.Errorf("invalid rwx char %q", r)
+			}
+			m |= bit << uint((8 - i))
+		}
+		return m, nil
+	}
+	// Octal / decimal.
+	n, err := strconv.ParseUint(s, 0, 32)
+	if err != nil {
+		// Try base 8 explicitly if no prefix.
+		n, err = strconv.ParseUint(s, 8, 32)
+		if err != nil {
+			return 0, fmt.Errorf("invalid mode %q", s)
+		}
+	}
+	return uint32(n) & 0777, nil
+}
+
+// Copy duplicates a file or directory tree.
+func (h *FileManagerHandler) Copy(c *gin.Context) {
+	username, ok := h.caller(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		Src string `json:"src" binding:"required"`
+		Dst string `json:"dst" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	err := agent.NewClient(h.agentSock).Call("filemanager.copy", map[string]interface{}{
+		"username": username,
+		"src":      req.Src,
+		"dst":      req.Dst,
+	}, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "copied"})
+}
+
+// Compress builds an archive (.zip or .tar.gz) at dst from src.
+func (h *FileManagerHandler) Compress(c *gin.Context) {
+	username, ok := h.caller(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		Src string `json:"src" binding:"required"`
+		Dst string `json:"dst" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	err := agent.NewClient(h.agentSock).Call("filemanager.compress", map[string]interface{}{
+		"username": username,
+		"src":      req.Src,
+		"dst":      req.Dst,
+	}, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "compressed"})
+}
+
+// Extract unpacks a .zip or .tar.gz into a destination directory.
+func (h *FileManagerHandler) Extract(c *gin.Context) {
+	username, ok := h.caller(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		Archive string `json:"archive" binding:"required"`
+		DstDir  string `json:"dst_dir" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	err := agent.NewClient(h.agentSock).Call("filemanager.extract", map[string]interface{}{
+		"username": username,
+		"archive":  req.Archive,
+		"dst_dir":  req.DstDir,
+	}, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "extracted"})
 }

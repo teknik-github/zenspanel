@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/zenspanel/zenspanel/agent"
 	agentbackup "github.com/zenspanel/zenspanel/agent/backup"
@@ -416,6 +417,54 @@ func main() {
 			return nil, err
 		}
 		return nil, agentfilemanager.Delete(p.Username, cfg.Paths.HomeBase, p.Path)
+	})
+
+	srv.Register("filemanager.chmod", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+			Path     string `json:"path"`
+			Mode     uint32 `json:"mode"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfilemanager.Chmod(p.Username, cfg.Paths.HomeBase, p.Path, os.FileMode(p.Mode))
+	})
+
+	srv.Register("filemanager.copy", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+			Src      string `json:"src"`
+			Dst      string `json:"dst"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfilemanager.Copy(p.Username, cfg.Paths.HomeBase, p.Src, p.Dst)
+	})
+
+	srv.Register("filemanager.compress", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+			Src      string `json:"src"`
+			Dst      string `json:"dst"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfilemanager.Compress(p.Username, cfg.Paths.HomeBase, p.Src, p.Dst)
+	})
+
+	srv.Register("filemanager.extract", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+			Archive  string `json:"archive"`
+			DstDir   string `json:"dst_dir"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfilemanager.Extract(p.Username, cfg.Paths.HomeBase, p.Archive, p.DstDir)
 	})
 
 	log.Printf("ZensPanel Agent starting, socket: %s", cfg.Agent.Socket)

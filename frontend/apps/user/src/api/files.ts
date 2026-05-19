@@ -25,5 +25,10 @@ export const filesApi = {
       },
     })
   },
+  chmod: (path: string, mode: string) => client.put('/files/chmod', { path, mode }),
+  copy: (src: string, dst: string) => client.post('/files/copy', { src, dst }),
+  compress: (src: string, dst: string) => client.post('/files/compress', { src, dst }),
+  extract: (archive: string, dstDir: string) => client.post('/files/extract', { archive, dst_dir: dstDir }),
 }
+
 

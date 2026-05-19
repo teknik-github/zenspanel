@@ -177,6 +177,10 @@ func (r *Router) Setup() *gin.Engine {
 		api.PUT("/files/rename", r.files.Rename)
 		api.DELETE("/files", r.files.Delete)
 		api.POST("/files/upload", r.files.Upload)
+		api.PUT("/files/chmod", r.files.Chmod)
+		api.POST("/files/copy", r.files.Copy)
+		api.POST("/files/compress", r.files.Compress)
+		api.POST("/files/extract", r.files.Extract)
 	}
 
 	// External API — authenticated via X-API-Key header. The endpoints
