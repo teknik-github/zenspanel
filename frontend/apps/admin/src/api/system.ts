@@ -17,6 +17,8 @@ export interface UpdateInfo {
   behind_by: number
   changelog: string
   current_branch: string
+  download_url: string
+  release_tag: string
 }
 
 export interface UpdateStatus {
@@ -31,6 +33,6 @@ export interface UpdateStatus {
 export const systemApi = {
   stats:        () => client.get<SystemStats>('/system/stats'),
   checkUpdate:  () => client.get<UpdateInfo>('/system/update/check'),
-  runUpdate:    () => client.post<{ started: boolean; error: string }>('/system/update/run', {}),
+  runUpdate:    (downloadURL?: string) => client.post<{ started: boolean; error: string }>('/system/update/run', { download_url: downloadURL || '' }),
   updateStatus: () => client.get<UpdateStatus>('/system/update/status'),
 }

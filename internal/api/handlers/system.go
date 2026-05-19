@@ -41,10 +41,19 @@ func (h *SystemHandler) CheckUpdate(c *gin.Context) {
 
 // RunUpdate kicks off the async update on the agent. The agent runs
 // at most one update at a time; concurrent calls return the in-flight
-// status instead of starting a second run.
+// status instead of starting a second run. The optional download_url
+// in the request body switches the agent from build-from-source to
+// download-the-tarball — the latter is the default path now and the
+// only one that fits in 1 GB of RAM.
 func (h *SystemHandler) RunUpdate(c *gin.Context) {
+	var req struct {
+		DownloadURL string `json:"download_url"`
+	}
+	_ = c.ShouldBindJSON(&req)
 	var resp interface{}
-	if err := agent.NewClient(h.agentSock).Call("update.run", nil, &resp); err != nil {
+	if err := agent.NewClient(h.agentSock).Call("update.run", map[string]interface{}{
+		"download_url": req.DownloadURL,
+	}, &resp); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

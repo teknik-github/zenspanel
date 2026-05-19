@@ -25,13 +25,21 @@ const isRunning = computed(() => {
 
 const phaseLabel: Record<string, string> = {
   idle: 'Idle',
+  starting: 'Starting',
+  // Build-from-source phases (legacy fallback)
   pulling: 'Pulling latest source',
   building_api: 'Building API binary',
   building_agent: 'Building agent binary',
   building_cli: 'Building CLI binary',
   building_frontend: 'Building frontend',
+  // Download-release phases (preferred)
+  downloading: 'Downloading release tarball',
+  extracting: 'Extracting tarball',
+  deploying_binaries: 'Deploying binaries',
+  pulling_source: 'Updating source tree',
+  // Shared
   deploying_frontend: 'Deploying frontend',
-  restarting: 'Restarting services',
+  restarting: 'Restarting API service',
   done: 'Update complete',
   failed: 'Update failed',
 }
@@ -89,11 +97,15 @@ async function checkForUpdates() {
 }
 
 async function applyUpdate() {
-  if (!confirm('Apply update? Services will restart. This page will reload after.')) return
+  const usingDownload = !!updateInfo.value?.download_url
+  const msg = usingDownload
+    ? `Download release ${updateInfo.value?.release_tag} and restart? Services will be down for a few seconds.`
+    : 'No pre-built release available — fall back to build-from-source? Build can use 1-2 GB RAM and may OOM small VPS hosts. Continue?'
+  if (!confirm(msg)) return
   starting.value = true
   updateError.value = ''
   try {
-    await systemApi.runUpdate()
+    await systemApi.runUpdate(updateInfo.value?.download_url || '')
     await loadStatus()
     startPolling()
   } catch (e: any) {
@@ -155,6 +167,17 @@ onUnmounted(stopPolling)
             class="text-xs bg-indigo-600 text-white px-3 py-1 rounded-md hover:bg-indigo-700 disabled:opacity-50">
             {{ starting ? 'Starting...' : 'Apply update' }}
           </button>
+        </div>
+        <div v-if="updateInfo.download_url"
+          class="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-3 py-1.5 flex items-center gap-1.5">
+          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Pre-built release {{ updateInfo.release_tag }} available — fast download, low memory footprint
+        </div>
+        <div v-else
+          class="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-3 py-1.5">
+          ⚠ No pre-built release for the latest commit. Falling back to build-from-source uses 1-2 GB RAM and may OOM small VPS hosts.
         </div>
         <details v-if="updateInfo.changelog" class="text-xs">
           <summary class="cursor-pointer text-gray-500 hover:text-gray-700">View changelog excerpt</summary>

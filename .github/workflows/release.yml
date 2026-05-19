@@ -1,0 +1,99 @@
+name: Release
+
+# Build linux/amd64 binaries + frontend on every push to a vX.Y.Z tag,
+# bundle them, and attach to a GitHub Release. Server installers and
+# the in-panel self-updater download from this artifact instead of
+# building from source on the host (which OOMs on 1-2 GB VPS).
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Build Go binaries
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          mkdir -p bundle/zenspanel/bin
+          go build -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o bundle/zenspanel/bin/zenspanel-api ./cmd/api
+          go build -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o bundle/zenspanel/bin/zenspanel-agent ./cmd/agent
+          go build -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o bundle/zenspanel/bin/zenspanel-cli ./cmd/cli
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm -r build
+
+      - name: Stage bundle
+        run: |
+          mkdir -p bundle/zenspanel/frontend
+          cp -r frontend/apps/admin/dist bundle/zenspanel/frontend/admin
+          cp -r frontend/apps/user/dist  bundle/zenspanel/frontend/user
+          cp -r migrations bundle/zenspanel/migrations
+          cp CHANGELOG.md bundle/zenspanel/CHANGELOG.md
+          cp -r scripts bundle/zenspanel/scripts || true
+          # Trim setup.sh files from migrations (none currently, but
+          # future-proof against accidentally shipping junk).
+          find bundle/zenspanel -name '*.tmp' -delete
+
+      - name: Tar bundle
+        working-directory: bundle
+        run: tar -czf "../zenspanel-${{ github.ref_name }}.tar.gz" zenspanel
+
+      - name: Generate checksums
+        run: |
+          sha256sum "zenspanel-${{ github.ref_name }}.tar.gz" > "zenspanel-${{ github.ref_name }}.tar.gz.sha256"
+
+      - name: Extract changelog excerpt
+        id: changelog
+        run: |
+          # Pull the section between [Unreleased] / first heading and the
+          # next ## heading; ship that as the release body. Fallback to a
+          # one-liner if extraction fails.
+          awk '
+            /^## \[/ { if (count++) exit }
+            count == 1 { print }
+          ' CHANGELOG.md > release-body.md || echo "See CHANGELOG.md" > release-body.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ZensPanel ${{ github.ref_name }}
+          body_path: release-body.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') }}
+          files: |
+            zenspanel-${{ github.ref_name }}.tar.gz
+            zenspanel-${{ github.ref_name }}.tar.gz.sha256

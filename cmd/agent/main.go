@@ -287,7 +287,11 @@ func main() {
 		return agentupdater.Check(cfg.Paths.SrcDir)
 	})
 	srv.Register("update.run", func(params json.RawMessage) (interface{}, error) {
-		err := agentupdater.Run(cfg.Paths.SrcDir, cfg.Paths.BinDir, cfg.Paths.FrontendDir)
+		var p struct {
+			DownloadURL string `json:"download_url"`
+		}
+		_ = json.Unmarshal(params, &p)
+		err := agentupdater.Run(cfg.Paths.SrcDir, cfg.Paths.BinDir, cfg.Paths.FrontendDir, p.DownloadURL)
 		return map[string]interface{}{"started": err == nil, "error": errMsg(err)}, nil
 	})
 	srv.Register("update.status", func(params json.RawMessage) (interface{}, error) {
