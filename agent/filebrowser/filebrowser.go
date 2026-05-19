@@ -1,93 +1,156 @@
 package filebrowser
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"os/exec"
+	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/zenspanel/zenspanel/agent/safe"
 )
 
-// Default DB path. Match the systemd unit so we operate on the same
-// database FileBrowser is serving from.
-const DefaultDB = "/var/lib/zenspanel/filebrowser.db"
+// fileBrowserURL is where the locally-running FileBrowser service is
+// reachable. We talk to its HTTP API instead of running the CLI because
+// the CLI takes an exclusive lock on the SQLite DB that the live service
+// already holds — every CLI invocation while the service is running
+// times out on the lock.
+const fileBrowserURL = "http://127.0.0.1:8081/filebrowser"
 
-// CreateUser provisions a FileBrowser user scoped to <homeBase>/<username>/.
-// Used immediately after we successfully add a Linux user via agent.user.create
-// so the panel user can land in FileBrowser and only see their own files.
-//
-// FileBrowser's proxy auth maps the X-Auth-User header to a user record;
-// if no record exists for that name the request falls back to the default
-// admin which sees everything. Pre-creating the user with the right
-// scope is the only way to get per-user isolation under proxy auth.
-//
-// Idempotent: re-running with an existing username returns success-ish
-// from the underlying command; we tolerate non-zero exit because the
-// expected error is "user already exists" which is exactly the state we
-// want to end up in.
+// adminUser is the FileBrowser user we authenticate as for management
+// calls. It exists because `filebrowser config init` creates it
+// automatically; with proxy auth the username in the X-Auth-User
+// header is the credential, so no password is needed.
+const adminUser = "admin"
+
+type fbUser struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Scope    string `json:"scope"`
+	LockPass bool   `json:"lockPassword"`
+	Perm     fbPerm `json:"perm"`
+}
+
+type fbPerm struct {
+	Admin    bool `json:"admin"`
+	Execute  bool `json:"execute"`
+	Create   bool `json:"create"`
+	Rename   bool `json:"rename"`
+	Modify   bool `json:"modify"`
+	Delete   bool `json:"delete"`
+	Share    bool `json:"share"`
+	Download bool `json:"download"`
+}
+
+type modifyUserReq struct {
+	What string  `json:"what"`
+	Data *fbUser `json:"data"`
+}
+
+// CreateUser provisions a FileBrowser user record scoped to
+// <homeBase>/<username>/. Idempotent: re-creating an existing user
+// returns success.
 func CreateUser(username, homeBase string) error {
 	if err := safe.Username(username); err != nil {
 		return err
 	}
 	scope := homeBase + "/" + username
-	// FileBrowser still requires a password column even under proxy
-	// auth. We set a long random one — it's never used because the
-	// proxy header is the credential.
-	password := username + "-no-login"
+	body, _ := json.Marshal(modifyUserReq{
+		What: "user",
+		Data: &fbUser{
+			Username: username,
+			Password: username + "-no-login", // unused under proxy auth
+			Scope:    scope,
+			LockPass: false,
+			Perm: fbPerm{
+				Create: true, Rename: true, Modify: true,
+				Delete: true, Share: true, Download: true,
+			},
+		},
+	})
 
-	cmd := exec.Command("/usr/local/bin/filebrowser",
-		"--database", DefaultDB,
-		"users", "add", username, password,
-		"--scope", scope,
-		"--perm.admin=false",
-	)
-	out, err := cmd.CombinedOutput()
+	req, err := http.NewRequest("POST", fileBrowserURL+"/api/users", bytes.NewReader(body))
 	if err != nil {
-		// "user already exists" is acceptable — that means a previous
-		// run already provisioned them. Anything else is a real error.
-		s := string(out)
-		if containsAny(s, "already exists", "AlreadyExists", "duplicate") {
-			return nil
-		}
-		return fmt.Errorf("filebrowser users add: %w: %s", err, s)
+		return err
 	}
-	return nil
+	req.Header.Set("Content-Type", "application/json")
+	// Proxy auth: the username in this header is the identity
+	// FileBrowser will run the request as. Admin scope is required
+	// to create users.
+	req.Header.Set("X-Auth-User", adminUser)
+
+	cli := &http.Client{Timeout: 5 * time.Second}
+	resp, err := cli.Do(req)
+	if err != nil {
+		return fmt.Errorf("filebrowser POST /api/users: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+		return nil
+	}
+	if resp.StatusCode == http.StatusConflict {
+		return nil // user already exists — exactly what we want
+	}
+	return fmt.Errorf("filebrowser create user: HTTP %d", resp.StatusCode)
 }
 
-// DeleteUser removes the FileBrowser user record. Called from
-// agent.user.delete so a recreated panel user with the same name
-// doesn't inherit the previous occupant's session/scope.
+// DeleteUser removes the FileBrowser user record. Looks the user up
+// first because the API expects an integer ID, not a username.
 func DeleteUser(username string) error {
 	if err := safe.Username(username); err != nil {
 		return err
 	}
-	cmd := exec.Command("/usr/local/bin/filebrowser",
-		"--database", DefaultDB,
-		"users", "rm", username,
-	)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		s := string(out)
-		if containsAny(s, "not found", "no rows", "doesn't exist") {
-			return nil
-		}
-		return fmt.Errorf("filebrowser users rm: %w: %s", err, s)
+	id, err := userID(username)
+	if err != nil {
+		return err
 	}
-	return nil
+	if id == 0 {
+		return nil // nothing to delete
+	}
+	req, err := http.NewRequest("DELETE",
+		fileBrowserURL+"/api/users/"+strconv.Itoa(id), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Auth-User", adminUser)
+	cli := &http.Client{Timeout: 5 * time.Second}
+	resp, err := cli.Do(req)
+	if err != nil {
+		return fmt.Errorf("filebrowser DELETE /api/users/%d: %w", id, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+	return fmt.Errorf("filebrowser delete user: HTTP %d", resp.StatusCode)
 }
 
-func containsAny(haystack string, needles ...string) bool {
-	for _, n := range needles {
-		if indexOf(haystack, n) >= 0 {
-			return true
+// userID asks FileBrowser for the numeric ID matching a username so we
+// can hit the /api/users/<id> DELETE endpoint.
+func userID(username string) (int, error) {
+	req, _ := http.NewRequest("GET", fileBrowserURL+"/api/users", nil)
+	req.Header.Set("X-Auth-User", adminUser)
+	cli := &http.Client{Timeout: 5 * time.Second}
+	resp, err := cli.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("list users: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("list users: HTTP %d", resp.StatusCode)
+	}
+	var users []struct {
+		ID       int    `json:"id"`
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+		return 0, err
+	}
+	for _, u := range users {
+		if u.Username == username {
+			return u.ID, nil
 		}
 	}
-	return false
-}
-
-func indexOf(s, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
+	return 0, nil
 }
