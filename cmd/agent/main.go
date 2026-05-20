@@ -13,6 +13,7 @@ import (
 	agentcron "github.com/zenspanel/zenspanel/agent/cron"
 	agentfilebrowser "github.com/zenspanel/zenspanel/agent/filebrowser"
 	agentfilemanager "github.com/zenspanel/zenspanel/agent/filemanager"
+	agentinstaller "github.com/zenspanel/zenspanel/agent/installer"
 	agentlogs "github.com/zenspanel/zenspanel/agent/logs"
 	agentmysql "github.com/zenspanel/zenspanel/agent/mysql"
 	agentnginx "github.com/zenspanel/zenspanel/agent/nginx"
@@ -383,6 +384,57 @@ func main() {
 			return nil, err
 		}
 		return map[string]interface{}{"lines": lines}, nil
+	})
+
+	// installer.run — async app install (WordPress, Laravel, HTML). Returns
+	// immediately with a job_id; poll installer.status for progress (V32,V33).
+	srv.Register("installer.run", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			JobID     string `json:"job_id"`
+			AppID     string `json:"app_id"`
+			Username  string `json:"username"`
+			DocRoot   string `json:"doc_root"`
+			DBName    string `json:"db_name"`
+			DBUser    string `json:"db_user"`
+			DBPass    string `json:"db_pass"`
+			DBHost    string `json:"db_host"`
+			SiteURL   string `json:"site_url"`
+			Overwrite bool   `json:"overwrite"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		err := agentinstaller.Run(agentinstaller.RunParams{
+			JobID:     p.JobID,
+			AppID:     p.AppID,
+			Username:  p.Username,
+			HomeBase:  cfg.Paths.HomeBase,
+			DocRoot:   p.DocRoot,
+			DBName:    p.DBName,
+			DBUser:    p.DBUser,
+			DBPass:    p.DBPass,
+			DBHost:    p.DBHost,
+			SiteURL:   p.SiteURL,
+			Overwrite: p.Overwrite,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"job_id": p.JobID}, nil
+	})
+
+	srv.Register("installer.status", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			JobID string `json:"job_id"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		status, err := agentinstaller.Status(p.JobID)
+		if err != nil {
+			return nil, err
+		}
+		return status, nil
 	})
 
 	// quota — filesystem-level disk quota enforcement. Hard limit comes

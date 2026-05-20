@@ -55,8 +55,9 @@ const navGroups = computed(() => [
     ],
   },
   {
-    label: 'Files & Tools',
+    label: 'Tools',
     items: [
+      { path: '/installer', label: 'Website Installer', icon: 'download', show: true },
       { path: '/file-manager', label: 'File Manager', icon: 'folder', show: true, external: true },
       { path: '/cron-jobs', label: 'Cron Jobs', icon: 'clock', show: true },
       { path: '/logs', label: 'Error Logs', icon: 'file-text', show: true },
@@ -83,6 +84,7 @@ const pageTitle = computed(() => {
     '/terminal': 'Terminal',
     '/backups': 'Backups',
     '/2fa': 'Two-Factor Auth',
+    '/installer': 'Website Installer',
   }
   return titles[route.path] || ''
 })
@@ -196,6 +198,9 @@ const pageTitle = computed(() => {
               </svg>
               <svg v-else-if="item.icon === 'upload-cloud'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+              </svg>
+              <svg v-else-if="item.icon === 'download'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
               <svg v-else-if="item.icon === 'shield'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>

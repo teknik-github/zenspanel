@@ -22,6 +22,7 @@ const router = createRouter({
         { path: 'terminal', component: () => import('@/pages/Terminal.vue') },
         { path: 'backups', component: () => import('@/pages/Backups.vue') },
         { path: '2fa', component: () => import('@/pages/TwoFactor.vue') },
+        { path: 'installer', component: () => import('@/pages/Installer.vue') },
       ],
     },
   ],
