@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -32,6 +33,20 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
+	}
+
+	// Derive AES-256-GCM encryption key for secrets (TOTP, S3 credentials).
+	// Falls back to deriving from JWT secret if enc_key not set in config.
+	var encKey []byte
+	if cfg.Agent.EncKeyHex != "" {
+		encKey, _ = hex.DecodeString(cfg.Agent.EncKeyHex)
+	}
+	if len(encKey) != 32 {
+		h := []byte(cfg.JWT.Secret)
+		for len(h) < 32 {
+			h = append(h, h...)
+		}
+		encKey = h[:32]
 	}
 
 	srv := agent.NewServer(cfg.Agent.Socket)
@@ -523,6 +538,67 @@ func main() {
 			return nil, err
 		}
 		return status, nil
+	})
+
+	// backup.upload_s3 — upload a local backup file to an S3-compatible
+	// target. Credentials are decrypted from the encrypted secret (V47).
+	srv.Register("backup.upload_s3", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			FilePath     string `json:"file_path"`
+			TargetID     uint64 `json:"target_id"`
+			Name         string `json:"name"`
+			Type         string `json:"type"`
+			Bucket       string `json:"bucket"`
+			Prefix       string `json:"prefix"`
+			AccessKey    string `json:"access_key"`
+			SecretKeyEnc string `json:"secret_key_enc"`
+			Region       string `json:"region"`
+			Endpoint     string `json:"endpoint"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		target := agentbackup.S3Target{
+			ID:           p.TargetID,
+			Name:         p.Name,
+			Type:         p.Type,
+			Bucket:       p.Bucket,
+			Prefix:       p.Prefix,
+			AccessKey:    p.AccessKey,
+			SecretKeyEnc: p.SecretKeyEnc,
+			Region:       p.Region,
+			Endpoint:     p.Endpoint,
+		}
+		return nil, agentbackup.UploadS3(p.FilePath, target, encKey)
+	})
+
+	srv.Register("backup.test_s3", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			TargetID     uint64 `json:"target_id"`
+			Name         string `json:"name"`
+			Type         string `json:"type"`
+			Bucket       string `json:"bucket"`
+			Prefix       string `json:"prefix"`
+			AccessKey    string `json:"access_key"`
+			SecretKeyEnc string `json:"secret_key_enc"`
+			Region       string `json:"region"`
+			Endpoint     string `json:"endpoint"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		target := agentbackup.S3Target{
+			ID:           p.TargetID,
+			Name:         p.Name,
+			Type:         p.Type,
+			Bucket:       p.Bucket,
+			Prefix:       p.Prefix,
+			AccessKey:    p.AccessKey,
+			SecretKeyEnc: p.SecretKeyEnc,
+			Region:       p.Region,
+			Endpoint:     p.Endpoint,
+		}
+		return nil, agentbackup.TestConnection(target, encKey)
 	})
 
 	// quota — filesystem-level disk quota enforcement. Hard limit comes

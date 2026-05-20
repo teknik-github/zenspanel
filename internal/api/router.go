@@ -25,6 +25,7 @@ type Router struct {
 	installer     *handlers.InstallerHandler
 	firewall      *handlers.FirewallHandler
 	antivirus     *handlers.AntivirusHandler
+	backupTargets *handlers.BackupTargetHandler
 	apiKeys       *handlers.APIKeyHandler
 	auditLogs     *handlers.AuditLogHandler
 	ssl           *handlers.SSLHandler
@@ -52,6 +53,7 @@ func NewRouter(
 	installerH *handlers.InstallerHandler,
 	firewallH *handlers.FirewallHandler,
 	antivirusH *handlers.AntivirusHandler,
+	backupTargetsH *handlers.BackupTargetHandler,
 	apiKeysH *handlers.APIKeyHandler,
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
@@ -78,6 +80,7 @@ func NewRouter(
 		installer:     installerH,
 		firewall:      firewallH,
 		antivirus:     antivirusH,
+		backupTargets: backupTargetsH,
 		apiKeys:       apiKeysH,
 		auditLogs:     auditLogsH,
 		ssl:           sslH,
@@ -206,6 +209,13 @@ func (r *Router) Setup() *gin.Engine {
 		// php extensions — admin manages global catalog, users toggle per-user overrides
 		api.GET("/admin/php-extensions", auth.RequireRole("admin"), r.phpExtensions.AdminList)
 		api.PUT("/admin/php-extensions/:id", auth.RequireRole("admin"), r.phpExtensions.AdminUpdate)
+
+		// backup targets — admin manages S3/remote destinations
+		api.GET("/admin/backup-targets", auth.RequireRole("admin"), r.backupTargets.List)
+		api.POST("/admin/backup-targets", auth.RequireRole("admin"), r.backupTargets.Create)
+		api.PUT("/admin/backup-targets/:id", auth.RequireRole("admin"), r.backupTargets.Update)
+		api.DELETE("/admin/backup-targets/:id", auth.RequireRole("admin"), r.backupTargets.Delete)
+		api.POST("/admin/backup-targets/:id/test", auth.RequireRole("admin"), r.backupTargets.Test)
 		api.GET("/php-extensions", r.phpExtensions.UserList)
 		api.PUT("/php-extensions", r.phpExtensions.UserUpdate)
 

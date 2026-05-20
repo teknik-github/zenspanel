@@ -78,10 +78,18 @@ func main() {
 	installerH := handlers.NewInstallerHandler(domainStore, userStore, cfg.Agent.Socket)
 	firewallH := handlers.NewFirewallHandler(cfg.Agent.Socket)
 	antivirusH := handlers.NewAntivirusHandler(userStore, cfg.Agent.Socket)
+	backupTargetStore := store.NewBackupTargetStore(db)
+	backupTargetsH := handlers.NewBackupTargetHandler(
+		backupTargetStore,
+		cfg.Agent.Socket,
+		cfg.JWT.Secret,
+		cfg.JWT.TOTPKey,
+	)
 	apiKeysH := handlers.NewAPIKeyHandler(apiKeyStore)
 	auditLogsH := handlers.NewAuditLogHandler(auditLogStore)
 	sslH := handlers.NewSSLHandler(domainStore, subdomainStore, cfg.Agent.Socket, cfg.LetsEncrypt.Email, cfg.LetsEncrypt.Staging)
 	backupsH := handlers.NewBackupHandler(backupStore, userStore, databaseStore, cfg.Paths.HomeBase, cfg.Paths.BackupBase, cfg.Agent.Socket)
+	backupsH.BackupTargets = backupTargetStore
 	filesH := handlers.NewFileManagerHandler(userStore, cfg.Agent.Socket)
 	systemH := handlers.NewSystemHandler(userStore, domainStore, databaseStore, cfg.Agent.Socket)
 	terminalH := handlers.NewTerminalHandler(userStore, cfg.Agent.Socket)
@@ -89,7 +97,7 @@ func main() {
 	// router
 	router := api.NewRouter(
 		authH, usersH, packagesH, domainsH, subdomainsH, databasesH,
-		phpVersionsH, phpExtensionsH, cronJobsH, logsH, installerH, firewallH, antivirusH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH, terminalH,
+		phpVersionsH, phpExtensionsH, cronJobsH, logsH, installerH, firewallH, antivirusH, backupTargetsH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH, terminalH,
 		apiKeyStore, auditLogStore,
 		rdb,
 		cfg.JWT.Secret,

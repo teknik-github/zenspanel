@@ -52,6 +52,7 @@ const navGroups = [
       { path: '/ssl-manager', label: 'SSL Manager', icon: 'lock' },
       { path: '/firewall', label: 'Firewall', icon: 'shield' },
       { path: '/backups', label: 'Backups', icon: 'upload-cloud' },
+      { path: '/backup-targets', label: 'Backup Targets', icon: 'cloud' },
       { path: '/api-keys', label: 'API Keys', icon: 'key' },
     ],
   },
@@ -184,6 +185,9 @@ const pageTitle = computed(() => {
             </svg>
             <svg v-else-if="item.icon === 'upload-cloud'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+            </svg>
+            <svg v-else-if="item.icon === 'cloud'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
             </svg>
             <svg v-else-if="item.icon === 'key'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>

@@ -37,9 +37,10 @@ type JWTConfig struct {
 }
 
 type AgentConfig struct {
-	Socket         string
-	SocketGroup    string `mapstructure:"socket_group"`
-	MySQLAdminDSN  string `mapstructure:"mysql_admin_dsn"`
+	Socket        string
+	SocketGroup   string `mapstructure:"socket_group"`
+	MySQLAdminDSN string `mapstructure:"mysql_admin_dsn"`
+	EncKeyHex     string `mapstructure:"enc_key"` // 32-byte hex AES-256-GCM key for secret encryption
 }
 
 type PathsConfig struct {

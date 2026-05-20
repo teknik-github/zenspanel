@@ -302,14 +302,14 @@ V49: package disk_quota + memory_limit ! stored + displayed in MB in UI. convert
 | T83 | . | user panel: Antivirus page — add realtime alerts section, WS listener for `antivirus_alert` events | I.frontend,V46 |
 | T84 | x | admin panel: sidebar "Updates" menu item → existing Settings page update card (just add nav shortcut) | I.frontend |
 | T85 | x | admin panel: Terminal page — `POST /admin/terminal/token` + reuse WS terminal (V48) | I.api,V48 |
-| T86 | . | migration 000018: `backup_targets` table (id, name, type, bucket, prefix, access_key, secret_key_enc, region, endpoint, enabled) | I.db |
-| T87 | . | `internal/store/backuptargets.go`: BackupTarget model + store (List, Create, Update, Delete, GetByID) | I.db,V47 |
-| T88 | . | `agent/backup/s3.go`: `UploadS3(filePath string, target BackupTarget) error` — aws-sdk-go-v2 or rclone subprocess (V47) | V47 |
-| T89 | . | register `backup.upload_s3` RPC @ `cmd/agent/main.go` | V47 |
-| T90 | . | `internal/api/handlers/backuptargets.go`: CRUD + Test endpoint (V47) | I.api,V47 |
-| T91 | . | wire backup-targets routes + construct handler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
-| T92 | . | admin panel: Backup Targets page — list targets, add/edit modal (S3 creds), test connection button | I.frontend,V47 |
-| T93 | . | extend existing backup flow: after local backup completes, if target configured → call `backup.upload_s3` | I.api |
+| T86 | x | migration 000018: `backup_targets` table (id, name, type, bucket, prefix, access_key, secret_key_enc, region, endpoint, enabled) | I.db |
+| T87 | x | `internal/store/backuptargets.go`: BackupTarget model + store (List, Create, Update, Delete, GetByID) | I.db,V47 |
+| T88 | x | `agent/backup/s3.go`: `UploadS3(filePath string, target BackupTarget) error` — aws-sdk-go-v2 or rclone subprocess (V47) | V47 |
+| T89 | x | register `backup.upload_s3` RPC @ `cmd/agent/main.go` | V47 |
+| T90 | x | `internal/api/handlers/backuptargets.go`: CRUD + Test endpoint (V47) | I.api,V47 |
+| T91 | x | wire backup-targets routes + construct handler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T92 | x | admin panel: Backup Targets page — list targets, add/edit modal (S3 creds), test connection button | I.frontend,V47 |
+| T93 | x | extend existing backup flow: after local backup completes, if target configured → call `backup.upload_s3` | I.api |
 | T94 | x | `internal/api/handlers/packages.go`: accept `disk_quota_mb` + `memory_limit_mb` in Create/Update, convert MB→bytes before store (V49) | V49 |
 | T95 | x | admin panel: Packages page — change disk_quota + memory_limit inputs to MB with unit label | I.frontend,V49 |
 | T96 | x | `make build` + `pnpm -r build` clean | — |

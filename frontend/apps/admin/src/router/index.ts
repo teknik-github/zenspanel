@@ -23,6 +23,7 @@ const router = createRouter({
         { path: 'firewall', component: () => import('@/pages/Firewall.vue') },
         { path: 'ssl-manager', component: () => import('@/pages/SSLManager.vue') },
         { path: 'backups', component: () => import('@/pages/Backups.vue') },
+        { path: 'backup-targets', component: () => import('@/pages/BackupTargets.vue') },
         { path: 'api-keys', component: () => import('@/pages/ApiKeys.vue') },
         { path: 'audit-logs', component: () => import('@/pages/AuditLogs.vue') },
         { path: 'settings', component: () => import('@/pages/Settings.vue') },

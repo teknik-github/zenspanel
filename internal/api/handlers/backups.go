@@ -18,12 +18,13 @@ import (
 )
 
 type BackupHandler struct {
-	backups    *store.BackupStore
-	users      *store.UserStore
-	databases  *store.DatabaseStore
-	homeBase   string
-	backupBase string
-	agentSock  string
+	backups       *store.BackupStore
+	users         *store.UserStore
+	databases     *store.DatabaseStore
+	BackupTargets *store.BackupTargetStore
+	homeBase      string
+	backupBase    string
+	agentSock     string
 }
 
 func NewBackupHandler(backups *store.BackupStore, users *store.UserStore, databases *store.DatabaseStore, homeBase, backupBase, agentSock string) *BackupHandler {
@@ -283,4 +284,27 @@ func (h *BackupHandler) runBackup(id, userID uint64, username, kind string) {
 		return
 	}
 	_ = h.backups.UpdateStatus(id, "done", archivePath, info.Size(), "")
+
+	// Upload to all enabled remote targets (best-effort — local backup
+	// is already marked done; remote failures are logged only).
+	if h.BackupTargets != nil {
+		targets, _ := h.BackupTargets.ListEnabled()
+		ac := agent.NewClient(h.agentSock)
+		for _, t := range targets {
+			if err := ac.Call("backup.upload_s3", map[string]interface{}{
+				"file_path":      archivePath,
+				"target_id":      t.ID,
+				"name":           t.Name,
+				"type":           t.Type,
+				"bucket":         t.Bucket,
+				"prefix":         t.Prefix,
+				"access_key":     t.AccessKey,
+				"secret_key_enc": t.SecretKeyEnc,
+				"region":         t.Region,
+				"endpoint":       t.Endpoint,
+			}, nil); err != nil {
+				log.Printf("backup upload to target %q failed: %v", t.Name, err)
+			}
+		}
+	}
 }

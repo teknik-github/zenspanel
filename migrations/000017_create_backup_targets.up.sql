@@ -1,0 +1,14 @@
+CREATE TABLE backup_targets (
+  id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name         VARCHAR(128) NOT NULL,
+  type         VARCHAR(32)  NOT NULL DEFAULT 's3',
+  bucket       VARCHAR(256) NOT NULL,
+  prefix       VARCHAR(256) NOT NULL DEFAULT '',
+  access_key   VARCHAR(256) NOT NULL,
+  secret_key_enc TEXT        NOT NULL,
+  region       VARCHAR(64)  NOT NULL DEFAULT 'us-east-1',
+  endpoint     VARCHAR(512) NOT NULL DEFAULT '',
+  enabled      BOOLEAN      NOT NULL DEFAULT TRUE,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
