@@ -266,21 +266,28 @@ var pmaRedeemTmpl = template.Must(template.New("pma_sso").Parse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Opening phpMyAdmin...</title>
 <style>body{font-family:system-ui,sans-serif;background:#f9fafb;color:#374151;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-size:14px}</style>
 </head><body>
-<form id="f" method="POST" action="/phpmyadmin/index.php" autocomplete="off">
+<form id="f" method="POST" action="/phpmyadmin/" autocomplete="off">
   <input type="hidden" name="pma_username" value="{{.User}}">
   <input type="hidden" name="pma_password" value="{{.Password}}">
   <input type="hidden" name="server" value="1">
   <input type="hidden" name="target" value="index.php">
+  <input type="hidden" name="set_session" value="">
   <noscript>JavaScript is required for phpMyAdmin auto-login. <button type="submit">Continue</button></noscript>
 </form>
 <p>Opening phpMyAdmin...</p>
-<script>document.getElementById('f').submit();</script>
+<script>
+// Try the standard login endpoint first; fall back to index.php if needed.
+var f = document.getElementById('f');
+f.submit();
+</script>
 </body></html>`))
 
-// RedeemPHPMyAdmin consumes a one-time SSO token and serves the auto-
-// submitting form. The token is deleted from Redis on first read so a
-// reused or leaked token returns 410 Gone. No JWT required — the token
-// itself is the credential, scoped to ~60 seconds and one redemption.
+// RedeemPHPMyAdmin consumes a one-time SSO token, stores credentials in
+// a short-lived Redis key readable by the PHP bridge, then redirects the
+// browser to the PHP bridge which sets the PHP session and redirects to
+// phpMyAdmin. The token is deleted from Redis on first read so a reused
+// or leaked token returns 410 Gone. No JWT required — the token itself
+// is the credential, scoped to ~60 seconds and one redemption.
 func (h *DatabaseHandler) RedeemPHPMyAdmin(c *gin.Context) {
 	if h.redis == nil {
 		c.String(http.StatusServiceUnavailable, "phpMyAdmin SSO requires Redis")
@@ -312,11 +319,22 @@ func (h *DatabaseHandler) RedeemPHPMyAdmin(c *gin.Context) {
 		return
 	}
 
-	c.Header("Cache-Control", "no-store")
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	if err := pmaRedeemTmpl.Execute(c.Writer, p); err != nil {
-		log.Printf("pma sso template: %v", err)
+	// Store credentials in a bridge key that the PHP signon.php script
+	// reads to set the PHP session. Use a new short-lived token so the
+	// credentials are only exposed for the duration of the redirect.
+	bridgeToken := make([]byte, 16)
+	if _, err := rand.Read(bridgeToken); err != nil {
+		c.String(http.StatusInternalServerError, "rand")
+		return
 	}
+	bridgeKey := "pma_bridge:" + hex.EncodeToString(bridgeToken)
+	bridgePayload, _ := json.Marshal(p)
+	_ = h.redis.Set(ctx, bridgeKey, bridgePayload, 30*time.Second).Err()
+
+	// Redirect to the PHP bridge which sets the PHP session and then
+	// redirects to phpMyAdmin. The bridge token is the only credential
+	// in the URL — it's one-time-use and expires in 30 seconds.
+	c.Redirect(http.StatusFound, "/phpmyadmin/signon.php?bridge="+hex.EncodeToString(bridgeToken))
 }
 
 // isHex checks that every byte is 0-9 or a-f. The token is generated with

@@ -200,6 +200,68 @@ install_dependencies() {
     debconf-set-selections <<< "phpmyadmin phpmyadmin/reconfigure-webserver multiselect none"
     apt-get install -y -qq phpmyadmin || log_warn "phpMyAdmin install had issues, continuing..."
 
+    # Configure phpMyAdmin for SSO (signon auth_type). This eliminates
+    # the login form — credentials are passed via PHP session from our
+    # SSO bridge script, so users click "phpMyAdmin" and land directly
+    # in their database without seeing a login page.
+    PMA_CONF="/etc/phpmyadmin/conf.d/zenspanel-sso.php"
+    cat > "$PMA_CONF" <<'PHPEOF'
+<?php
+$cfg['Servers'][1]['auth_type'] = 'signon';
+$cfg['Servers'][1]['SignonSession'] = 'SignonSession';
+$cfg['Servers'][1]['SignonURL'] = '/phpmyadmin/signon.php';
+$cfg['Servers'][1]['LogoutURL'] = '/phpmyadmin/signon.php?logout=1';
+PHPEOF
+
+    # SSO bridge script: reads credentials from Redis (set by Go API),
+    # sets the PHP session vars phpMyAdmin expects, then redirects.
+    cat > /usr/share/phpmyadmin/signon.php <<'PHPEOF'
+<?php
+// ZensPanel phpMyAdmin SSO bridge.
+// The Go API stores credentials in Redis under pma_bridge:<token>
+// and redirects here with ?bridge=<token>. We read the credentials,
+// set the PHP session, and redirect to phpMyAdmin which auto-logs in.
+
+session_name('SignonSession');
+session_start();
+
+if (isset($_GET['logout'])) {
+    $_SESSION = [];
+    session_destroy();
+    header('Location: /');
+    exit;
+}
+
+// If a bridge token is present, fetch credentials from Redis.
+if (isset($_GET['bridge'])) {
+    $token = preg_replace('/[^a-f0-9]/', '', $_GET['bridge']);
+    if (strlen($token) === 32) {
+        $redis = new Redis();
+        if ($redis->connect('127.0.0.1', 6379)) {
+            $key = 'pma_bridge:' . $token;
+            $val = $redis->get($key);
+            if ($val !== false) {
+                $redis->del($key); // one-time use
+                $data = json_decode($val, true);
+                if (!empty($data['DBUser']) && !empty($data['Password'])) {
+                    $_SESSION['PMA_single_signon_user']     = $data['DBUser'];
+                    $_SESSION['PMA_single_signon_password'] = $data['Password'];
+                    $_SESSION['PMA_single_signon_host']     = '127.0.0.1';
+                    session_write_close();
+                    header('Location: /phpmyadmin/');
+                    exit;
+                }
+            }
+        }
+    }
+}
+
+// No valid credentials — redirect back to panel.
+header('Location: /');
+exit;
+PHPEOF
+    chmod 644 /usr/share/phpmyadmin/signon.php
+
     # Composer phar lives at a stable path; the agent's per-user
     # ~/bin/composer wrapper execs it via the user's pinned PHP. Without
     # this file, `composer` in the terminal returns "command not found".
