@@ -299,7 +299,19 @@ EOF
 install_clamav() {
     log_section "Installing ClamAV"
 
-    apt-get install -y -qq clamav clamav-daemon
+    # Refresh apt cache first — ClamAV packages may not be in the local
+    # cache if this is a fresh system or the cache is stale.
+    apt-get update -qq
+
+    apt-get install -y -qq clamav clamav-daemon || {
+        log_warn "ClamAV install failed — trying with universe repo..."
+        add-apt-repository -y universe 2>/dev/null || true
+        apt-get update -qq
+        apt-get install -y -qq clamav clamav-daemon || {
+            log_warn "ClamAV install failed, skipping. Install manually: apt-get install clamav clamav-daemon"
+            return 0
+        }
+    }
 
     # Update virus definitions before starting the daemon.
     log_info "Updating ClamAV virus definitions..."

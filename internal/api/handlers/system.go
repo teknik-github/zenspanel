@@ -284,7 +284,8 @@ func (h *SystemHandler) Maintenance(c *gin.Context) {
 
 	switch req.Action {
 	case "clamav_install":
-		// Install ClamAV if not present, then start the daemon.
+		// apt-get update first — ClamAV may not be in the local cache.
+		run("apt-get", "update", "-qq")
 		r := run("apt-get", "install", "-y", "clamav", "clamav-daemon")
 		if r.Error == "" {
 			run("systemctl", "enable", "clamav-daemon", "clamav-freshclam")
