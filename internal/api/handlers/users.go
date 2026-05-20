@@ -315,13 +315,18 @@ func (h *UserHandler) Update(c *gin.Context) {
 		user, uerr := h.users.GetByID(id)
 		if uerr == nil {
 			agentClient := agent.NewClient(h.agentSock)
-			// Re-seed ~/bin/php so the terminal shell tracks the new
-			// version. Best-effort — Update returning 200 with a stale
-			// symlink is better than 500 on a successful row update.
 			_ = agentClient.Call("user.setup_bin", map[string]interface{}{
 				"username":    user.Username,
 				"php_version": user.PHPVersion,
 			}, nil)
+		} else {
+			// GetByID failed after a successful DB write — surface a warning
+			// so the caller knows the shell symlink may be stale (B10).
+			c.JSON(http.StatusOK, gin.H{
+				"message": "updated",
+				"warning": "php_version updated in DB but shell symlink could not be refreshed: " + uerr.Error(),
+			})
+			return
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "updated"})

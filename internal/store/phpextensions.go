@@ -109,6 +109,39 @@ func (s *PHPExtensionStore) GetUserState(userID uint64, phpVersion string) ([]Us
 	return views, nil
 }
 
+// GetUsersWithExtEnabled returns userIDs + usernames of users who have
+// the given extension explicitly enabled (user override = true). Used by
+// AdminUpdate to propagate a global disable to running FPM pools (V44).
+func (s *PHPExtensionStore) GetUsersWithExtEnabled(extID uint64) ([]struct {
+	UserID   uint64
+	Username string
+}, error) {
+	rows, err := s.db.Query(`
+		SELECT u.id, u.username
+		FROM user_php_extensions upe
+		JOIN users u ON u.id = upe.user_id
+		WHERE upe.ext_id = ? AND upe.enabled = TRUE`, extID)
+	if err != nil {
+		return nil, fmt.Errorf("get users with ext enabled: %w", err)
+	}
+	defer rows.Close()
+	var result []struct {
+		UserID   uint64
+		Username string
+	}
+	for rows.Next() {
+		var r struct {
+			UserID   uint64
+			Username string
+		}
+		if err := rows.Scan(&r.UserID, &r.Username); err != nil {
+			continue
+		}
+		result = append(result, r)
+	}
+	return result, nil
+}
+
 // SetUserState upserts a per-user override. Returns an error if the
 // admin has disabled the extension and the user is trying to enable it
 // (V20). Callers should check this before calling the agent.

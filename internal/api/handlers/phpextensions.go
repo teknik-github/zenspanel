@@ -56,16 +56,18 @@ func (h *PHPExtensionHandler) AdminUpdate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	// Propagate the change to all users who had this extension enabled.
-	// Best-effort — the DB row is already updated; agent failures are
-	// non-fatal (admin can retry by toggling again).
+	// Propagate global disable to running FPM pools (V44). Best-effort —
+	// DB row is already updated; agent failures are non-fatal.
 	if !req.Enabled {
 		ac := agentclient.NewClient(h.agentSock)
-		// We don't enumerate all users here — the FPM pool will pick up
-		// the change on next reload. For immediate effect the admin can
-		// reload FPM manually. This keeps the handler fast.
-		_ = ac
-		_ = ext
+		users, _ := h.exts.GetUsersWithExtEnabled(id)
+		for _, u := range users {
+			_ = ac.Call("phpfpm.disable_extension", map[string]interface{}{
+				"username":    u.Username,
+				"php_version": ext.PHPVersion,
+				"ext_name":    ext.Name,
+			}, nil)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "updated"})
 }

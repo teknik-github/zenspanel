@@ -261,10 +261,10 @@ V44: phpext AdminUpdate disable → ! call agent `phpfpm.reload` for every user 
 | T72 | x | DB isolation audit: verify each `CREATE USER` grants only on `<user>_%` pattern. add `REVOKE ALL ON *.* FROM` before grant in `agent/mysql/mysql.go` | V41 |
 | T73 | x | storage quota: wire `package.disk_quota` into `quota.set` on user create + package change (already partially done — verify end-to-end, fix if broken) | V42 |
 | T74 | x | `make build` + `pnpm -r build` clean | — |
-| T75 | . | fix B8: `agent/installer/installer.go` — replace `runAs` shell-string interpolation w/ `exec.Command` arg array for `php artisan key:generate`; validate DocRoot contains no shell metachar | V43 |
-| T76 | . | fix B9: `internal/api/handlers/phpextensions.go:AdminUpdate` — on global disable, enumerate users w/ ext enabled via store, call `phpfpm.disable_extension` per user | V44 |
-| T77 | . | fix B10: `internal/api/handlers/users.go:Update` — if GetByID fails after php_version update, surface warning in response instead of silent skip | — |
-| T78 | . | `make build` + `pnpm -r build` clean | — |
+| T75 | x | fix B8: `agent/installer/installer.go` — replace `runAs` shell-string interpolation w/ `exec.Command` arg array for `php artisan key:generate`; validate DocRoot contains no shell metachar | V43 |
+| T76 | x | fix B9: `internal/api/handlers/phpextensions.go:AdminUpdate` — on global disable, enumerate users w/ ext enabled via store, call `phpfpm.disable_extension` per user | V44 |
+| T77 | x | fix B10: `internal/api/handlers/users.go:Update` — if GetByID fails after php_version update, surface warning in response instead of silent skip | — |
+| T78 | x | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 

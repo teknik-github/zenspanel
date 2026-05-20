@@ -259,9 +259,16 @@ func installLaravel(j *JobStatus, p RunParams) error {
 	defer os.RemoveAll(tmpDir)
 
 	j.log("Running: composer create-project laravel/laravel " + tmpDir)
+	// Use exec.Command arg array — no shell string interpolation (V43).
 	cmd := exec.Command("su", "-s", "/bin/sh", "-c",
-		fmt.Sprintf("composer create-project laravel/laravel %q --prefer-dist --no-interaction 2>&1", tmpDir),
-		p.Username)
+		"composer create-project laravel/laravel \"$1\" --prefer-dist --no-interaction 2>&1",
+		"--", tmpDir, p.Username)
+	// Note: su syntax: su -s /bin/sh -c '<script>' -- <arg0> <username>
+	// The shell receives $1=tmpDir; username is the su target, not a shell arg.
+	// Rewrite to pass tmpDir via env to avoid any interpolation risk.
+	cmd = exec.Command("su", "-s", "/bin/sh", p.Username, "-c",
+		"composer create-project laravel/laravel \"${LARAVEL_DEST}\" --prefer-dist --no-interaction 2>&1")
+	cmd.Env = append(os.Environ(), "LARAVEL_DEST="+tmpDir)
 	out, err := cmd.CombinedOutput()
 	j.log(string(out))
 	if err != nil {
@@ -292,8 +299,16 @@ func installLaravel(j *JobStatus, p RunParams) error {
 		_ = os.WriteFile(envFile, []byte(s), 0644)
 	}
 
-	// Generate app key as the panel user.
-	_ = runAs(j, p.Username, fmt.Sprintf("cd %q && php artisan key:generate --ansi 2>&1", p.DocRoot))
+	// Generate app key as the panel user — use env var to pass docroot
+	// so no shell metacharacters in p.DocRoot can escape (V43).
+	artisanCmd := exec.Command("su", "-s", "/bin/sh", p.Username, "-c",
+		"cd \"${APP_DIR}\" && php artisan key:generate --ansi 2>&1")
+	artisanCmd.Env = append(os.Environ(), "APP_DIR="+p.DocRoot)
+	if out, err := artisanCmd.CombinedOutput(); err != nil {
+		j.log("WARN: artisan key:generate failed: " + string(out))
+	} else {
+		j.log(string(out))
+	}
 
 	j.setPhase("setting_permissions")
 	if err := chownR(p.DocRoot, p.Username); err != nil {
