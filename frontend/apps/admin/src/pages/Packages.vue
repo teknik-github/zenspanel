@@ -13,10 +13,11 @@ const confirmDelete = ref<number | null>(null)
 const defaultForm = () => ({
   name: '',
   cpu_quota: 10000,
-  memory_limit: 536870912,
-  disk_quota: 10737418240,
+  memory_limit_mb: 512,
+  disk_quota_mb: 10240,
   max_domains: 5,
   max_databases: 5,
+  max_cron_jobs: 10,
   php_versions_allowed: '["8.3","8.2","8.1"]',
   terminal_enabled: false,
   backup_enabled: false,
@@ -39,7 +40,11 @@ function openCreate() {
 
 function openEdit(pkg: any) {
   editingPackage.value = pkg
-  form.value = { ...pkg }
+  form.value = {
+    ...pkg,
+    memory_limit_mb: pkg.memory_limit_mb ?? Math.round(pkg.memory_limit / (1024 * 1024)),
+    disk_quota_mb: pkg.disk_quota_mb ?? Math.round(pkg.disk_quota / (1024 * 1024)),
+  }
   showModal.value = true
 }
 
@@ -133,8 +138,8 @@ function formatBytes(bytes: number) {
         </div>
         <div class="text-xs text-gray-500 space-y-1">
           <div class="flex justify-between"><span>CPU</span><span class="font-medium text-gray-700">{{ pkg.cpu_quota / 1000 }}%</span></div>
-          <div class="flex justify-between"><span>RAM</span><span class="font-medium text-gray-700">{{ formatBytes(pkg.memory_limit) }}</span></div>
-          <div class="flex justify-between"><span>Disk</span><span class="font-medium text-gray-700">{{ formatBytes(pkg.disk_quota) }}</span></div>
+          <div class="flex justify-between"><span>RAM</span><span class="font-medium text-gray-700">{{ pkg.memory_limit_mb ?? Math.round(pkg.memory_limit / 1048576) }} MB</span></div>
+          <div class="flex justify-between"><span>Disk</span><span class="font-medium text-gray-700">{{ pkg.disk_quota_mb ?? Math.round(pkg.disk_quota / 1048576) }} MB</span></div>
           <div class="flex justify-between"><span>Domains</span><span class="font-medium text-gray-700">{{ pkg.max_domains }}</span></div>
           <div class="flex justify-between"><span>Databases</span><span class="font-medium text-gray-700">{{ pkg.max_databases }}</span></div>
         </div>
@@ -162,14 +167,20 @@ function formatBytes(bytes: number) {
                 class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Memory Limit (bytes)</label>
-              <input v-model.number="form.memory_limit" type="number"
-                class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <label class="block text-xs font-medium text-gray-600 mb-1">Memory Limit (MB)</label>
+              <div class="relative">
+                <input v-model.number="form.memory_limit_mb" type="number" min="1"
+                  class="w-full border border-gray-200 rounded-md px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <span class="absolute right-3 top-2 text-xs text-gray-400">MB</span>
+              </div>
             </div>
             <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Disk Quota (bytes)</label>
-              <input v-model.number="form.disk_quota" type="number"
-                class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <label class="block text-xs font-medium text-gray-600 mb-1">Disk Quota (MB)</label>
+              <div class="relative">
+                <input v-model.number="form.disk_quota_mb" type="number" min="1"
+                  class="w-full border border-gray-200 rounded-md px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <span class="absolute right-3 top-2 text-xs text-gray-400">MB</span>
+              </div>
             </div>
             <div>
               <label class="block text-xs font-medium text-gray-600 mb-1">Max Domains</label>

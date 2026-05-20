@@ -60,6 +60,7 @@ const navGroups = [
     items: [
       { path: '/audit-logs', label: 'Audit Logs', icon: 'file-text' },
       { path: '/settings', label: 'Settings', icon: 'settings' },
+      { path: '/settings', label: 'Updates', icon: 'refresh-cw' },
     ],
   },
 ]
@@ -191,6 +192,10 @@ const pageTitle = computed(() => {
             </svg>
             <svg v-else-if="item.icon === 'settings'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+            </svg>
+            <svg v-else-if="item.icon === 'refresh-cw'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
             </svg>
             <span v-if="!collapsed">{{ item.label }}</span>
           </router-link>

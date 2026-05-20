@@ -18,13 +18,68 @@ func NewPackageHandler(packages *store.PackageStore) *PackageHandler {
 	return &PackageHandler{packages: packages}
 }
 
+// packageRequest accepts disk_quota and memory_limit in MB (V49).
+// The UI sends MB; we convert to bytes before storing.
+type packageRequest struct {
+	Name               string `json:"name"`
+	CPUQuota           int    `json:"cpu_quota"`
+	DiskQuotaMB        int64  `json:"disk_quota_mb"`
+	MemoryLimitMB      int64  `json:"memory_limit_mb"`
+	MaxDomains         int    `json:"max_domains"`
+	MaxDatabases       int    `json:"max_databases"`
+	MaxCronJobs        int    `json:"max_cron_jobs"`
+	PHPVersionsAllowed string `json:"php_versions_allowed"`
+	TerminalEnabled    bool   `json:"terminal_enabled"`
+	BackupEnabled      bool   `json:"backup_enabled"`
+}
+
+func (r packageRequest) toPackage() store.Package {
+	return store.Package{
+		Name:               r.Name,
+		CPUQuota:           r.CPUQuota,
+		DiskQuota:          r.DiskQuotaMB * 1024 * 1024,
+		MemoryLimit:        r.MemoryLimitMB * 1024 * 1024,
+		MaxDomains:         r.MaxDomains,
+		MaxDatabases:       r.MaxDatabases,
+		MaxCronJobs:        r.MaxCronJobs,
+		PHPVersionsAllowed: r.PHPVersionsAllowed,
+		TerminalEnabled:    r.TerminalEnabled,
+		BackupEnabled:      r.BackupEnabled,
+	}
+}
+
+// packageResponse converts a Package to a JSON-friendly map with MB units.
+func packageResponse(p store.Package) map[string]interface{} {
+	return map[string]interface{}{
+		"id":                   p.ID,
+		"name":                 p.Name,
+		"cpu_quota":            p.CPUQuota,
+		"disk_quota":           p.DiskQuota,
+		"disk_quota_mb":        p.DiskQuota / (1024 * 1024),
+		"memory_limit":         p.MemoryLimit,
+		"memory_limit_mb":      p.MemoryLimit / (1024 * 1024),
+		"max_domains":          p.MaxDomains,
+		"max_databases":        p.MaxDatabases,
+		"max_cron_jobs":        p.MaxCronJobs,
+		"php_versions_allowed": p.PHPVersionsAllowed,
+		"terminal_enabled":     p.TerminalEnabled,
+		"backup_enabled":       p.BackupEnabled,
+		"created_at":           p.CreatedAt,
+		"updated_at":           p.UpdatedAt,
+	}
+}
+
 func (h *PackageHandler) List(c *gin.Context) {
 	pkgs, err := h.packages.List()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": pkgs})
+	resp := make([]map[string]interface{}, len(pkgs))
+	for i, p := range pkgs {
+		resp[i] = packageResponse(p)
+	}
+	c.JSON(http.StatusOK, gin.H{"data": resp})
 }
 
 func (h *PackageHandler) Get(c *gin.Context) {
@@ -34,29 +89,31 @@ func (h *PackageHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "package not found"})
 		return
 	}
-	c.JSON(http.StatusOK, pkg)
+	c.JSON(http.StatusOK, packageResponse(*pkg))
 }
 
 func (h *PackageHandler) Create(c *gin.Context) {
-	var pkg store.Package
-	if err := c.ShouldBindJSON(&pkg); err != nil {
+	var req packageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	pkg := req.toPackage()
 	if err := h.packages.Create(&pkg); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, pkg)
+	c.JSON(http.StatusCreated, packageResponse(pkg))
 }
 
 func (h *PackageHandler) Update(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	var pkg store.Package
-	if err := c.ShouldBindJSON(&pkg); err != nil {
+	var req packageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	pkg := req.toPackage()
 	if err := h.packages.Update(id, &pkg); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

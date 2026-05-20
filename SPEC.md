@@ -300,7 +300,7 @@ V49: package disk_quota + memory_limit ! stored + displayed in MB in UI. convert
 | T81 | . | register `antivirus.watch_start` + `antivirus.watch_stop` RPCs @ `cmd/agent/main.go` | V46 |
 | T82 | . | `internal/api/handlers/antivirus.go`: add `Alerts` (list) + WS push on new alert | I.api,V46 |
 | T83 | . | user panel: Antivirus page — add realtime alerts section, WS listener for `antivirus_alert` events | I.frontend,V46 |
-| T84 | . | admin panel: sidebar "Updates" menu item → existing Settings page update card (just add nav shortcut) | I.frontend |
+| T84 | x | admin panel: sidebar "Updates" menu item → existing Settings page update card (just add nav shortcut) | I.frontend |
 | T85 | . | admin panel: Terminal page — `POST /admin/terminal/token` + reuse WS terminal (V48) | I.api,V48 |
 | T86 | . | migration 000018: `backup_targets` table (id, name, type, bucket, prefix, access_key, secret_key_enc, region, endpoint, enabled) | I.db |
 | T87 | . | `internal/store/backuptargets.go`: BackupTarget model + store (List, Create, Update, Delete, GetByID) | I.db,V47 |
@@ -310,9 +310,9 @@ V49: package disk_quota + memory_limit ! stored + displayed in MB in UI. convert
 | T91 | . | wire backup-targets routes + construct handler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
 | T92 | . | admin panel: Backup Targets page — list targets, add/edit modal (S3 creds), test connection button | I.frontend,V47 |
 | T93 | . | extend existing backup flow: after local backup completes, if target configured → call `backup.upload_s3` | I.api |
-| T94 | . | `internal/api/handlers/packages.go`: accept `disk_quota_mb` + `memory_limit_mb` in Create/Update, convert MB→bytes before store (V49) | V49 |
-| T95 | . | admin panel: Packages page — change disk_quota + memory_limit inputs to MB with unit label | I.frontend,V49 |
-| T96 | . | `make build` + `pnpm -r build` clean | — |
+| T94 | x | `internal/api/handlers/packages.go`: accept `disk_quota_mb` + `memory_limit_mb` in Create/Update, convert MB→bytes before store (V49) | V49 |
+| T95 | x | admin panel: Packages page — change disk_quota + memory_limit inputs to MB with unit label | I.frontend,V49 |
+| T96 | x | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 
