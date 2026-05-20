@@ -94,6 +94,19 @@ CREATE TABLE user_php_extensions (
 - `frontend/apps/admin/src/pages/PhpExtensions.vue`: table of all exts grouped by php version, toggle per row
 - `frontend/apps/user/src/pages/PhpSettings.vue`: "Extensions" section — toggle per ext (admin-allowed only)
 
+### firewall / IP security
+
+- `GET  /api/v1/admin/firewall/blocked`              admin JWT → 200 `{data: [{ip, reason, blocked_at, source}]}`
+- `POST /api/v1/admin/firewall/block`                admin JWT body `{ip, reason?}` → 200
+- `POST /api/v1/admin/firewall/unblock`              admin JWT body `{ip}` → 200
+- `GET  /api/v1/admin/firewall/fail2ban/jails`       admin JWT → 200 `{data: [{name, enabled, ban_count, currently_banned}]}`
+- `PUT  /api/v1/admin/firewall/fail2ban/jails/:name` admin JWT body `{enabled: bool}` → 200
+- agent rpc `firewall.list_blocked`                  → `{ips: [{ip, reason, source}]}`
+- agent rpc `firewall.block   {ip, reason}`          → nil  (ipset add + iptables rule)
+- agent rpc `firewall.unblock {ip}`                  → nil  (ipset del)
+- agent rpc `fail2ban.list_jails`                    → `{jails: [{name, enabled, ban_count, currently_banned}]}`
+- agent rpc `fail2ban.set_jail {name, enabled}`      → nil  (edit jail.d config + fail2ban-client reload)
+
 ### cron jobs
 
 - `GET /api/v1/cron-jobs` user JWT → 200 `{data: [{id, expression, command, enabled, last_run_at}]}`
@@ -158,6 +171,10 @@ V30: log viewer ! serve files outside `/var/log/nginx/` (nginx) or `/var/log/php
 V31: log viewer ! tail only (last N lines). ⊥ stream full file. max 500 lines per request
 V32: installer ! overwrite existing files in docroot w/o explicit `overwrite=true`. ⊥ silent data loss
 V33: installer runs as Linux user (agent drops privs via `su -s /bin/sh -c ... <user>`). ⊥ root-owned files in home
+V34: IP block/unblock ! exec via `iptables`/`ipset` arg array. ⊥ shell string interpolation. validate IP/CIDR before any exec
+V35: fail2ban jail config ! written outside `/etc/fail2ban/jail.d/`. ⊥ path traversal via jail name
+V36: blocked IP list read from `iptables -L` + `ipset list` — agent is authoritative. ⊥ panel DB as source of truth
+V37: unblock ! require confirmation token (admin-only route). ⊥ accidental mass-unblock via stale UI state
 
 ## §T TASKS
 
@@ -219,6 +236,14 @@ V33: installer runs as Linux user (agent drops privs via `su -s /bin/sh -c ... <
 | T54 | x | wire installer routes + construct InstallerHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
 | T55 | x | user panel: Website Installer page — app cards (WP, Laravel, HTML), domain select, DB fields, install progress log | I.frontend,V32 |
 | T56 | x | `make build` + `pnpm -r build` clean | — |
+| T57 | x | `scripts/install.sh`: install fail2ban + ipset; create zenspanel ipset chain; configure fail2ban jails (nginx-http-auth, nginx-limit-req, sshd) | V35 |
+| T58 | x | `agent/firewall/firewall.go`: `ListBlocked()`, `Block(ip, reason)`, `Unblock(ip)` — ipset + iptables, validate IP/CIDR (V34,V36) | V34,V36 |
+| T59 | x | `agent/firewall/fail2ban.go`: `ListJails()`, `SetJail(name, enabled)` — parse `fail2ban-client status`, write jail.d snippet (V35) | V35 |
+| T60 | x | register `firewall.*` + `fail2ban.*` RPCs @ `cmd/agent/main.go` | V34 |
+| T61 | x | `internal/api/handlers/firewall.go`: ListBlocked, Block, Unblock, ListJails, SetJail — admin-only, call agent | I.api,V37 |
+| T62 | x | wire 5 firewall routes + construct FirewallHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T63 | x | admin panel: Firewall page — blocked IPs table (block/unblock), fail2ban jails table (enable/disable toggle) | I.frontend,V37 |
+| T64 | x | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 

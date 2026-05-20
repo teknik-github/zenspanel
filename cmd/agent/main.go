@@ -13,6 +13,7 @@ import (
 	agentcron "github.com/zenspanel/zenspanel/agent/cron"
 	agentfilebrowser "github.com/zenspanel/zenspanel/agent/filebrowser"
 	agentfilemanager "github.com/zenspanel/zenspanel/agent/filemanager"
+	agentfirewall "github.com/zenspanel/zenspanel/agent/firewall"
 	agentinstaller "github.com/zenspanel/zenspanel/agent/installer"
 	agentlogs "github.com/zenspanel/zenspanel/agent/logs"
 	agentmysql "github.com/zenspanel/zenspanel/agent/mysql"
@@ -435,6 +436,57 @@ func main() {
 			return nil, err
 		}
 		return status, nil
+	})
+
+	// firewall — ipset-based IP blocking + fail2ban jail management.
+	// All IP inputs validated before exec (V34). Jail names validated
+	// before writing to jail.d (V35).
+	srv.Register("firewall.list_blocked", func(params json.RawMessage) (interface{}, error) {
+		ips, err := agentfirewall.ListBlocked()
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"ips": ips}, nil
+	})
+
+	srv.Register("firewall.block", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			IP     string `json:"ip"`
+			Reason string `json:"reason"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfirewall.Block(p.IP, p.Reason)
+	})
+
+	srv.Register("firewall.unblock", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			IP string `json:"ip"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfirewall.Unblock(p.IP)
+	})
+
+	srv.Register("fail2ban.list_jails", func(params json.RawMessage) (interface{}, error) {
+		jails, err := agentfirewall.ListJails()
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"jails": jails}, nil
+	})
+
+	srv.Register("fail2ban.set_jail", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Name    string `json:"name"`
+			Enabled bool   `json:"enabled"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentfirewall.SetJail(p.Name, p.Enabled)
 	})
 
 	// quota — filesystem-level disk quota enforcement. Hard limit comes

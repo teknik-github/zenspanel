@@ -50,6 +50,7 @@ const navGroups = [
       { path: '/php-versions', label: 'PHP Versions', icon: 'code' },
       { path: '/php-extensions', label: 'PHP Extensions', icon: 'puzzle' },
       { path: '/ssl-manager', label: 'SSL Manager', icon: 'lock' },
+      { path: '/firewall', label: 'Firewall', icon: 'shield' },
       { path: '/backups', label: 'Backups', icon: 'upload-cloud' },
       { path: '/api-keys', label: 'API Keys', icon: 'key' },
     ],
@@ -175,6 +176,9 @@ const pageTitle = computed(() => {
             </svg>
             <svg v-else-if="item.icon === 'lock'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <svg v-else-if="item.icon === 'shield'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
             <svg v-else-if="item.icon === 'upload-cloud'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
