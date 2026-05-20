@@ -213,12 +213,12 @@ V33: installer runs as Linux user (agent drops privs via `su -s /bin/sh -c ... <
 | T48 | x | `internal/api/handlers/logs.go`: `DomainLogs` handler — resolve nginx + fpm log paths from domain row, call agent `logs.tail` | I.api,V30,V31 |
 | T49 | x | wire `GET /api/v1/domains/:id/logs` route | I.api |
 | T50 | x | user panel: Logs viewer — per-domain dropdown (nginx/fpm), line count selector, auto-refresh toggle | I.frontend |
-| T51 | . | `agent/installer/installer.go`: app catalog (WordPress, Laravel skeleton, plain HTML); `Run(appID, username, docroot, db*)` — download, extract, configure, chown (V32,V33) | V32,V33 |
-| T52 | . | register `installer.run` + `installer.status` RPCs @ `cmd/agent/main.go` | V33 |
-| T53 | . | `internal/api/handlers/installer.go`: ListApps, Install (async → job_id), Status — ownership check, domain lookup | I.api,V32 |
-| T54 | . | wire installer routes + construct InstallerHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
-| T55 | . | user panel: Website Installer page — app cards (WP, Laravel, HTML), domain select, DB fields, install progress log | I.frontend,V32 |
-| T56 | . | `make build` + `pnpm -r build` clean | — |
+| T51 | x | `agent/installer/installer.go`: app catalog (WordPress, Laravel skeleton, plain HTML); `Run(appID, username, docroot, db*)` — download, extract, configure, chown (V32,V33) | V32,V33 |
+| T52 | x | register `installer.run` + `installer.status` RPCs @ `cmd/agent/main.go` | V33 |
+| T53 | x | `internal/api/handlers/installer.go`: ListApps, Install (async → job_id), Status — ownership check, domain lookup | I.api,V32 |
+| T54 | x | wire installer routes + construct InstallerHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T55 | x | user panel: Website Installer page — app cards (WP, Laravel, HTML), domain select, DB fields, install progress log | I.frontend,V32 |
+| T56 | x | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 

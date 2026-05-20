@@ -22,6 +22,7 @@ type Router struct {
 	phpExtensions *handlers.PHPExtensionHandler
 	cronJobs      *handlers.CronJobHandler
 	logs          *handlers.LogHandler
+	installer     *handlers.InstallerHandler
 	apiKeys       *handlers.APIKeyHandler
 	auditLogs     *handlers.AuditLogHandler
 	ssl           *handlers.SSLHandler
@@ -46,6 +47,7 @@ func NewRouter(
 	phpExtensionsH *handlers.PHPExtensionHandler,
 	cronJobsH *handlers.CronJobHandler,
 	logsH *handlers.LogHandler,
+	installerH *handlers.InstallerHandler,
 	apiKeysH *handlers.APIKeyHandler,
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
@@ -69,6 +71,7 @@ func NewRouter(
 		phpExtensions: phpExtensionsH,
 		cronJobs:      cronJobsH,
 		logs:          logsH,
+		installer:     installerH,
 		apiKeys:       apiKeysH,
 		auditLogs:     auditLogsH,
 		ssl:           sslH,
@@ -205,6 +208,11 @@ func (r *Router) Setup() *gin.Engine {
 		api.POST("/cron-jobs", r.cronJobs.Create)
 		api.PUT("/cron-jobs/:id", r.cronJobs.Update)
 		api.DELETE("/cron-jobs/:id", r.cronJobs.Delete)
+
+		// website installer
+		api.GET("/installer/apps", r.installer.ListApps)
+		api.POST("/installer/install", r.installer.Install)
+		api.GET("/installer/status/:job_id", r.installer.Status)
 
 		// api keys
 		api.GET("/api-keys", auth.RequireRole("admin"), r.apiKeys.List)
