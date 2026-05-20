@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -166,6 +167,7 @@ func (h *TerminalHandler) Connect(c *gin.Context) {
 	if err := agent.NewClient(h.agentSock).Call("terminal.stream", map[string]interface{}{
 		"username": entry.username,
 	}, &spawnRes); err != nil {
+		log.Printf("terminal.stream failed for user %s: %v", entry.username, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "spawn pty: " + err.Error()})
 		return
 	}
