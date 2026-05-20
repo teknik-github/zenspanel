@@ -25,13 +25,16 @@ func SpawnSession(username, homeBase string) (*Session, error) {
 		return nil, err
 	}
 	homeDir := homeBase + "/" + username
-	cmd := exec.Command("su", "-s", "/bin/rbash", "-", username)
+	cmd := exec.Command("su", "-s", "/bin/bash", "-", username)
 	cmd.Env = []string{
 		"HOME=" + homeDir,
 		"USER=" + username,
 		"LOGNAME=" + username,
-		"PATH=" + homeDir + "/bin",
+		// ~/bin first so per-user php/composer symlinks take precedence,
+		// then standard system paths so basic commands (ls, cat, etc.) work.
+		"PATH=" + homeDir + "/bin:/usr/local/bin:/usr/bin:/bin",
 		"TERM=xterm-256color",
+		"SHELL=/bin/bash",
 	}
 	cmd.Dir = homeDir
 
