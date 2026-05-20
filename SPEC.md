@@ -301,7 +301,7 @@ V49: package disk_quota + memory_limit ! stored + displayed in MB in UI. convert
 | T82 | . | `internal/api/handlers/antivirus.go`: add `Alerts` (list) + WS push on new alert | I.api,V46 |
 | T83 | . | user panel: Antivirus page — add realtime alerts section, WS listener for `antivirus_alert` events | I.frontend,V46 |
 | T84 | x | admin panel: sidebar "Updates" menu item → existing Settings page update card (just add nav shortcut) | I.frontend |
-| T85 | . | admin panel: Terminal page — `POST /admin/terminal/token` + reuse WS terminal (V48) | I.api,V48 |
+| T85 | x | admin panel: Terminal page — `POST /admin/terminal/token` + reuse WS terminal (V48) | I.api,V48 |
 | T86 | . | migration 000018: `backup_targets` table (id, name, type, bucket, prefix, access_key, secret_key_enc, region, endpoint, enabled) | I.db |
 | T87 | . | `internal/store/backuptargets.go`: BackupTarget model + store (List, Create, Update, Delete, GetByID) | I.db,V47 |
 | T88 | . | `agent/backup/s3.go`: `UploadS3(filePath string, target BackupTarget) error` — aws-sdk-go-v2 or rclone subprocess (V47) | V47 |

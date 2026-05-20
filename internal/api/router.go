@@ -270,6 +270,7 @@ func (r *Router) Setup() *gin.Engine {
 		// terminal — token endpoint is JWT-gated; the WS endpoint that
 		// redeems the token is registered above outside this group.
 		api.POST("/terminal/token", r.terminal.GetToken)
+		api.POST("/admin/terminal/token", auth.RequireRole("admin"), r.terminal.AdminGetToken)
 	}
 
 	// External API — authenticated via X-API-Key header. The endpoints

@@ -111,6 +111,43 @@ func (h *TerminalHandler) GetToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
+// AdminGetToken mints a terminal token for an admin session. The admin
+// can specify a target username to shell into that user's account, or
+// leave it empty to get a shell as the zenspanel system user (V48 —
+// never spawns a root shell; zenspanel user has no sudo).
+func (h *TerminalHandler) AdminGetToken(c *gin.Context) {
+	var req struct {
+		Username string `json:"username"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
+	// Default to the zenspanel system user if no target specified.
+	targetUsername := req.Username
+	if targetUsername == "" {
+		targetUsername = "zenspanel"
+	}
+
+	// If a specific user is requested, verify they exist.
+	if req.Username != "" {
+		if _, err := h.users.GetByUsername(req.Username); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+	}
+
+	tb := make([]byte, 16)
+	if _, err := rand.Read(tb); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "rand: " + err.Error()})
+		return
+	}
+	token := hex.EncodeToString(tb)
+	tokenStore.Store(token, tokenEntry{
+		username:  targetUsername,
+		expiresAt: time.Now().Add(60 * time.Second),
+	})
+	c.JSON(http.StatusOK, gin.H{"token": token})
+}
+
 // checkTokenRate is a per-user 5-second sliding-window check. Returns
 // true if the caller may mint a token now and updates the timestamp;
 // false if a previous mint is still inside the cooldown.
