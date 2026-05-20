@@ -256,3 +256,70 @@ func serviceActive(name string) string {
 	}
 	return status
 }
+
+// Maintenance runs a one-shot admin action on the server. Actions are
+// whitelisted — no arbitrary command execution. Admin-only route.
+func (h *SystemHandler) Maintenance(c *gin.Context) {
+	var req struct {
+		Action string `json:"action" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	type result struct {
+		Output string `json:"output"`
+		Error  string `json:"error,omitempty"`
+	}
+
+	run := func(name string, args ...string) result {
+		out, err := exec.Command(name, args...).CombinedOutput()
+		r := result{Output: strings.TrimSpace(string(out))}
+		if err != nil {
+			r.Error = err.Error()
+		}
+		return r
+	}
+
+	switch req.Action {
+	case "clamav_install":
+		// Install ClamAV if not present, then start the daemon.
+		r := run("apt-get", "install", "-y", "clamav", "clamav-daemon")
+		if r.Error == "" {
+			run("systemctl", "enable", "clamav-daemon", "clamav-freshclam")
+			run("systemctl", "start", "clamav-daemon", "clamav-freshclam")
+		}
+		c.JSON(http.StatusOK, r)
+
+	case "clamav_update":
+		// Update virus definitions via freshclam.
+		run("systemctl", "stop", "clamav-freshclam")
+		r := run("freshclam")
+		run("systemctl", "start", "clamav-freshclam")
+		c.JSON(http.StatusOK, r)
+
+	case "clamav_restart":
+		r := run("systemctl", "restart", "clamav-daemon")
+		c.JSON(http.StatusOK, r)
+
+	case "fail2ban_restart":
+		r := run("systemctl", "restart", "fail2ban")
+		c.JSON(http.StatusOK, r)
+
+	case "nginx_reload":
+		r := run("nginx", "-s", "reload")
+		c.JSON(http.StatusOK, r)
+
+	case "service_status":
+		services := []string{"clamav-daemon", "clamav-freshclam", "fail2ban", "nginx", "mysql", "redis-server"}
+		statuses := map[string]string{}
+		for _, svc := range services {
+			statuses[svc] = serviceActive(svc)
+		}
+		c.JSON(http.StatusOK, gin.H{"services": statuses})
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action: " + req.Action})
+	}
+}

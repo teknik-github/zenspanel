@@ -245,6 +245,7 @@ func (r *Router) Setup() *gin.Engine {
 		api.GET("/system/update/check", auth.RequireRole("admin"), r.system.CheckUpdate)
 		api.POST("/system/update/run", auth.RequireRole("admin"), r.system.RunUpdate)
 		api.GET("/system/update/status", auth.RequireRole("admin"), r.system.UpdateStatus)
+		api.POST("/system/maintenance", auth.RequireRole("admin"), r.system.Maintenance)
 
 		// backups (per-user)
 		api.GET("/backups", r.backups.List)
