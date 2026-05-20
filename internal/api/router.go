@@ -23,6 +23,7 @@ type Router struct {
 	cronJobs      *handlers.CronJobHandler
 	logs          *handlers.LogHandler
 	installer     *handlers.InstallerHandler
+	firewall      *handlers.FirewallHandler
 	apiKeys       *handlers.APIKeyHandler
 	auditLogs     *handlers.AuditLogHandler
 	ssl           *handlers.SSLHandler
@@ -48,6 +49,7 @@ func NewRouter(
 	cronJobsH *handlers.CronJobHandler,
 	logsH *handlers.LogHandler,
 	installerH *handlers.InstallerHandler,
+	firewallH *handlers.FirewallHandler,
 	apiKeysH *handlers.APIKeyHandler,
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
@@ -72,6 +74,7 @@ func NewRouter(
 		cronJobs:      cronJobsH,
 		logs:          logsH,
 		installer:     installerH,
+		firewall:      firewallH,
 		apiKeys:       apiKeysH,
 		auditLogs:     auditLogsH,
 		ssl:           sslH,
@@ -213,6 +216,13 @@ func (r *Router) Setup() *gin.Engine {
 		api.GET("/installer/apps", r.installer.ListApps)
 		api.POST("/installer/install", r.installer.Install)
 		api.GET("/installer/status/:job_id", r.installer.Status)
+
+		// firewall — all routes admin-only (V37)
+		api.GET("/admin/firewall/blocked", auth.RequireRole("admin"), r.firewall.ListBlocked)
+		api.POST("/admin/firewall/block", auth.RequireRole("admin"), r.firewall.Block)
+		api.POST("/admin/firewall/unblock", auth.RequireRole("admin"), r.firewall.Unblock)
+		api.GET("/admin/firewall/fail2ban/jails", auth.RequireRole("admin"), r.firewall.ListJails)
+		api.PUT("/admin/firewall/fail2ban/jails/:name", auth.RequireRole("admin"), r.firewall.SetJail)
 
 		// api keys
 		api.GET("/api-keys", auth.RequireRole("admin"), r.apiKeys.List)

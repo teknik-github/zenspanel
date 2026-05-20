@@ -215,8 +215,83 @@ install_dependencies() {
 }
 
 # =============================================================================
-# STEP 4: Install Go
+# STEP 3b: Install fail2ban + ipset (firewall hardening)
 # =============================================================================
+install_firewall() {
+    log_section "Installing Firewall (fail2ban + ipset)"
+
+    apt-get install -y -qq fail2ban ipset iptables-persistent
+
+    # Create a persistent ipset for panel-managed blocks. The set survives
+    # reboots via iptables-persistent + ipset save/restore.
+    if ! ipset list zenspanel-blocked &>/dev/null; then
+        ipset create zenspanel-blocked hash:ip timeout 0 comment
+        log_info "Created ipset zenspanel-blocked"
+    fi
+
+    # Wire the ipset into iptables INPUT chain if not already present.
+    if ! iptables -C INPUT -m set --match-set zenspanel-blocked src -j DROP 2>/dev/null; then
+        iptables -I INPUT 1 -m set --match-set zenspanel-blocked src -j DROP
+        log_info "Added iptables rule for zenspanel-blocked"
+    fi
+
+    # Persist iptables rules across reboots.
+    netfilter-persistent save 2>/dev/null || iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+
+    # Save ipset so it's restored on boot.
+    mkdir -p /etc/ipset
+    ipset save > /etc/ipset/zenspanel.conf
+
+    # Restore ipset on boot via a systemd service.
+    cat > /etc/systemd/system/zenspanel-ipset.service <<'EOF'
+[Unit]
+Description=ZensPanel ipset restore
+Before=network.target iptables.service
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/ipset restore -f /etc/ipset/zenspanel.conf
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl enable zenspanel-ipset --quiet
+
+    # fail2ban jails for ZensPanel. Written to jail.d so they survive
+    # fail2ban package upgrades (V35 — never write outside jail.d).
+    cat > /etc/fail2ban/jail.d/zenspanel.conf <<'EOF'
+[DEFAULT]
+bantime  = 3600
+findtime = 600
+maxretry = 10
+
+[sshd]
+enabled  = true
+port     = ssh
+logpath  = %(sshd_log)s
+backend  = %(sshd_backend)s
+maxretry = 5
+
+[nginx-http-auth]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/error.log
+maxretry = 10
+
+[nginx-limit-req]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/error.log
+maxretry = 20
+EOF
+
+    systemctl enable fail2ban --quiet
+    systemctl restart fail2ban || log_warn "fail2ban restart failed, continuing..."
+
+    log_info "Firewall (fail2ban + ipset) installed ✓"
+}
 install_go() {
     log_section "Installing Go ${GO_VERSION}"
 
@@ -1114,6 +1189,7 @@ BANNER
     preflight_checks
     collect_config
     install_dependencies
+    install_firewall
     install_go
     install_node
     build_zenspanel
