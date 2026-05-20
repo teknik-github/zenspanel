@@ -35,19 +35,28 @@ var (
 	upgrader   = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		// Same-origin check. The previous `return true` allowed any
-		// page on any origin to upgrade with the victim's cookie-
-		// auth'd token, leading to cross-site WebSocket hijack
-		// (CSWSH). We now compare the Origin header to r.Host. Empty
-		// Origin (curl, native WS clients) is allowed because they
-		// can't be tricked by a malicious page.
+		// Same-origin check (V14). Compare Origin to the canonical host.
+		// When behind nginx, r.Host is the upstream address (127.0.0.1:8080)
+		// but the browser sends Origin with the public host. We check both
+		// r.Host and X-Forwarded-Host so the check works whether the API is
+		// accessed directly or through a reverse proxy.
 		CheckOrigin: func(r *http.Request) bool {
 			origin := r.Header.Get("Origin")
 			if origin == "" {
-				return true
+				return true // non-browser client (curl, native WS)
 			}
-			return origin == "http://"+r.Host || origin == "https://"+r.Host ||
-				strings.HasSuffix(origin, "://"+r.Host)
+			// Collect candidate hosts: direct + forwarded.
+			hosts := []string{r.Host}
+			if fwd := r.Header.Get("X-Forwarded-Host"); fwd != "" {
+				hosts = append(hosts, fwd)
+			}
+			for _, h := range hosts {
+				if origin == "http://"+h || origin == "https://"+h ||
+					strings.HasSuffix(origin, "://"+h) {
+					return true
+				}
+			}
+			return false
 		},
 	}
 )
