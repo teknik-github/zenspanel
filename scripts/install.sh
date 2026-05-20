@@ -292,6 +292,28 @@ EOF
 
     log_info "Firewall (fail2ban + ipset) installed ✓"
 }
+
+# =============================================================================
+# STEP 3c: Install ClamAV antivirus
+# =============================================================================
+install_clamav() {
+    log_section "Installing ClamAV"
+
+    apt-get install -y -qq clamav clamav-daemon
+
+    # Update virus definitions before starting the daemon.
+    log_info "Updating ClamAV virus definitions..."
+    systemctl stop clamav-freshclam 2>/dev/null || true
+    freshclam --quiet || log_warn "freshclam update failed, continuing..."
+    systemctl enable clamav-freshclam --quiet
+    systemctl start clamav-freshclam || log_warn "clamav-freshclam start failed"
+
+    systemctl enable clamav-daemon --quiet
+    systemctl start clamav-daemon || log_warn "clamav-daemon start failed (will retry on next boot)"
+
+    log_info "ClamAV installed ✓"
+}
+
 install_go() {
     log_section "Installing Go ${GO_VERSION}"
 
@@ -1191,6 +1213,7 @@ BANNER
     collect_config
     install_dependencies
     install_firewall
+    install_clamav
     install_go
     install_node
     build_zenspanel

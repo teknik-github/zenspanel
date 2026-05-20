@@ -251,11 +251,11 @@ V42: disk quota enforcement ! use package.disk_quota as hard limit. quota applie
 | T64 | x | `make build` + `pnpm -r build` clean | — |
 | T65 | x | fix terminal WS: nginx config — add `proxy_set_header X-Forwarded-Host $host` to `/ws/` location in `install.sh` | V38 |
 | T66 | x | firewall page: merge fail2ban currently-banned IPs into blocked list (call `fail2ban-client banned` per jail, tag source="fail2ban") | V39 |
-| T67 | . | `agent/antivirus/antivirus.go`: `Scan(username, homeBase, path string) ([]string, error)` — run `clamscan` as panel user, path jail (V40) | V40 |
-| T68 | . | register `antivirus.scan` RPC + `antivirus.status` (clamav daemon running?) @ `cmd/agent/main.go` | V40 |
-| T69 | . | `internal/api/handlers/antivirus.go`: Scan (async job), Status — ownership check, path jail | I.api,V40 |
-| T70 | . | wire antivirus routes + install ClamAV in `install.sh` | I.api |
-| T71 | . | user panel: Antivirus page — scan button, path input, results list (infected files), status indicator | I.frontend,V40 |
+| T67 | x | `agent/antivirus/antivirus.go`: `Scan(username, homeBase, path string) ([]string, error)` — run `clamscan` as panel user, path jail (V40) | V40 |
+| T68 | x | register `antivirus.scan` RPC + `antivirus.status` (clamav daemon running?) @ `cmd/agent/main.go` | V40 |
+| T69 | x | `internal/api/handlers/antivirus.go`: Scan (async job), Status — ownership check, path jail | I.api,V40 |
+| T70 | x | wire antivirus routes + install ClamAV in `install.sh` | I.api |
+| T71 | x | user panel: Antivirus page — scan button, path input, results list (infected files), status indicator | I.frontend,V40 |
 | T72 | x | DB isolation audit: verify each `CREATE USER` grants only on `<user>_%` pattern. add `REVOKE ALL ON *.* FROM` before grant in `agent/mysql/mysql.go` | V41 |
 | T73 | x | storage quota: wire `package.disk_quota` into `quota.set` on user create + package change (already partially done — verify end-to-end, fix if broken) | V42 |
 | T74 | x | `make build` + `pnpm -r build` clean | — |

@@ -24,6 +24,7 @@ type Router struct {
 	logs          *handlers.LogHandler
 	installer     *handlers.InstallerHandler
 	firewall      *handlers.FirewallHandler
+	antivirus     *handlers.AntivirusHandler
 	apiKeys       *handlers.APIKeyHandler
 	auditLogs     *handlers.AuditLogHandler
 	ssl           *handlers.SSLHandler
@@ -50,6 +51,7 @@ func NewRouter(
 	logsH *handlers.LogHandler,
 	installerH *handlers.InstallerHandler,
 	firewallH *handlers.FirewallHandler,
+	antivirusH *handlers.AntivirusHandler,
 	apiKeysH *handlers.APIKeyHandler,
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
@@ -75,6 +77,7 @@ func NewRouter(
 		logs:          logsH,
 		installer:     installerH,
 		firewall:      firewallH,
+		antivirus:     antivirusH,
 		apiKeys:       apiKeysH,
 		auditLogs:     auditLogsH,
 		ssl:           sslH,
@@ -216,6 +219,11 @@ func (r *Router) Setup() *gin.Engine {
 		api.GET("/installer/apps", r.installer.ListApps)
 		api.POST("/installer/install", r.installer.Install)
 		api.GET("/installer/status/:job_id", r.installer.Status)
+
+		// antivirus — user scans their own home directory (V40)
+		api.GET("/antivirus/status", r.antivirus.DaemonStatus)
+		api.POST("/antivirus/scan", r.antivirus.Scan)
+		api.GET("/antivirus/scan/:job_id", r.antivirus.ScanStatus)
 
 		// firewall — all routes admin-only (V37)
 		api.GET("/admin/firewall/blocked", auth.RequireRole("admin"), r.firewall.ListBlocked)

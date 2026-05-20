@@ -15,6 +15,7 @@ import (
 	agentfilemanager "github.com/zenspanel/zenspanel/agent/filemanager"
 	agentfirewall "github.com/zenspanel/zenspanel/agent/firewall"
 	agentinstaller "github.com/zenspanel/zenspanel/agent/installer"
+	agentantivirus "github.com/zenspanel/zenspanel/agent/antivirus"
 	agentlogs "github.com/zenspanel/zenspanel/agent/logs"
 	agentmysql "github.com/zenspanel/zenspanel/agent/mysql"
 	agentnginx "github.com/zenspanel/zenspanel/agent/nginx"
@@ -487,6 +488,41 @@ func main() {
 			return nil, err
 		}
 		return nil, agentfirewall.SetJail(p.Name, p.Enabled)
+	})
+
+	// antivirus — async ClamAV scan of user home (V40: runs as panel user,
+	// path jailed to home directory).
+	srv.Register("antivirus.scan", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			JobID    string `json:"job_id"`
+			Username string `json:"username"`
+			Path     string `json:"path"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		if err := agentantivirus.Scan(p.JobID, p.Username, cfg.Paths.HomeBase, p.Path); err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"job_id": p.JobID}, nil
+	})
+
+	srv.Register("antivirus.status", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			JobID string `json:"job_id"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		if p.JobID == "" {
+			// No job_id — return daemon status only.
+			return map[string]interface{}{"running": agentantivirus.ClamAVRunning()}, nil
+		}
+		status, err := agentantivirus.Status(p.JobID)
+		if err != nil {
+			return nil, err
+		}
+		return status, nil
 	})
 
 	// quota — filesystem-level disk quota enforcement. Hard limit comes
