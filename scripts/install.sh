@@ -434,36 +434,75 @@ install_node() {
 # STEP 6: Clone and build ZensPanel
 # =============================================================================
 build_zenspanel() {
-    log_section "Building ZensPanel"
+    log_section "Installing ZensPanel"
 
-    mkdir -p "$ZENSPANEL_DIR"/{bin,frontend}
+    mkdir -p "$ZENSPANEL_DIR"/{bin,frontend,src}
     mkdir -p "$ZENSPANEL_DATA"/{home,backups}
     mkdir -p "$ZENSPANEL_LOG"
     mkdir -p "$ZENSPANEL_CONF"
     mkdir -p /etc/nginx/zenspanel
     mkdir -p /etc/nginx/ssl/zenspanel
 
-    # Ensure the zenspanel group exists before we ship ownership at it. The
-    # zenspanel system user is created later in setup_services(); the group
-    # is created here too so subsequent useradd -g zenspanel succeeds.
     getent group zenspanel >/dev/null || groupadd -r zenspanel
 
-    # API runs as the zenspanel user and writes to home/ (when not via the
-    # agent) and backups/. Without these chown calls the backup handler's
-    # tar would fail with permission denied on first run.
     if id zenspanel &>/dev/null; then
         chown -R zenspanel:zenspanel "$ZENSPANEL_DATA"
-        # home/ needs execute-for-others (x bit) so nginx (www-data) can
-        # traverse into per-user public_html dirs and serve static files —
-        # 0750 blocks www-data and every static request 404s with "File
-        # not found." 0751 allows traversal without listing.
         chmod 751 "$ZENSPANEL_DATA/home"
         chmod 750 "$ZENSPANEL_DATA/backups"
     fi
 
-    local src="$ZENSPANEL_DIR/src"
+    # Try to download the latest pre-built release from GitHub.
+    # Falls back to build-from-source only if no release is available
+    # (e.g. running from a dev branch with no tag yet).
+    local release_url
+    release_url=$(curl -fsSL "https://api.github.com/repos/teknik-github/zenspanel/releases/latest" \
+        2>/dev/null | grep '"browser_download_url"' | grep '\.tar\.gz"' | head -1 | cut -d'"' -f4)
 
-    # Use local source if running from repo, otherwise clone
+    if [[ -n "$release_url" ]]; then
+        log_info "Downloading latest release..."
+        local tarball="/tmp/zenspanel-release.tar.gz"
+        curl -fsSL "$release_url" -o "$tarball" || die "Failed to download release"
+
+        log_info "Extracting release..."
+        local tmpdir="/tmp/zenspanel-extract"
+        rm -rf "$tmpdir"
+        mkdir -p "$tmpdir"
+        tar -xzf "$tarball" -C "$tmpdir" || die "Failed to extract release"
+        rm -f "$tarball"
+
+        # Bundle layout: zenspanel/bin/, zenspanel/frontend/, zenspanel/migrations/
+        local bundle="$tmpdir/zenspanel"
+        cp -r "$bundle/bin/"* "$ZENSPANEL_DIR/bin/"
+        chmod +x "$ZENSPANEL_DIR/bin/"*
+        cp -r "$bundle/frontend/admin" "$ZENSPANEL_DIR/frontend/admin"
+        cp -r "$bundle/frontend/user"  "$ZENSPANEL_DIR/frontend/user"
+
+        # Keep source for migrations + self-updater.
+        local src="$ZENSPANEL_DIR/src"
+        if [[ -d "$src/.git" ]]; then
+            log_info "Updating source tree..."
+            git -C "$src" pull --quiet || true
+        else
+            log_info "Cloning source tree (for migrations + updates)..."
+            git clone --quiet "$ZENSPANEL_REPO" "$src" || \
+                log_warn "Source clone failed — migrations will use bundled copy"
+        fi
+        # Copy bundled migrations as fallback if clone failed.
+        if [[ -d "$bundle/migrations" ]] && [[ ! -d "$src/migrations" ]]; then
+            cp -r "$bundle/migrations" "$src/migrations"
+        fi
+
+        rm -rf "$tmpdir"
+        ln -sf "$ZENSPANEL_DIR/bin/zenspanel-cli" /usr/local/bin/zenspanel-cli
+        log_info "ZensPanel installed from release ✓"
+    else
+        log_warn "No pre-built release found — building from source (requires Go + pnpm, may use 1-2 GB RAM)"
+        _build_from_source
+    fi
+}
+
+_build_from_source() {
+    local src="$ZENSPANEL_DIR/src"
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local repo_root
@@ -486,12 +525,9 @@ build_zenspanel() {
         fi
     fi
 
-    # Ensure all Go dependencies are present
     log_info "Resolving Go dependencies..."
-    (cd "$src" && /usr/local/go/bin/go mod tidy) || \
-        die "Failed to resolve Go dependencies"
+    (cd "$src" && /usr/local/go/bin/go mod tidy) || die "Failed to resolve Go dependencies"
 
-    # Build Go binaries
     log_info "Building zenspanel-api..."
     (cd "$src" && /usr/local/go/bin/go build -o "$ZENSPANEL_DIR/bin/zenspanel-api" ./cmd/api) || \
         die "Failed to build zenspanel-api"
@@ -504,21 +540,17 @@ build_zenspanel() {
     (cd "$src" && /usr/local/go/bin/go build -o "$ZENSPANEL_DIR/bin/zenspanel-cli" ./cmd/cli) || \
         die "Failed to build zenspanel-cli"
 
-    # Symlink the CLI into /usr/local/bin so admins can run `zenspanel-cli`
-    # from anywhere without remembering the install path.
     ln -sf "$ZENSPANEL_DIR/bin/zenspanel-cli" /usr/local/bin/zenspanel-cli
 
-    # Build frontend
     log_info "Building frontend (this may take a few minutes)..."
     (cd "$src/frontend" && \
-        pnpm install 2>&1 | grep -v "^Progress" && \
-        pnpm approve-builds --yes 2>/dev/null || true && \
+        pnpm install --ignore-scripts 2>&1 | grep -v "^Progress" && \
         pnpm -r build 2>&1) || die "Failed to build frontend"
 
     cp -r "$src/frontend/apps/admin/dist" "$ZENSPANEL_DIR/frontend/admin"
     cp -r "$src/frontend/apps/user/dist"  "$ZENSPANEL_DIR/frontend/user"
 
-    log_info "ZensPanel built ✓"
+    log_info "ZensPanel built from source ✓"
 }
 
 # =============================================================================
