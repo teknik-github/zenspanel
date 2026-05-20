@@ -318,7 +318,35 @@ func (h *SystemHandler) Maintenance(c *gin.Context) {
 		for _, svc := range services {
 			statuses[svc] = serviceActive(svc)
 		}
+		// Also check inotifywait + rclone availability.
+		statuses["inotify-tools"] = func() string {
+			if _, err := exec.LookPath("inotifywait"); err == nil {
+				return "active"
+			}
+			return "not installed"
+		}()
+		statuses["rclone"] = func() string {
+			if _, err := exec.LookPath("rclone"); err == nil {
+				return "active"
+			}
+			return "not installed"
+		}()
 		c.JSON(http.StatusOK, gin.H{"services": statuses})
+
+	case "install_tools":
+		// Install inotify-tools + rclone for antivirus realtime + S3 backups.
+		run("apt-get", "update", "-qq")
+		r1 := run("apt-get", "install", "-y", "inotify-tools")
+		r2 := run("bash", "-c", "which rclone || curl -fsSL https://rclone.org/install.sh | bash")
+		output := r1.Output + "\n" + r2.Output
+		errMsg := ""
+		if r1.Error != "" {
+			errMsg += "inotify-tools: " + r1.Error + " "
+		}
+		if r2.Error != "" {
+			errMsg += "rclone: " + r2.Error
+		}
+		c.JSON(http.StatusOK, gin.H{"output": output, "error": errMsg})
 
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action: " + req.Action})

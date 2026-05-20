@@ -386,6 +386,34 @@ async function runMaintenance(action: string) {
           <div v-else-if="maintResult['nginx_reload'] && !maintResult['nginx_reload']?.error" class="text-green-400">nginx reloaded</div>
         </div>
       </div>
+
+      <div class="border-t border-gray-100 pt-3 space-y-2">
+        <p class="text-xs font-medium text-gray-600">Optional Tools</p>
+        <p class="text-xs text-gray-400">Required for: Antivirus Realtime (inotify-tools) · S3 Backups (rclone)</p>
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="flex gap-2 text-[10px]">
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full"
+                :class="serviceStatuses['inotify-tools'] === 'active' ? 'bg-green-500' : 'bg-red-400'"></span>
+              inotify-tools
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full"
+                :class="serviceStatuses['rclone'] === 'active' ? 'bg-green-500' : 'bg-red-400'"></span>
+              rclone
+            </span>
+          </div>
+          <button @click="runMaintenance('install_tools')" :disabled="!!maintRunning"
+            class="text-xs border border-indigo-200 text-indigo-600 px-3 py-1.5 rounded-md hover:bg-indigo-50 disabled:opacity-50">
+            {{ maintRunning === 'install_tools' ? 'Installing...' : 'Install Missing Tools' }}
+          </button>
+        </div>
+        <div v-if="maintResult['install_tools']"
+          class="bg-gray-900 rounded p-2 font-mono text-xs max-h-24 overflow-y-auto">
+          <div v-if="maintResult['install_tools']?.error" class="text-red-400">{{ maintResult['install_tools'].error }}</div>
+          <div v-else class="text-green-400">Tools installed successfully</div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
