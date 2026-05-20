@@ -323,6 +323,12 @@ func (h *UserHandler) Create(c *gin.Context) {
 				}, nil); err != nil {
 					provisionWarnings = append(provisionWarnings, "quota: "+err.Error())
 				}
+				// Enforce DB quota — revoke INSERT/CREATE on user DBs if
+				// total DB size already exceeds the package limit.
+				_ = agentClient.Call("mysql.enforce_db_quota", map[string]interface{}{
+					"db_user":    user.Username,
+					"hard_bytes": pkg.DiskQuota,
+				}, nil)
 			}
 		}
 	}
@@ -551,6 +557,11 @@ func (h *UserHandler) ChangePackage(c *gin.Context) {
 				"username":   user.Username,
 				"hard_bytes": pkg.DiskQuota,
 			}, nil)
+			// Re-enforce DB quota with new package limit.
+			_ = agentClient.Call("mysql.enforce_db_quota", map[string]interface{}{
+				"db_user":    user.Username,
+				"hard_bytes": pkg.DiskQuota,
+			}, nil)
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "package updated"})
@@ -602,12 +613,24 @@ func (h *UserHandler) GetUsage(c *gin.Context) {
 		"username": user.Username,
 	}, &metrics)
 
+	// Add MySQL DB size to disk usage so the dashboard reflects total
+	// storage (files + databases) against the package quota.
+	var dbSizeRes struct {
+		SizeBytes int64 `json:"size_bytes"`
+	}
+	if len(user.Username) > 0 {
+		_ = agentClient.Call("mysql.get_db_size", map[string]interface{}{
+			"db_user": user.Username,
+		}, &dbSizeRes)
+	}
+	totalDiskUsed := metrics.DiskUsed + dbSizeRes.SizeBytes
+
 	c.JSON(http.StatusOK, gin.H{
 		"user_id": id,
 		"usage": gin.H{
 			"domains":   gin.H{"used": domainsUsed, "max": maxDomains},
 			"databases": gin.H{"used": databasesUsed, "max": maxDatabases},
-			"disk":      gin.H{"used": metrics.DiskUsed, "max": maxDisk},
+			"disk":      gin.H{"used": totalDiskUsed, "max": maxDisk, "files": metrics.DiskUsed, "db": dbSizeRes.SizeBytes},
 			"ram":       gin.H{"used": metrics.RAMUsed, "max": maxRAM},
 			"cpu":       gin.H{"used": metrics.CPUPct, "max": 100},
 		},

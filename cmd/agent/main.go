@@ -289,6 +289,31 @@ func main() {
 		return nil, mysqlClient.ResetUserPassword(p.DBUser, p.NewPassword)
 	})
 
+	srv.Register("mysql.get_db_size", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			DBUser string `json:"db_user"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		size, err := mysqlClient.GetUserDBSize(p.DBUser)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"size_bytes": size}, nil
+	})
+
+	srv.Register("mysql.enforce_db_quota", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			DBUser    string `json:"db_user"`
+			HardBytes int64  `json:"hard_bytes"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, mysqlClient.EnforceDBQuota(p.DBUser, p.HardBytes)
+	})
+
 	// terminal
 	srv.Register("terminal.spawn", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
