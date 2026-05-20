@@ -157,3 +157,138 @@ func ClamAVRunning() bool {
 	}
 	return strings.TrimSpace(string(out)) == "active"
 }
+
+// Alert is emitted by the realtime watcher when a threat is detected.
+type Alert struct {
+	Path       string    `json:"path"`
+	Threat     string    `json:"threat"`
+	DetectedAt time.Time `json:"detected_at"`
+}
+
+// AlertCallback is called by WatchStart for each detected threat.
+type AlertCallback func(alert Alert)
+
+// watchSessions tracks active inotifywait sessions by watchID.
+var (
+	watchMu       sync.Mutex
+	watchSessions = map[string]*exec.Cmd{}
+)
+
+// WatchStart launches an inotifywait watcher on the user's home directory.
+// For every new or modified file, it runs clamscan on that file. If a
+// threat is found, cb is called with the alert details (V40, V46).
+// Returns a watchID that can be passed to WatchStop.
+func WatchStart(username, homeBase string, cb AlertCallback) (string, error) {
+	if err := safe.Username(username); err != nil {
+		return "", err
+	}
+	userHome := filepath.Join(homeBase, username)
+	if _, err := os.Stat(userHome); err != nil {
+		return "", fmt.Errorf("user home not found: %w", err)
+	}
+
+	watchID := fmt.Sprintf("%s-%d", username, time.Now().UnixNano())
+
+	// inotifywait monitors CREATE and CLOSE_WRITE events recursively.
+	// We use -m (monitor) so it runs indefinitely until killed.
+	cmd := exec.Command("inotifywait",
+		"-m", "-r", "-e", "create,close_write",
+		"--format", "%w%f",
+		userHome,
+	)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("inotifywait pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("inotifywait start: %w", err)
+	}
+
+	watchMu.Lock()
+	watchSessions[watchID] = cmd
+	watchMu.Unlock()
+
+	go func() {
+		defer func() {
+			watchMu.Lock()
+			delete(watchSessions, watchID)
+			watchMu.Unlock()
+		}()
+		sc := bufio.NewScanner(stdout)
+		for sc.Scan() {
+			filePath := strings.TrimSpace(sc.Text())
+			if filePath == "" {
+				continue
+			}
+			// Path jail (V40): skip files outside user home.
+			if !strings.HasPrefix(filePath, userHome+"/") && filePath != userHome {
+				continue
+			}
+			// Scan the single file with clamscan.
+			out, err := exec.Command("clamscan", "--no-summary", filePath).Output()
+			if err == nil {
+				continue // exit 0 = clean
+			}
+			// exit 1 = infected; parse the output for threat name.
+			for _, line := range strings.Split(string(out), "\n") {
+				if strings.HasSuffix(strings.TrimSpace(line), "FOUND") {
+					parts := strings.SplitN(line, ":", 2)
+					threat := "unknown"
+					if len(parts) == 2 {
+						threat = strings.TrimSuffix(strings.TrimSpace(parts[1]), " FOUND")
+					}
+					cb(Alert{
+						Path:       filePath,
+						Threat:     threat,
+						DetectedAt: time.Now(),
+					})
+					break
+				}
+			}
+		}
+	}()
+
+	return watchID, nil
+}
+
+// WatchStop terminates the inotifywait watcher for the given watchID.
+func WatchStop(watchID string) error {
+	watchMu.Lock()
+	cmd, ok := watchSessions[watchID]
+	if ok {
+		delete(watchSessions, watchID)
+	}
+	watchMu.Unlock()
+	if !ok {
+		return nil // already stopped — idempotent
+	}
+	if cmd.Process != nil {
+		return cmd.Process.Kill()
+	}
+	return nil
+}
+
+// pendingAlerts stores alerts per username until the API polls them.
+var (
+	alertsMu      sync.Mutex
+	pendingAlerts = map[string][]Alert{}
+)
+
+// StoreAlert queues an alert for the given username.
+func StoreAlert(username string, a Alert) {
+	alertsMu.Lock()
+	pendingAlerts[username] = append(pendingAlerts[username], a)
+	alertsMu.Unlock()
+}
+
+// DrainAlerts returns and clears all pending alerts for the username.
+func DrainAlerts(username string) []Alert {
+	alertsMu.Lock()
+	alerts := pendingAlerts[username]
+	delete(pendingAlerts, username)
+	alertsMu.Unlock()
+	if alerts == nil {
+		return []Alert{}
+	}
+	return alerts
+}

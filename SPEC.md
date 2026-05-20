@@ -295,11 +295,11 @@ V49: package disk_quota + memory_limit ! stored + displayed in MB in UI. convert
 | T76 | x | fix B9: `internal/api/handlers/phpextensions.go:AdminUpdate` — on global disable, enumerate users w/ ext enabled via store, call `phpfpm.disable_extension` per user | V44 |
 | T77 | x | fix B10: `internal/api/handlers/users.go:Update` — if GetByID fails after php_version update, surface warning in response instead of silent skip | — |
 | T78 | x | `make build` + `pnpm -r build` clean | — |
-| T79 | . | migration 000017: `antivirus_alerts` table (id, user_id, path, threat, detected_at) | I.db |
-| T80 | . | `agent/antivirus/antivirus.go`: add `WatchStart(username, homeBase)` — inotifywait loop, scan on CREATE/MODIFY, store alert via callback (V40,V46) | V40,V46 |
-| T81 | . | register `antivirus.watch_start` + `antivirus.watch_stop` RPCs @ `cmd/agent/main.go` | V46 |
-| T82 | . | `internal/api/handlers/antivirus.go`: add `Alerts` (list) + WS push on new alert | I.api,V46 |
-| T83 | . | user panel: Antivirus page — add realtime alerts section, WS listener for `antivirus_alert` events | I.frontend,V46 |
+| T79 | x | migration 000017: `antivirus_alerts` table (id, user_id, path, threat, detected_at) | I.db |
+| T80 | x | `agent/antivirus/antivirus.go`: add `WatchStart(username, homeBase)` — inotifywait loop, scan on CREATE/MODIFY, store alert via callback (V40,V46) | V40,V46 |
+| T81 | x | register `antivirus.watch_start` + `antivirus.watch_stop` RPCs @ `cmd/agent/main.go` | V46 |
+| T82 | x | `internal/api/handlers/antivirus.go`: add `Alerts` (list) + WS push on new alert | I.api,V46 |
+| T83 | x | user panel: Antivirus page — add realtime alerts section, WS listener for `antivirus_alert` events | I.frontend,V46 |
 | T84 | x | admin panel: sidebar "Updates" menu item → existing Settings page update card (just add nav shortcut) | I.frontend |
 | T85 | x | admin panel: Terminal page — `POST /admin/terminal/token` + reuse WS terminal (V48) | I.api,V48 |
 | T86 | x | migration 000018: `backup_targets` table (id, name, type, bucket, prefix, access_key, secret_key_enc, region, endpoint, enabled) | I.db |

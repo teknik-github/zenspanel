@@ -540,7 +540,48 @@ func main() {
 		return status, nil
 	})
 
-	// backup.upload_s3 — upload a local backup file to an S3-compatible
+	// antivirus.watch_start — start inotifywait realtime watcher on user
+	// home. Alerts are pushed back to the API via a callback that calls
+	// the alert_callback RPC (V40, V46).
+	// NOTE: The callback mechanism is simplified — alerts are stored in
+	// an in-memory channel that the API polls via antivirus.watch_alerts.
+	srv.Register("antivirus.watch_start", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		watchID, err := agentantivirus.WatchStart(p.Username, cfg.Paths.HomeBase, func(alert agentantivirus.Alert) {
+			// Store alert in the pending alerts map for the API to poll.
+			agentantivirus.StoreAlert(p.Username, alert)
+		})
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"watch_id": watchID}, nil
+	})
+
+	srv.Register("antivirus.watch_stop", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			WatchID string `json:"watch_id"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentantivirus.WatchStop(p.WatchID)
+	})
+
+	srv.Register("antivirus.poll_alerts", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		alerts := agentantivirus.DrainAlerts(p.Username)
+		return map[string]interface{}{"alerts": alerts}, nil
+	})
 	// target. Credentials are decrypted from the encrypted secret (V47).
 	srv.Register("backup.upload_s3", func(params json.RawMessage) (interface{}, error) {
 		var p struct {

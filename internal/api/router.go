@@ -234,6 +234,10 @@ func (r *Router) Setup() *gin.Engine {
 		api.GET("/antivirus/status", r.antivirus.DaemonStatus)
 		api.POST("/antivirus/scan", r.antivirus.Scan)
 		api.GET("/antivirus/scan/:job_id", r.antivirus.ScanStatus)
+		api.GET("/antivirus/alerts", r.antivirus.Alerts)
+		api.GET("/antivirus/poll", r.antivirus.PollAlerts)
+		api.POST("/antivirus/watch", r.antivirus.WatchStart)
+		api.DELETE("/antivirus/watch/:watch_id", r.antivirus.WatchStop)
 
 		// firewall — all routes admin-only (V37)
 		api.GET("/admin/firewall/blocked", auth.RequireRole("admin"), r.firewall.ListBlocked)

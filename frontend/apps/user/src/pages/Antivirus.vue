@@ -9,6 +9,13 @@ const jobId = ref('')
 const scanResult = ref<any>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
+// Realtime watch state
+const watching = ref(false)
+const watchId = ref('')
+const realtimeAlerts = ref<any[]>([])
+const storedAlerts = ref<any[]>([])
+let alertPollTimer: ReturnType<typeof setInterval> | null = null
+
 onMounted(async () => {
   try {
     const res = await antivirusApi.status()
@@ -16,9 +23,18 @@ onMounted(async () => {
   } catch {
     daemonRunning.value = false
   }
+  // Load stored alerts from DB
+  try {
+    const res = await antivirusApi.alerts()
+    storedAlerts.value = res.data.data || []
+  } catch { /* ignore */ }
 })
 
-onUnmounted(() => stopPoll())
+onUnmounted(() => {
+  stopPoll()
+  stopAlertPoll()
+  if (watchId.value) antivirusApi.watchStop(watchId.value).catch(() => {})
+})
 
 async function startScan() {
   scanning.value = true
@@ -54,6 +70,45 @@ function startPoll() {
 function stopPoll() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 }
+
+async function toggleWatch() {
+  if (watching.value) {
+    // Stop watching
+    if (watchId.value) {
+      await antivirusApi.watchStop(watchId.value).catch(() => {})
+      watchId.value = ''
+    }
+    stopAlertPoll()
+    watching.value = false
+  } else {
+    // Start watching
+    try {
+      const res = await antivirusApi.watchStart()
+      watchId.value = res.data.watch_id || ''
+      watching.value = true
+      startAlertPoll()
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Failed to start realtime watch')
+    }
+  }
+}
+
+function startAlertPoll() {
+  stopAlertPoll()
+  alertPollTimer = setInterval(async () => {
+    try {
+      const res = await antivirusApi.poll()
+      if (res.data.new_alerts > 0) {
+        realtimeAlerts.value = [...res.data.alerts, ...realtimeAlerts.value].slice(0, 100)
+        storedAlerts.value = [...res.data.alerts, ...storedAlerts.value].slice(0, 50)
+      }
+    } catch { /* ignore */ }
+  }, 5000)
+}
+
+function stopAlertPoll() {
+  if (alertPollTimer) { clearInterval(alertPollTimer); alertPollTimer = null }
+}
 </script>
 
 <template>
@@ -74,9 +129,47 @@ function stopPoll() {
       </span>
     </div>
 
-    <!-- Scan form -->
+    <!-- Realtime protection -->
+    <div class="bg-white border border-gray-200 rounded-lg p-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-800">Realtime Protection</h2>
+          <p class="text-xs text-gray-500 mt-0.5">
+            Monitors your files for threats as they are created or modified.
+          </p>
+        </div>
+        <button @click="toggleWatch" :disabled="daemonRunning === false"
+          class="text-xs px-3 py-1.5 rounded-md border transition-colors disabled:opacity-50"
+          :class="watching
+            ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+            : 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100'">
+          {{ watching ? 'Stop Protection' : 'Start Protection' }}
+        </button>
+      </div>
+      <div v-if="watching" class="mt-2 flex items-center gap-1.5 text-xs text-green-600">
+        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+        Monitoring active — scanning new and modified files
+      </div>
+
+      <!-- Realtime alerts -->
+      <div v-if="realtimeAlerts.length" class="mt-3 space-y-1">
+        <p class="text-xs font-medium text-red-600">{{ realtimeAlerts.length }} threat(s) detected this session:</p>
+        <div v-for="(a, i) in realtimeAlerts" :key="i"
+          class="flex items-start gap-2 bg-red-50 border border-red-100 rounded px-3 py-2">
+          <svg class="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div class="min-w-0">
+            <p class="text-xs font-mono text-red-700 truncate">{{ a.path }}</p>
+            <p class="text-[10px] text-red-500">{{ a.threat }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manual scan -->
     <div class="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-      <h2 class="text-sm font-semibold text-gray-800">Scan Files</h2>
+      <h2 class="text-sm font-semibold text-gray-800">Manual Scan</h2>
       <p class="text-xs text-gray-500">Scan your home directory for malware. Leave path empty to scan everything.</p>
       <div class="flex gap-2">
         <input v-model="scanPath" type="text" placeholder="public_html/  (empty = full scan)"
@@ -87,18 +180,12 @@ function stopPoll() {
           <svg v-if="scanning" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
           </svg>
-          <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
           {{ scanning ? 'Scanning...' : 'Scan' }}
         </button>
       </div>
-      <p v-if="daemonRunning === false" class="text-xs text-red-500">
-        ClamAV daemon is not running. Contact your administrator.
-      </p>
     </div>
 
-    <!-- Scan progress -->
+    <!-- Scan progress/result -->
     <div v-if="scanning && !scanResult?.done" class="bg-white border border-gray-200 rounded-lg p-4">
       <div class="flex items-center gap-3">
         <svg class="w-5 h-5 text-indigo-500 animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -111,7 +198,6 @@ function stopPoll() {
       </div>
     </div>
 
-    <!-- Scan results -->
     <div v-if="scanResult?.done || scanResult?.error" class="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <div class="px-4 py-3 border-b border-gray-200"
         :class="scanResult?.error ? 'bg-red-50' : scanResult?.infected?.length ? 'bg-red-50' : 'bg-green-50'">
@@ -129,24 +215,44 @@ function stopPoll() {
               <template v-else-if="scanResult?.infected?.length">{{ scanResult.infected.length }} infected file(s) found</template>
               <template v-else>No threats found</template>
             </p>
-            <p class="text-xs mt-0.5"
-              :class="scanResult?.error ? 'text-red-600' : 'text-gray-500'">
+            <p class="text-xs mt-0.5" :class="scanResult?.error ? 'text-red-600' : 'text-gray-500'">
               <template v-if="scanResult?.error">{{ scanResult.error }}</template>
               <template v-else>{{ scanResult?.scanned ?? 0 }} files scanned</template>
             </p>
           </div>
         </div>
       </div>
-
       <div v-if="scanResult?.infected?.length" class="divide-y divide-gray-50">
-        <div v-for="file in scanResult.infected" :key="file"
-          class="px-4 py-2.5 flex items-center gap-2">
+        <div v-for="file in scanResult.infected" :key="file" class="px-4 py-2.5 flex items-center gap-2">
           <svg class="w-3.5 h-3.5 text-red-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
           </svg>
           <span class="text-xs font-mono text-gray-700 break-all">{{ file }}</span>
         </div>
       </div>
+    </div>
+
+    <!-- Alert history -->
+    <div v-if="storedAlerts.length" class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+        <h2 class="text-sm font-semibold text-gray-800">Alert History</h2>
+      </div>
+      <table class="w-full text-xs">
+        <thead class="bg-gray-50 border-b border-gray-200">
+          <tr class="text-gray-500">
+            <th class="text-left px-4 py-2 font-medium">File</th>
+            <th class="text-left px-4 py-2 font-medium">Threat</th>
+            <th class="text-left px-4 py-2 font-medium">Detected</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="a in storedAlerts" :key="a.id" class="border-b border-gray-50 hover:bg-gray-50">
+            <td class="px-4 py-2 font-mono text-gray-700 max-w-xs truncate" :title="a.path">{{ a.path }}</td>
+            <td class="px-4 py-2 text-red-600">{{ a.threat }}</td>
+            <td class="px-4 py-2 text-gray-400">{{ new Date(a.detected_at).toLocaleString() }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </template>

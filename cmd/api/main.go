@@ -77,7 +77,7 @@ func main() {
 	logsH := handlers.NewLogHandler(domainStore, userStore, cfg.Agent.Socket)
 	installerH := handlers.NewInstallerHandler(domainStore, userStore, cfg.Agent.Socket)
 	firewallH := handlers.NewFirewallHandler(cfg.Agent.Socket)
-	antivirusH := handlers.NewAntivirusHandler(userStore, cfg.Agent.Socket)
+	antivirusH := handlers.NewAntivirusHandler(userStore, store.NewAntivirusAlertStore(db), cfg.Agent.Socket)
 	backupTargetStore := store.NewBackupTargetStore(db)
 	backupTargetsH := handlers.NewBackupTargetHandler(
 		backupTargetStore,
