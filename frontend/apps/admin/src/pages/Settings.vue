@@ -60,9 +60,10 @@ async function loadStatus() {
     updateStatus.value = r.data
     if (r.data.done) {
       stopPolling()
-      if (r.data.phase === 'done') {
-        // Services just restarted — wait a few seconds, then reload so
-        // the user sees the new build.
+      // Only reload if we were actively polling (i.e. an update just
+      // finished in this session). Don't reload on initial page load
+      // where the previous update's "done" state is still in the API.
+      if (r.data.phase === 'done' && pollTimer !== null) {
         setTimeout(() => location.reload(), 5000)
       }
     }
