@@ -62,6 +62,7 @@ const navGroups = computed(() => [
       { path: '/logs', label: 'Error Logs', icon: 'file-text', show: true },
       { path: '/terminal', label: 'Terminal', icon: 'terminal', show: auth.user?.terminal_enabled },
       { path: '/backups', label: 'Backups', icon: 'upload-cloud', show: auth.user?.backup_enabled },
+      { path: '/2fa', label: 'Two-Factor Auth', icon: 'shield', show: true },
     ],
   },
 ])
@@ -81,6 +82,7 @@ const pageTitle = computed(() => {
     '/logs': 'Error Logs',
     '/terminal': 'Terminal',
     '/backups': 'Backups',
+    '/2fa': 'Two-Factor Auth',
   }
   return titles[route.path] || ''
 })
@@ -194,6 +196,9 @@ const pageTitle = computed(() => {
               </svg>
               <svg v-else-if="item.icon === 'upload-cloud'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+              </svg>
+              <svg v-else-if="item.icon === 'shield'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
               </svg>
               <span v-if="!collapsed">{{ item.label }}</span>
             </component>

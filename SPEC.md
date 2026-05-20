@@ -203,11 +203,11 @@ V33: installer runs as Linux user (agent drops privs via `su -s /bin/sh -c ... <
 | T38 | x | `internal/api/handlers/cronjobs.go`: List/Create/Update/Delete — ownership check, quota check (V25), call `cron.sync` after every mutation | I.api,V25,V26 |
 | T39 | x | wire cron routes + construct CronJobHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
 | T40 | x | user panel: Cron Jobs page — table + add/edit modal (expression builder or free-form + validate), enable/disable toggle | I.frontend,V24 |
-| T41 | . | migration 000015: add `totp_secret_enc`, `totp_enabled`, `totp_recovery_codes` (JSON array of bcrypt hashes) to `users` table | I.db |
-| T42 | . | `internal/store/users.go`: add SetTOTP, GetTOTPSecret, ConsumeRecoveryCode methods | I.db,V27,V29 |
-| T43 | . | `internal/api/handlers/auth.go`: Setup/Confirm/Disable 2FA handlers; modify Login to return `requires_2fa+temp_token`; add Verify + Recover handlers | I.api,V27,V28,V29 |
-| T44 | . | wire 2FA routes @ `internal/api/router.go` (public: verify, recover; JWT: setup, confirm, disable) | I.api |
-| T45 | . | user panel: 2FA setup flow — QR code display, confirm code input, recovery codes download; login page: TOTP step after password | I.frontend,V28 |
+| T41 | x | migration 000015: add `totp_secret_enc`, `totp_enabled`, `totp_recovery_codes` (JSON array of bcrypt hashes) to `users` table | I.db |
+| T42 | x | `internal/store/users.go`: add SetTOTP, GetTOTPSecret, ConsumeRecoveryCode methods | I.db,V27,V29 |
+| T43 | x | `internal/api/handlers/auth.go`: Setup/Confirm/Disable 2FA handlers; modify Login to return `requires_2fa+temp_token`; add Verify + Recover handlers | I.api,V27,V28,V29 |
+| T44 | x | wire 2FA routes @ `internal/api/router.go` (public: verify, recover; JWT: setup, confirm, disable) | I.api |
+| T45 | x | user panel: 2FA setup flow — QR code display, confirm code input, recovery codes download; login page: TOTP step after password | I.frontend,V28 |
 | T46 | x | `agent/logs/logs.go`: `Tail(logPath string, lines int) ([]string, error)` — path jail (V30), max 500 lines (V31) | V30,V31 |
 | T47 | x | register `logs.tail` RPC @ `cmd/agent/main.go` | V30 |
 | T48 | x | `internal/api/handlers/logs.go`: `DomainLogs` handler — resolve nginx + fpm log paths from domain row, call agent `logs.tail` | I.api,V30,V31 |

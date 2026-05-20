@@ -33,6 +33,7 @@ type JWTConfig struct {
 	Secret        string
 	Expiry        string
 	RefreshExpiry string `mapstructure:"refresh_expiry"`
+	TOTPKey       string `mapstructure:"totp_key"` // 32-byte hex AES-256-GCM key for TOTP secret encryption (V27)
 }
 
 type AgentConfig struct {
