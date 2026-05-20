@@ -48,7 +48,7 @@ async function deleteUser() {
 async function loginAs() {
   const res = await usersApi.impersonate(user.value.id)
   const token = res.data.token
-  const url = `${window.location.origin}/user/#impersonate=${encodeURIComponent(token)}`
+  const url = `${window.location.origin}/#impersonate=${encodeURIComponent(token)}`
   window.open(url, '_blank')
 }
 </script>

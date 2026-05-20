@@ -122,7 +122,7 @@ async function loginAs(id: number) {
   // the URL hash on mount so we don't have to touch the admin's own
   // localStorage. The hash is stripped by the browser after the SPA
   // reads it — it never reaches the server.
-  const url = `${window.location.origin}/user/#impersonate=${encodeURIComponent(token)}`
+  const url = `${window.location.origin}/#impersonate=${encodeURIComponent(token)}`
   window.open(url, '_blank')
 }
 
