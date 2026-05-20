@@ -175,6 +175,11 @@ V34: IP block/unblock ! exec via `iptables`/`ipset` arg array. ⊥ shell string 
 V35: fail2ban jail config ! written outside `/etc/fail2ban/jail.d/`. ⊥ path traversal via jail name
 V36: blocked IP list read from `iptables -L` + `ipset list` — agent is authoritative. ⊥ panel DB as source of truth
 V37: unblock ! require confirmation token (admin-only route). ⊥ accidental mass-unblock via stale UI state
+V38: WS CheckOrigin ! check X-Forwarded-Host when behind reverse proxy. ⊥ reject valid same-origin WS from proxied installs
+V39: fail2ban banned IPs ! merged into firewall blocked list w/ source="fail2ban". ⊥ separate UI for panel vs fail2ban bans
+V40: antivirus scan ! run as panel user (! root). scan path ! ⊂ user home jail. ⊥ scan arbitrary filesystem paths
+V41: DB isolation: each panel user's MySQL databases ! accessible only by that user's MySQL account. ⊥ cross-user DB access
+V42: disk quota enforcement ! use package.disk_quota as hard limit. quota applied at user create + package change. 0 = unlimited
 
 ## §T TASKS
 
@@ -244,6 +249,16 @@ V37: unblock ! require confirmation token (admin-only route). ⊥ accidental mas
 | T62 | x | wire 5 firewall routes + construct FirewallHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
 | T63 | x | admin panel: Firewall page — blocked IPs table (block/unblock), fail2ban jails table (enable/disable toggle) | I.frontend,V37 |
 | T64 | x | `make build` + `pnpm -r build` clean | — |
+| T65 | x | fix terminal WS: nginx config — add `proxy_set_header X-Forwarded-Host $host` to `/ws/` location in `install.sh` | V38 |
+| T66 | x | firewall page: merge fail2ban currently-banned IPs into blocked list (call `fail2ban-client banned` per jail, tag source="fail2ban") | V39 |
+| T67 | . | `agent/antivirus/antivirus.go`: `Scan(username, homeBase, path string) ([]string, error)` — run `clamscan` as panel user, path jail (V40) | V40 |
+| T68 | . | register `antivirus.scan` RPC + `antivirus.status` (clamav daemon running?) @ `cmd/agent/main.go` | V40 |
+| T69 | . | `internal/api/handlers/antivirus.go`: Scan (async job), Status — ownership check, path jail | I.api,V40 |
+| T70 | . | wire antivirus routes + install ClamAV in `install.sh` | I.api |
+| T71 | . | user panel: Antivirus page — scan button, path input, results list (infected files), status indicator | I.frontend,V40 |
+| T72 | x | DB isolation audit: verify each `CREATE USER` grants only on `<user>_%` pattern. add `REVOKE ALL ON *.* FROM` before grant in `agent/mysql/mysql.go` | V41 |
+| T73 | x | storage quota: wire `package.disk_quota` into `quota.set` on user create + package change (already partially done — verify end-to-end, fix if broken) | V42 |
+| T74 | x | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 
@@ -255,3 +270,4 @@ V37: unblock ! require confirmation token (admin-only route). ⊥ accidental mas
 | B4 | 2026-05-19 | login cookie `Secure=false` & `SameSite=Lax` ∴ JWT exposed on plain-HTTP & cross-site state-changing requests reachable. HIGH | V13 |
 | B5 | 2026-05-19 | `/terminal/token` ! rate limit ∴ token enumeration / spam possible. MEDIUM | V17 |
 | B6 | 2026-05-19 | ownership pattern `role != "admin"` ∴ api_key callers (id=0) fall through to "owner" branch on future routes. brittle, current routes safe-by-accident. MEDIUM | V16 |
+| B7 | 2026-05-20 | WS terminal fails on direct-port access (`:8888`): nginx `/ws/` location missing `proxy_set_header X-Forwarded-Host $host` ∴ `r.Host` = `127.0.0.1:8080` but browser Origin = `103.150.92.61:8888` → CheckOrigin rejects upgrade. Fix already in code (V38); nginx config needs the header. | V38 |

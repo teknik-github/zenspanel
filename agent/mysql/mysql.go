@@ -41,6 +41,9 @@ func (c *Client) CreateDatabase(dbName, dbUser, dbPassword string) error {
 	queries := []string{
 		fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4", dbName),
 		fmt.Sprintf("CREATE USER IF NOT EXISTS '%s'@'localhost' IDENTIFIED BY '%s'", dbUser, dbPassword),
+		// Revoke any global privileges before granting — defense in depth (V41).
+		// If the user already existed with broader grants, this strips them.
+		fmt.Sprintf("REVOKE ALL PRIVILEGES, GRANT OPTION FROM '%s'@'localhost'", dbUser),
 		fmt.Sprintf("GRANT ALL PRIVILEGES ON `%s`.* TO '%s'@'localhost'", dbName, dbUser),
 		"FLUSH PRIVILEGES",
 	}
