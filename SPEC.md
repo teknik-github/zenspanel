@@ -180,6 +180,8 @@ V39: fail2ban banned IPs ! merged into firewall blocked list w/ source="fail2ban
 V40: antivirus scan ! run as panel user (! root). scan path ! ⊂ user home jail. ⊥ scan arbitrary filesystem paths
 V41: DB isolation: each panel user's MySQL databases ! accessible only by that user's MySQL account. ⊥ cross-user DB access
 V42: disk quota enforcement ! use package.disk_quota as hard limit. quota applied at user create + package change. 0 = unlimited
+V43: installer `runAs` ! build shell string via fmt.Sprintf w/ untrusted path. use exec.Command arg array OR validate path contains no shell metachar before interpolation
+V44: phpext AdminUpdate disable → ! call agent `phpfpm.reload` for every user who has ext enabled. ⊥ silent no-op on global disable
 
 ## §T TASKS
 
@@ -259,6 +261,10 @@ V42: disk quota enforcement ! use package.disk_quota as hard limit. quota applie
 | T72 | x | DB isolation audit: verify each `CREATE USER` grants only on `<user>_%` pattern. add `REVOKE ALL ON *.* FROM` before grant in `agent/mysql/mysql.go` | V41 |
 | T73 | x | storage quota: wire `package.disk_quota` into `quota.set` on user create + package change (already partially done — verify end-to-end, fix if broken) | V42 |
 | T74 | x | `make build` + `pnpm -r build` clean | — |
+| T75 | . | fix B8: `agent/installer/installer.go` — replace `runAs` shell-string interpolation w/ `exec.Command` arg array for `php artisan key:generate`; validate DocRoot contains no shell metachar | V43 |
+| T76 | . | fix B9: `internal/api/handlers/phpextensions.go:AdminUpdate` — on global disable, enumerate users w/ ext enabled via store, call `phpfpm.disable_extension` per user | V44 |
+| T77 | . | fix B10: `internal/api/handlers/users.go:Update` — if GetByID fails after php_version update, surface warning in response instead of silent skip | — |
+| T78 | . | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 
@@ -271,3 +277,6 @@ V42: disk quota enforcement ! use package.disk_quota as hard limit. quota applie
 | B5 | 2026-05-19 | `/terminal/token` ! rate limit ∴ token enumeration / spam possible. MEDIUM | V17 |
 | B6 | 2026-05-19 | ownership pattern `role != "admin"` ∴ api_key callers (id=0) fall through to "owner" branch on future routes. brittle, current routes safe-by-accident. MEDIUM | V16 |
 | B7 | 2026-05-20 | WS terminal fails on direct-port access (`:8888`): nginx `/ws/` location missing `proxy_set_header X-Forwarded-Host $host` ∴ `r.Host` = `127.0.0.1:8080` but browser Origin = `103.150.92.61:8888` → CheckOrigin rejects upgrade. Fix already in code (V38); nginx config needs the header. | V38 |
+| B8 | 2026-05-20 | `agent/installer/installer.go:296` — `runAs` builds shell string via `fmt.Sprintf("cd %q && ...", p.DocRoot)`. Go `%q` does NOT escape `$` or backticks ∴ DocRoot containing `$(...)` executes arbitrary commands as panel user. DocRoot flows from `domain.document_root` which user can set via PUT /domains/:id. HIGH shell injection. | V43 |
+| B9 | 2026-05-20 | `internal/api/handlers/phpextensions.go:AdminUpdate` — dead propagation branch: `if !req.Enabled` block fetches agent client but never calls any RPC ∴ disabling ext globally does NOT reload running FPM pools. Ext stays loaded until next pool reload. Contradicts V20 intent. LOW. | V44 |
+| B10 | 2026-05-20 | `internal/api/handlers/users.go:Update` — if `GetByID` fails after DB write, `user.setup_bin` is silently skipped and response is still 200. Shell PHP symlink stays stale. No warning surfaced to caller. LOW. | — |
