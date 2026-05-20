@@ -136,6 +136,31 @@ CREATE TABLE user_php_extensions (
 - `GET /api/v1/installer/status/:job_id` JWT → 200 `{phase, log, done, error}`
 - agent rpc `installer.run {app_id, username, docroot, db_name, db_user, db_pass}` — async, streams status via sync.Map
 
+### antivirus realtime
+
+- agent rpc `antivirus.watch_start {username}` → `{watch_id}` — inotifywait on user home, scan new/modified files
+- agent rpc `antivirus.watch_stop {watch_id}` → nil
+- `GET /api/v1/antivirus/alerts` user JWT → 200 `{data: [{id, path, threat, detected_at}]}`
+- WS push: `{type:"antivirus_alert", path, threat}` on detection
+
+### admin terminal
+
+- `POST /api/v1/admin/terminal/token` admin JWT body `{username?}` → 200 `{token}` (username empty = zenspanel system user)
+- WS `/ws/terminal` reuse existing — token carries admin role + target username
+
+### s3 backup
+
+- `GET  /api/v1/admin/backup-targets`              admin JWT → 200 `{data: [{id, name, type, bucket, prefix, enabled}]}`
+- `POST /api/v1/admin/backup-targets`              admin JWT body `{name, type, bucket, prefix, access_key, secret_key_enc, region, endpoint?}` → 201
+- `PUT  /api/v1/admin/backup-targets/:id`          admin JWT → 200
+- `DELETE /api/v1/admin/backup-targets/:id`        admin JWT → 200
+- `POST /api/v1/admin/backup-targets/:id/test`     admin JWT → 200 `{ok, error?}`
+- agent rpc `backup.upload_s3 {backup_path, target_id}` — upload file to S3-compatible target
+
+### package MB units
+
+- `POST/PUT /api/v1/packages` — `disk_quota_mb` + `memory_limit_mb` fields (MB integers). API converts → bytes before storing. existing `disk_quota`/`memory_limit` (bytes) kept in DB unchanged
+
 ## §V INVARIANTS
 
 V1: ∀ subdomain create → parent_domain.user_id == requester.user_id (! admin bypass)
@@ -182,6 +207,11 @@ V41: DB isolation: each panel user's MySQL databases ! accessible only by that u
 V42: disk quota enforcement ! use package.disk_quota as hard limit. quota applied at user create + package change. 0 = unlimited
 V43: installer `runAs` ! build shell string via fmt.Sprintf w/ untrusted path. use exec.Command arg array OR validate path contains no shell metachar before interpolation
 V44: phpext AdminUpdate disable → ! call agent `phpfpm.reload` for every user who has ext enabled. ⊥ silent no-op on global disable
+V45: "Login as" URL ! use user panel base path (served at `/`). ⊥ hardcode `/user/` prefix
+V46: antivirus realtime → inotifywait watch on user home. ! scan outside user home jail (V40 extends). alert stored in DB + pushed via WS
+V47: S3/remote backup ! store credentials in DB plaintext. encrypt w/ AES-256-GCM (same pattern as TOTP key V27). support S3-compatible + rclone targets
+V48: admin terminal ! run as root. spawn bash as `zenspanel` system user or specific panel user. ⊥ arbitrary root shell
+V49: package disk_quota + memory_limit ! stored + displayed in MB in UI. converted to bytes before passing to agent (×1024×1024). ⊥ raw bytes in form fields
 
 ## §T TASKS
 
@@ -265,6 +295,24 @@ V44: phpext AdminUpdate disable → ! call agent `phpfpm.reload` for every user 
 | T76 | x | fix B9: `internal/api/handlers/phpextensions.go:AdminUpdate` — on global disable, enumerate users w/ ext enabled via store, call `phpfpm.disable_extension` per user | V44 |
 | T77 | x | fix B10: `internal/api/handlers/users.go:Update` — if GetByID fails after php_version update, surface warning in response instead of silent skip | — |
 | T78 | x | `make build` + `pnpm -r build` clean | — |
+| T79 | . | migration 000017: `antivirus_alerts` table (id, user_id, path, threat, detected_at) | I.db |
+| T80 | . | `agent/antivirus/antivirus.go`: add `WatchStart(username, homeBase)` — inotifywait loop, scan on CREATE/MODIFY, store alert via callback (V40,V46) | V40,V46 |
+| T81 | . | register `antivirus.watch_start` + `antivirus.watch_stop` RPCs @ `cmd/agent/main.go` | V46 |
+| T82 | . | `internal/api/handlers/antivirus.go`: add `Alerts` (list) + WS push on new alert | I.api,V46 |
+| T83 | . | user panel: Antivirus page — add realtime alerts section, WS listener for `antivirus_alert` events | I.frontend,V46 |
+| T84 | . | admin panel: sidebar "Updates" menu item → existing Settings page update card (just add nav shortcut) | I.frontend |
+| T85 | . | admin panel: Terminal page — `POST /admin/terminal/token` + reuse WS terminal (V48) | I.api,V48 |
+| T86 | . | migration 000018: `backup_targets` table (id, name, type, bucket, prefix, access_key, secret_key_enc, region, endpoint, enabled) | I.db |
+| T87 | . | `internal/store/backuptargets.go`: BackupTarget model + store (List, Create, Update, Delete, GetByID) | I.db,V47 |
+| T88 | . | `agent/backup/s3.go`: `UploadS3(filePath string, target BackupTarget) error` — aws-sdk-go-v2 or rclone subprocess (V47) | V47 |
+| T89 | . | register `backup.upload_s3` RPC @ `cmd/agent/main.go` | V47 |
+| T90 | . | `internal/api/handlers/backuptargets.go`: CRUD + Test endpoint (V47) | I.api,V47 |
+| T91 | . | wire backup-targets routes + construct handler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T92 | . | admin panel: Backup Targets page — list targets, add/edit modal (S3 creds), test connection button | I.frontend,V47 |
+| T93 | . | extend existing backup flow: after local backup completes, if target configured → call `backup.upload_s3` | I.api |
+| T94 | . | `internal/api/handlers/packages.go`: accept `disk_quota_mb` + `memory_limit_mb` in Create/Update, convert MB→bytes before store (V49) | V49 |
+| T95 | . | admin panel: Packages page — change disk_quota + memory_limit inputs to MB with unit label | I.frontend,V49 |
+| T96 | . | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 
@@ -280,3 +328,4 @@ V44: phpext AdminUpdate disable → ! call agent `phpfpm.reload` for every user 
 | B8 | 2026-05-20 | `agent/installer/installer.go:296` — `runAs` builds shell string via `fmt.Sprintf("cd %q && ...", p.DocRoot)`. Go `%q` does NOT escape `$` or backticks ∴ DocRoot containing `$(...)` executes arbitrary commands as panel user. DocRoot flows from `domain.document_root` which user can set via PUT /domains/:id. HIGH shell injection. | V43 |
 | B9 | 2026-05-20 | `internal/api/handlers/phpextensions.go:AdminUpdate` — dead propagation branch: `if !req.Enabled` block fetches agent client but never calls any RPC ∴ disabling ext globally does NOT reload running FPM pools. Ext stays loaded until next pool reload. Contradicts V20 intent. LOW. | V44 |
 | B10 | 2026-05-20 | `internal/api/handlers/users.go:Update` — if `GetByID` fails after DB write, `user.setup_bin` is silently skipped and response is still 200. Shell PHP symlink stays stale. No warning surfaced to caller. LOW. | — |
+| B11 | 2026-05-20 | "Login as" opens `/user/#impersonate=<token>` but nginx serves user panel at `/` (root). URL 404s ∴ token never read, user lands on login page. FIXED: changed to `/#impersonate=<token>`. | V45 |
