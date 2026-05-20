@@ -65,7 +65,7 @@ func main() {
 	subdomainStore := store.NewSubdomainStore(db)
 
 	// handlers
-	authH := handlers.NewAuthHandler(userStore, cfg.JWT.Secret, cfg.JWT.Expiry)
+	authH := handlers.NewAuthHandler(userStore, cfg.JWT.Secret, cfg.JWT.Expiry, cfg.JWT.TOTPKey)
 	usersH := handlers.NewUserHandler(userStore, packageStore, domainStore, subdomainStore, databaseStore, cfg.Agent.Socket)
 	packagesH := handlers.NewPackageHandler(packageStore)
 	domainsH := handlers.NewDomainHandler(domainStore, subdomainStore, userStore, cfg.Agent.Socket, cfg.Paths.HomeBase)

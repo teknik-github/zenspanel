@@ -1,11 +1,18 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// jsonMarshal / jsonUnmarshal are local aliases so the recovery-code
+// logic in ConsumeRecoveryCode doesn't need to import encoding/json
+// at the call site — it's already imported here.
+var jsonMarshal   = json.Marshal
+var jsonUnmarshal = json.Unmarshal
 
 type UserStore struct {
 	db *sqlx.DB
@@ -157,6 +164,59 @@ func (s *UserStore) GetMaxLinuxUID() (int, error) {
 	var maxUID int
 	err := s.db.Get(&maxUID, "SELECT COALESCE(MAX(linux_uid), 9999) FROM users")
 	return maxUID, err
+}
+
+// SetTOTP persists the encrypted TOTP secret, enabled flag, and bcrypt-hashed
+// recovery codes for a user. Pass empty strings + false to clear 2FA (V27).
+func (s *UserStore) SetTOTP(id uint64, secretEnc string, enabled bool, recoveryCodes string) error {
+	_, err := s.db.Exec(
+		"UPDATE users SET totp_secret_enc = ?, totp_enabled = ?, totp_recovery_codes = ? WHERE id = ?",
+		secretEnc, enabled, recoveryCodes, id)
+	return err
+}
+
+// GetTOTPSecret returns the encrypted TOTP secret and enabled flag for a user.
+func (s *UserStore) GetTOTPSecret(id uint64) (secretEnc string, enabled bool, err error) {
+	var u User
+	if err = s.db.Get(&u, "SELECT totp_secret_enc, totp_enabled FROM users WHERE id = ?", id); err != nil {
+		return "", false, err
+	}
+	return u.TOTPSecretEnc.String, u.TOTPEnabled, nil
+}
+
+// ConsumeRecoveryCode checks whether code matches any stored recovery code hash
+// for the user, removes it if found (single-use, V29), and returns true on match.
+// Recovery codes are stored as a JSON array of bcrypt hashes.
+func (s *UserStore) ConsumeRecoveryCode(id uint64, code string) (bool, error) {
+	var u User
+	if err := s.db.Get(&u, "SELECT totp_recovery_codes FROM users WHERE id = ?", id); err != nil {
+		return false, err
+	}
+	if !u.TOTPRecoveryCodes.Valid || u.TOTPRecoveryCodes.String == "" {
+		return false, nil
+	}
+	var hashes []string
+	if err := jsonUnmarshal([]byte(u.TOTPRecoveryCodes.String), &hashes); err != nil {
+		return false, fmt.Errorf("parse recovery codes: %w", err)
+	}
+	matchIdx := -1
+	for i, h := range hashes {
+		if bcrypt.CompareHashAndPassword([]byte(h), []byte(code)) == nil {
+			matchIdx = i
+			break
+		}
+	}
+	if matchIdx < 0 {
+		return false, nil
+	}
+	// Remove the consumed code and persist.
+	hashes = append(hashes[:matchIdx], hashes[matchIdx+1:]...)
+	updated, err := jsonMarshal(hashes)
+	if err != nil {
+		return false, fmt.Errorf("marshal recovery codes: %w", err)
+	}
+	_, err = s.db.Exec("UPDATE users SET totp_recovery_codes = ? WHERE id = ?", string(updated), id)
+	return err == nil, err
 }
 
 // CountDomains returns the number of domain rows owned by the user. Used by

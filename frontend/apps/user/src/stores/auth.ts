@@ -13,10 +13,30 @@ export const useAuthStore = defineStore('auth', () => {
     backup_enabled: boolean
     package_id: number | null
     php_version: string
+    totp_enabled: boolean
   } | null>(null)
 
   async function login(username: string, password: string) {
     const res = await authApi.login(username, password)
+    if (res.data.requires_2fa) {
+      // Return the temp token so the login page can show the TOTP step.
+      return { requires_2fa: true, temp_token: res.data.temp_token }
+    }
+    token.value = res.data.token
+    user.value = res.data.user
+    localStorage.setItem('token', res.data.token)
+    return { requires_2fa: false }
+  }
+
+  async function verifyTOTP(tempToken: string, code: string) {
+    const res = await authApi.twofa.verify(tempToken, code)
+    token.value = res.data.token
+    user.value = res.data.user
+    localStorage.setItem('token', res.data.token)
+  }
+
+  async function recoverTOTP(tempToken: string, recoveryCode: string) {
+    const res = await authApi.twofa.recover(tempToken, recoveryCode)
     token.value = res.data.token
     user.value = res.data.user
     localStorage.setItem('token', res.data.token)
@@ -33,5 +53,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('token')
   }
 
-  return { token, user, login, fetchMe, logout }
+  return { token, user, login, verifyTOTP, recoverTOTP, fetchMe, logout }
 })

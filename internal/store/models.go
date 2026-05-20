@@ -6,19 +6,22 @@ import (
 )
 
 type User struct {
-	ID              uint64    `db:"id" json:"id"`
-	Username        string    `db:"username" json:"username"`
-	Email           string    `db:"email" json:"email"`
-	PasswordHash    string    `db:"password_hash" json:"-"`
-	Role            string    `db:"role" json:"role"`
-	LinuxUID        int       `db:"linux_uid" json:"linux_uid"`
-	PackageID       NullInt64 `db:"package_id" json:"package_id"`
-	Status          string    `db:"status" json:"status"`
-	TerminalEnabled bool      `db:"terminal_enabled" json:"terminal_enabled"`
-	BackupEnabled   bool      `db:"backup_enabled" json:"backup_enabled"`
-	PHPVersion      string    `db:"php_version" json:"php_version"`
-	CreatedAt       time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt       time.Time `db:"updated_at" json:"updated_at"`
+	ID                uint64         `db:"id" json:"id"`
+	Username          string         `db:"username" json:"username"`
+	Email             string         `db:"email" json:"email"`
+	PasswordHash      string         `db:"password_hash" json:"-"`
+	Role              string         `db:"role" json:"role"`
+	LinuxUID          int            `db:"linux_uid" json:"linux_uid"`
+	PackageID         NullInt64      `db:"package_id" json:"package_id"`
+	Status            string         `db:"status" json:"status"`
+	TerminalEnabled   bool           `db:"terminal_enabled" json:"terminal_enabled"`
+	BackupEnabled     bool           `db:"backup_enabled" json:"backup_enabled"`
+	PHPVersion        string         `db:"php_version" json:"php_version"`
+	TOTPSecretEnc     sql.NullString `db:"totp_secret_enc" json:"-"`
+	TOTPEnabled       bool           `db:"totp_enabled" json:"totp_enabled"`
+	TOTPRecoveryCodes sql.NullString `db:"totp_recovery_codes" json:"-"`
+	CreatedAt         time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt         time.Time      `db:"updated_at" json:"updated_at"`
 }
 
 type Package struct {
