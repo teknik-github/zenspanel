@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"database/sql"
-
 	"github.com/gin-gonic/gin"
 
 	"github.com/zenspanel/zenspanel/internal/auth"
@@ -34,13 +32,13 @@ func Audit(logs *store.AuditLogStore) gin.HandlerFunc {
 			IPAddress: c.ClientIP(),
 		}
 		if uid := auth.GetUserID(c); uid > 0 {
-			entry.UserID = sql.NullInt64{Int64: int64(uid), Valid: true}
+			entry.UserID = store.NullInt64{Int64: int64(uid), Valid: true}
 		}
 		if id := c.Param("id"); id != "" {
-			entry.Resource = sql.NullString{String: id, Valid: true}
+			entry.Resource = store.NullString{String: id, Valid: true}
 		}
 		if ua := c.GetHeader("User-Agent"); ua != "" {
-			entry.UserAgent = sql.NullString{String: ua, Valid: true}
+			entry.UserAgent = store.NullString{String: ua, Valid: true}
 		}
 		_ = logs.Create(entry)
 	}

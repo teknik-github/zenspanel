@@ -113,15 +113,15 @@ type SSLCertificate struct {
 }
 
 type Backup struct {
-	ID        uint64         `db:"id" json:"id"`
-	UserID    uint64         `db:"user_id" json:"user_id"`
-	Type      string         `db:"type" json:"type"`
-	Status    string         `db:"status" json:"status"`
-	FilePath  sql.NullString `db:"file_path" json:"file_path"`
-	SizeBytes sql.NullInt64  `db:"size_bytes" json:"size_bytes"`
-	ErrorMsg  sql.NullString `db:"error_msg" json:"error_msg"`
-	CreatedAt time.Time      `db:"created_at" json:"created_at"`
-	UpdatedAt time.Time      `db:"updated_at" json:"updated_at"`
+	ID        uint64     `db:"id"         json:"id"`
+	UserID    uint64     `db:"user_id"    json:"user_id"`
+	Type      string     `db:"type"       json:"type"`
+	Status    string     `db:"status"     json:"status"`
+	FilePath  NullString `db:"file_path"  json:"file_path"`
+	SizeBytes NullInt64  `db:"size_bytes" json:"size_bytes"`
+	ErrorMsg  NullString `db:"error_msg"  json:"error_msg"`
+	CreatedAt time.Time  `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time  `db:"updated_at" json:"updated_at"`
 }
 
 type APIKey struct {
@@ -137,12 +137,12 @@ type APIKey struct {
 }
 
 type AuditLog struct {
-	ID        uint64         `db:"id" json:"id"`
-	UserID    sql.NullInt64  `db:"user_id" json:"user_id"`
-	Action    string         `db:"action" json:"action"`
-	Resource  sql.NullString `db:"resource" json:"resource"`
-	IPAddress string         `db:"ip_address" json:"ip_address"`
-	UserAgent sql.NullString `db:"user_agent" json:"user_agent"`
-	Meta      sql.NullString `db:"meta" json:"meta"`
-	CreatedAt time.Time      `db:"created_at" json:"created_at"`
+	ID        uint64     `db:"id"         json:"id"`
+	UserID    NullInt64  `db:"user_id"    json:"user_id"`
+	Action    string     `db:"action"     json:"action"`
+	Resource  NullString `db:"resource"   json:"resource"`
+	IPAddress string     `db:"ip_address" json:"ip_address"`
+	UserAgent NullString `db:"user_agent" json:"user_agent"`
+	Meta      NullString `db:"meta"       json:"meta"`
+	CreatedAt time.Time  `db:"created_at" json:"created_at"`
 }
