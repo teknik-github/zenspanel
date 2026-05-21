@@ -2,8 +2,10 @@
 import { onMounted, ref } from 'vue'
 import { useDatabasesStore } from '@/stores/databases'
 import { databasesApi } from '@/api/databases'
+import { useToast } from '../notify'
 
 const databasesStore = useDatabasesStore()
+const { error: toastError } = useToast()
 const showModal = ref(false)
 const newDBName = ref('')
 const newDBUser = ref('')
@@ -45,7 +47,7 @@ async function openPHPMyAdmin(id: number) {
       window.open(res.data.url, '_blank')
     }
   } catch (e: any) {
-    alert(e.response?.data?.error || 'Failed to open phpMyAdmin')
+    toastError(e.response?.data?.error || 'Failed to open phpMyAdmin')
   }
 }
 

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { antivirusApi } from '@/api/antivirus'
+import { useToast } from '../notify'
+
+const { error: toastError } = useToast()
 
 const daemonRunning = ref<boolean | null>(null)
 const scanning = ref(false)
@@ -88,7 +91,7 @@ async function toggleWatch() {
       watching.value = true
       startAlertPoll()
     } catch (e: any) {
-      alert(e.response?.data?.error || 'Failed to start realtime watch')
+      toastError(e.response?.data?.error || 'Failed to start realtime watch')
     }
   }
 }

@@ -2,8 +2,10 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { backupsApi } from '@/api/backups'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '../notify'
 
 const auth = useAuthStore()
+const { error: toastError } = useToast()
 const backups = ref<any[]>([])
 const showModal = ref(false)
 const backupType = ref<'full' | 'db' | 'files'>('full')
@@ -43,7 +45,7 @@ async function createBackup() {
     showModal.value = false
     await fetchBackups()
   } catch (e: any) {
-    alert(e?.response?.data?.error || 'Failed to create backup')
+    toastError(e?.response?.data?.error || 'Failed to create backup')
   } finally {
     loading.value = false
   }
@@ -59,7 +61,7 @@ async function downloadBackup(id: number, filename: string) {
     a.click()
     URL.revokeObjectURL(url)
   } catch (e: any) {
-    alert(e?.response?.data?.error || 'Failed to download backup')
+    toastError(e?.response?.data?.error || 'Failed to download backup')
   }
 }
 
@@ -69,7 +71,7 @@ async function restoreBackup(id: number) {
     confirmRestore.value = null
     await fetchBackups()
   } catch (e: any) {
-    alert(e?.response?.data?.error || 'Failed to restore backup')
+    toastError(e?.response?.data?.error || 'Failed to restore backup')
   }
 }
 
@@ -79,7 +81,7 @@ async function deleteBackup(id: number) {
     confirmDelete.value = null
     await fetchBackups()
   } catch (e: any) {
-    alert(e?.response?.data?.error || 'Failed to delete backup')
+    toastError(e?.response?.data?.error || 'Failed to delete backup')
   }
 }
 

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { systemApi, type UpdateInfo, type UpdateStatus } from '@/api/system'
+import { useConfirm, useToast } from '../notify'
+
+const { confirm } = useConfirm()
+const { error: toastError } = useToast()
 
 const updateInfo = ref<UpdateInfo | null>(null)
 const updateStatus = ref<UpdateStatus | null>(null)
@@ -73,7 +77,8 @@ async function applyUpdate() {
   const msg = usingDownload
     ? `Download release ${updateInfo.value?.release_tag} and restart? Services will be down for a few seconds.`
     : 'No pre-built release available — fall back to build-from-source? Build can use 1-2 GB RAM and may OOM small VPS hosts. Continue?'
-  if (!confirm(msg)) return
+  const ok = await confirm({ title: 'Apply Update', message: msg, confirmLabel: 'Apply', danger: !usingDownload })
+  if (!ok) return
   starting.value = true
   updateError.value = ''
   try {

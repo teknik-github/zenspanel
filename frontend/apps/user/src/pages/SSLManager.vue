@@ -3,11 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import { domainsApi } from '@/api/domains'
 import { sslApi } from '@/api/ssl'
 import { subdomainsApi } from '@/api/subdomains'
+import { useToast } from '../notify'
 
-// Both lists merged into a single rendered table. Each row carries a
-// `kind` discriminator so action handlers can route SSL calls through
-// either /domains/:id/ssl or /subdomains/:id/ssl. Backend endpoints
-// take the same JSON body shape, so the only branch needed is the URL.
+const { error: toastError } = useToast()
 type SSLRow = {
   kind: 'domain' | 'subdomain'
   id: number
@@ -86,7 +84,7 @@ async function issueLetsEncrypt(row: SSLRow) {
     }
     await refresh()
   } catch (e: any) {
-    alert(e?.response?.data?.error || 'Failed to issue certificate')
+    toastError(e?.response?.data?.error || 'Failed to issue certificate')
   } finally {
     delete pending.value[k]
   }
@@ -106,7 +104,7 @@ async function uploadCustomSSL() {
     keyPEM.value = ''
     await refresh()
   } catch (e: any) {
-    alert(e?.response?.data?.error || 'Failed to upload certificate')
+    toastError(e?.response?.data?.error || 'Failed to upload certificate')
   } finally {
     uploading.value = false
   }
@@ -124,7 +122,7 @@ async function removeSSL(row: SSLRow) {
     confirmRemove.value = null
     await refresh()
   } catch (e: any) {
-    alert(e?.response?.data?.error || 'Failed to remove certificate')
+    toastError(e?.response?.data?.error || 'Failed to remove certificate')
   } finally {
     delete pending.value[k]
   }
