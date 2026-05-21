@@ -6,6 +6,7 @@ import { phpVersionsApi } from '@/api/phpVersions'
 import { domainsApi } from '@/api/domains'
 import { subdomainsApi } from '@/api/subdomains'
 import { hotlinkApi } from '@/api/hotlink'
+import { backupsApi } from '@/api/backups'
 
 const router = useRouter()
 const domainsStore = useDomainsStore()
@@ -16,6 +17,50 @@ const newPHP = ref('8.3')
 const loading = ref(false)
 const confirmDelete = ref<number | null>(null)
 const loaded = ref(false)
+
+// Domain backup state
+const backupingDomain = ref<number | null>(null)
+const domainBackupJob = ref<any | null>(null) // {id, domain, status, file_path, error_msg}
+let backupPollTimer: ReturnType<typeof setInterval> | null = null
+
+async function startDomainBackup(domain: any) {
+  backupingDomain.value = domain.id
+  domainBackupJob.value = { id: null, domain: domain.domain, status: 'pending' }
+  try {
+    const res = await backupsApi.createDomain(domain.id)
+    domainBackupJob.value = { ...domainBackupJob.value, id: res.data.backup_id ?? res.data.id }
+    startBackupPoll()
+  } catch (e: any) {
+    domainBackupJob.value = { ...domainBackupJob.value, status: 'failed', error_msg: e?.response?.data?.error || 'Failed to start backup' }
+    backupingDomain.value = null
+  }
+}
+
+function startBackupPoll() {
+  stopBackupPoll()
+  backupPollTimer = setInterval(async () => {
+    if (!domainBackupJob.value?.id) return
+    try {
+      const res = await backupsApi.get(domainBackupJob.value.id)
+      const row = res.data
+      domainBackupJob.value = { ...domainBackupJob.value, ...row }
+      if (row.status === 'done' || row.status === 'failed') {
+        stopBackupPoll()
+        backupingDomain.value = null
+      }
+    } catch { stopBackupPoll(); backupingDomain.value = null }
+  }, 3000)
+}
+
+function stopBackupPoll() {
+  if (backupPollTimer) { clearInterval(backupPollTimer); backupPollTimer = null }
+}
+
+function closeDomainBackupModal() {
+  stopBackupPoll()
+  domainBackupJob.value = null
+  backupingDomain.value = null
+}
 
 // Subdomain state. We keep the expanded set + the lists keyed by parent
 // id in a reactive map so v-for has stable refs and we don't refetch on
@@ -264,6 +309,13 @@ async function deleteSubdomain() {
                       </svg>
                       <span class="hidden sm:inline">{{ (hotlinkState[d.id] ?? false) ? 'Hotlink On' : 'Hotlink Off' }}</span>
                     </button>
+                    <button @click="startDomainBackup(d)" :disabled="backupingDomain === d.id" title="Backup domain"
+                      class="text-xs text-amber-600 border border-amber-200 px-2 py-1 rounded hover:bg-amber-50 inline-flex items-center gap-1 transition-colors disabled:opacity-50">
+                      <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                      <span class="hidden sm:inline">{{ backupingDomain === d.id ? 'Backing up...' : 'Backup' }}</span>
+                    </button>
                     <button @click="confirmDelete = d.id" title="Delete domain" class="text-red-400 hover:text-red-600 transition-colors">
                       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
@@ -411,6 +463,48 @@ async function deleteSubdomain() {
           <button @click="deleteDomain(confirmDelete!)"
             class="flex-1 bg-red-600 text-white rounded-md py-2 text-sm hover:bg-red-700">Delete</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Domain backup status modal -->
+    <div v-if="domainBackupJob" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+        <h2 class="font-semibold text-gray-800 mb-1">Domain Backup</h2>
+        <p class="text-xs text-gray-400 mb-4 font-mono">{{ domainBackupJob.domain }}</p>
+        <div class="space-y-3">
+          <div class="flex items-center gap-3">
+            <svg v-if="domainBackupJob.status === 'pending' || domainBackupJob.status === 'running'"
+              class="w-5 h-5 text-indigo-500 animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
+            <svg v-else-if="domainBackupJob.status === 'done'"
+              class="w-5 h-5 text-green-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <svg v-else class="w-5 h-5 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <div>
+              <p class="text-sm font-medium text-gray-800 capitalize">{{ domainBackupJob.status }}</p>
+              <p v-if="domainBackupJob.error_msg" class="text-xs text-red-600 mt-0.5">{{ domainBackupJob.error_msg }}</p>
+              <p v-else-if="domainBackupJob.status === 'done'" class="text-xs text-gray-500 mt-0.5">
+                {{ domainBackupJob.size ? (domainBackupJob.size / 1048576).toFixed(1) + ' MB' : '' }}
+              </p>
+            </div>
+          </div>
+          <a v-if="domainBackupJob.status === 'done' && domainBackupJob.id"
+            :href="`/api/v1/backups/${domainBackupJob.id}/download`"
+            class="flex items-center justify-center gap-2 w-full bg-indigo-600 text-white text-sm py-2 rounded-md hover:bg-indigo-700 transition-colors">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download Backup
+          </a>
+        </div>
+        <button @click="closeDomainBackupModal"
+          class="mt-4 w-full border border-gray-200 text-gray-600 rounded-md py-2 text-sm hover:bg-gray-50">
+          {{ domainBackupJob.status === 'done' || domainBackupJob.status === 'failed' ? 'Close' : 'Close (backup continues in background)' }}
+        </button>
       </div>
     </div>
 

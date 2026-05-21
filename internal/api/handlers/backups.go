@@ -22,6 +22,7 @@ type BackupHandler struct {
 	users         *store.UserStore
 	databases     *store.DatabaseStore
 	BackupTargets *store.BackupTargetStore
+	Domains       *store.DomainStore
 	homeBase      string
 	backupBase    string
 	agentSock     string
@@ -36,6 +37,20 @@ func NewBackupHandler(backups *store.BackupStore, users *store.UserStore, databa
 		backupBase: backupBase,
 		agentSock:  agentSock,
 	}
+}
+
+func (h *BackupHandler) Get(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	row, err := h.backups.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "backup not found"})
+		return
+	}
+	if auth.GetRole(c) == "user" && row.UserID != auth.GetUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	c.JSON(http.StatusOK, row)
 }
 
 func (h *BackupHandler) List(c *gin.Context) {
@@ -307,4 +322,61 @@ func (h *BackupHandler) runBackup(id, userID uint64, username, kind string) {
 			}
 		}
 	}
+}
+
+// DomainBackup creates a backup of a single domain's docroot (V58).
+// Scoped to docroot only — no full home, no cross-domain data.
+func (h *BackupHandler) DomainBackup(c *gin.Context) {
+	domainID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	if h.Domains == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "domain store not configured"})
+		return
+	}
+	domain, err := h.Domains.GetByID(domainID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "domain not found"})
+		return
+	}
+	if auth.GetRole(c) == "user" && domain.UserID != auth.GetUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
+	user, err := h.users.GetByID(domain.UserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup user"})
+		return
+	}
+
+	// Create a backup row to track the job.
+	row := &store.Backup{
+		UserID: domain.UserID,
+		Type:   "domain",
+		Status: "pending",
+	}
+	if err := h.backups.Create(row); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	go h.runDomainBackup(row.ID, user.Username, domain.Domain, domain.DocumentRoot)
+	c.JSON(http.StatusAccepted, gin.H{"job_id": row.ID, "backup_id": row.ID})
+}
+
+func (h *BackupHandler) runDomainBackup(id uint64, username, domainName, docRoot string) {
+	_ = h.backups.UpdateStatus(id, "running", "", 0, "")
+
+	var result struct {
+		ArchivePath string `json:"archive_path"`
+		Size        int64  `json:"size"`
+	}
+	if err := agent.NewClient(h.agentSock).Call("backup.domain", map[string]interface{}{
+		"username":    username,
+		"doc_root":    docRoot,
+		"domain_name": domainName,
+	}, &result); err != nil {
+		_ = h.backups.UpdateStatus(id, "failed", "", 0, err.Error())
+		return
+	}
+	_ = h.backups.UpdateStatus(id, "done", result.ArchivePath, result.Size, "")
 }

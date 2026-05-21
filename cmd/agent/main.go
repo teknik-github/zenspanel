@@ -809,6 +809,22 @@ func main() {
 		return nil, agentbackup.RestoreDB(p.DBName, p.ArchivePath, dsn, cfg.Paths.BackupBase)
 	})
 
+	srv.Register("backup.domain", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username   string `json:"username"`
+			DocRoot    string `json:"doc_root"`
+			DomainName string `json:"domain_name"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		archivePath, size, err := agentbackup.BackupDomain(p.Username, p.DocRoot, cfg.Paths.BackupBase, p.DomainName)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"archive_path": archivePath, "size": size}, nil
+	})
+
 	// filemanager
 	srv.Register("filemanager.list", func(params json.RawMessage) (interface{}, error) {
 		var p struct {

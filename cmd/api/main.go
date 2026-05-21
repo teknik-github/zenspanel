@@ -97,6 +97,7 @@ func main() {
 	sslH := handlers.NewSSLHandler(domainStore, subdomainStore, cfg.Agent.Socket, cfg.LetsEncrypt.Email, cfg.LetsEncrypt.Staging)
 	backupsH := handlers.NewBackupHandler(backupStore, userStore, databaseStore, cfg.Paths.HomeBase, cfg.Paths.BackupBase, cfg.Agent.Socket)
 	backupsH.BackupTargets = backupTargetStore
+	backupsH.Domains = domainStore
 	filesH := handlers.NewFileManagerHandler(userStore, cfg.Agent.Socket)
 	systemH := handlers.NewSystemHandler(userStore, domainStore, databaseStore, cfg.Agent.Socket, version)
 	terminalH := handlers.NewTerminalHandler(userStore, cfg.Agent.Socket)

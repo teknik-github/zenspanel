@@ -368,10 +368,10 @@ V61: max_ftp_accounts per package. 0 = disabled. ⊥ unlimited FTP on restricted
 | T117 | x | admin panel: Packages page — add "Antivirus" checkbox to package form | I.frontend,V57 |
 | T118 | x | user panel: Antivirus page — check `auth.user.package.antivirus_enabled`; show "not available in your plan" if disabled | I.frontend,V57 |
 | T119 | x | `make build` + `pnpm -r build` clean | — |
-| T120 | . | `POST /api/v1/domains/:id/backup` user JWT → 202 `{job_id}` — backup domain docroot only (V58) | I.api,V58 |
-| T121 | . | `agent/backup/backup.go`: `BackupDomain(username, docroot, backupBase, jobID)` — tar docroot, async (V58,V33) | V58,V33 |
-| T122 | . | register `backup.domain` RPC @ `cmd/agent/main.go` | V58 |
-| T123 | . | user panel: Domains page — "Backup" button per domain row; status modal with download link | I.frontend,V58 |
+| T120 | x | `POST /api/v1/domains/:id/backup` user JWT → 202 `{job_id}` — backup domain docroot only (V58) | I.api,V58 |
+| T121 | x | `agent/backup/backup.go`: `BackupDomain(username, docroot, backupBase, jobID)` — tar docroot, async (V58,V33) | V58,V33 |
+| T122 | x | register `backup.domain` RPC @ `cmd/agent/main.go` | V58 |
+| T123 | x | user panel: Domains page — "Backup" button per domain row; status modal with download link | I.frontend,V58 |
 | T124 | . | migration 000022: `ftp_accounts` table (id, user_id, ftp_username, password_hash, home_dir, enabled) + add `max_ftp_accounts INT DEFAULT 0` to packages | I.db |
 | T125 | . | `agent/ftp/ftp.go`: `CreateAccount(ftpUser, password, homeDir)` + `DeleteAccount(ftpUser)` — manage vsftpd virtual users via PAM/db (V59,V60) | V59,V60 |
 | T126 | . | register `ftp.create` + `ftp.delete` RPCs @ `cmd/agent/main.go` | V59 |
