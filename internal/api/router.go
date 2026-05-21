@@ -39,6 +39,7 @@ type Router struct {
 	files         *handlers.FileManagerHandler
 	system        *handlers.SystemHandler
 	terminal      *handlers.TerminalHandler
+	ftp           *handlers.FTPHandler
 	apiKeyStore   *store.APIKeyStore
 	auditLogStore *store.AuditLogStore
 	redis         *redis.Client
@@ -70,6 +71,7 @@ func NewRouter(
 	filesH *handlers.FileManagerHandler,
 	systemH *handlers.SystemHandler,
 	terminalH *handlers.TerminalHandler,
+	ftpH *handlers.FTPHandler,
 	apiKeyStore *store.APIKeyStore,
 	auditLogStore *store.AuditLogStore,
 	rdb *redis.Client,
@@ -100,6 +102,7 @@ func NewRouter(
 		files:         filesH,
 		system:        systemH,
 		terminal:      terminalH,
+		ftp:           ftpH,
 		apiKeyStore:   apiKeyStore,
 		auditLogStore: auditLogStore,
 		redis:         rdb,
@@ -305,6 +308,11 @@ func (r *Router) Setup() *gin.Engine {
 		api.POST("/files/copy", r.files.Copy)
 		api.POST("/files/compress", r.files.Compress)
 		api.POST("/files/extract", r.files.Extract)
+
+		// ftp accounts
+		api.GET("/ftp", r.ftp.List)
+		api.POST("/ftp", r.ftp.Create)
+		api.DELETE("/ftp/:id", r.ftp.Delete)
 
 		// terminal — token endpoint is JWT-gated; the WS endpoint that
 		// redeems the token is registered above outside this group.

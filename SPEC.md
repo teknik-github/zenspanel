@@ -372,16 +372,16 @@ V61: max_ftp_accounts per package. 0 = disabled. ⊥ unlimited FTP on restricted
 | T121 | x | `agent/backup/backup.go`: `BackupDomain(username, docroot, backupBase, jobID)` — tar docroot, async (V58,V33) | V58,V33 |
 | T122 | x | register `backup.domain` RPC @ `cmd/agent/main.go` | V58 |
 | T123 | x | user panel: Domains page — "Backup" button per domain row; status modal with download link | I.frontend,V58 |
-| T124 | . | migration 000022: `ftp_accounts` table (id, user_id, ftp_username, password_hash, home_dir, enabled) + add `max_ftp_accounts INT DEFAULT 0` to packages | I.db |
-| T125 | . | `agent/ftp/ftp.go`: `CreateAccount(ftpUser, password, homeDir)` + `DeleteAccount(ftpUser)` — manage vsftpd virtual users via PAM/db (V59,V60) | V59,V60 |
-| T126 | . | register `ftp.create` + `ftp.delete` RPCs @ `cmd/agent/main.go` | V59 |
-| T127 | . | `internal/store/ftpaccounts.go`: FTPAccount model + store (List, Create, Delete, CountByUserID) | I.db,V61 |
-| T128 | . | `internal/api/handlers/ftp.go`: List/Create/Delete — ownership check, quota check vs package.max_ftp_accounts (V61) | I.api,V61 |
-| T129 | . | wire FTP routes + construct FTPHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
-| T130 | . | admin panel: Packages page — add `max_ftp_accounts` field (0=disabled) | I.frontend,V61 |
-| T131 | . | user panel: FTP Accounts page — list accounts, create (username+password), delete; show server/port info | I.frontend,V59 |
-| T132 | . | `scripts/install.sh`: install vsftpd, configure virtual users via PAM + db file, enable passive mode | — |
-| T133 | . | `make build` + `pnpm -r build` clean | — |
+| T124 | x | migration 000022: `ftp_accounts` table (id, user_id, ftp_username, password_hash, home_dir, enabled) + add `max_ftp_accounts INT DEFAULT 0` to packages | I.db |
+| T125 | x | `agent/ftp/ftp.go`: `CreateAccount(ftpUser, password, homeDir)` + `DeleteAccount(ftpUser)` — manage vsftpd virtual users via PAM/db (V59,V60) | V59,V60 |
+| T126 | x | register `ftp.create` + `ftp.delete` RPCs @ `cmd/agent/main.go` | V59 |
+| T127 | x | `internal/store/ftpaccounts.go`: FTPAccount model + store (List, Create, Delete, CountByUserID) | I.db,V61 |
+| T128 | x | `internal/api/handlers/ftp.go`: List/Create/Delete — ownership check, quota check vs package.max_ftp_accounts (V61) | I.api,V61 |
+| T129 | x | wire FTP routes + construct FTPHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T130 | x | admin panel: Packages page — add `max_ftp_accounts` field (0=disabled) | I.frontend,V61 |
+| T131 | x | user panel: FTP Accounts page — list accounts, create (username+password), delete; show server/port info | I.frontend,V59 |
+| T132 | x | `scripts/install.sh`: install vsftpd, configure virtual users via PAM + db file, enable passive mode | — |
+| T133 | x | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 

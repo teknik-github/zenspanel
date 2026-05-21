@@ -388,6 +388,81 @@ install_clamav() {
     log_info "ClamAV installed ✓"
 }
 
+setup_vsftpd() {
+    log_section "Setting up vsftpd (FTP server)"
+
+    apt-get install -y -qq vsftpd db-util libpam-pwdfile || {
+        log_warn "vsftpd install failed, skipping FTP support"
+        return 0
+    }
+
+    # Create virtual user system account (no login shell, no home)
+    if ! id vsftpd_virtual &>/dev/null; then
+        useradd -r -d /dev/null -s /sbin/nologin vsftpd_virtual || true
+    fi
+
+    # Create vsftpd config directory for per-user configs
+    mkdir -p /etc/vsftpd/users
+    touch /etc/vsftpd/virtual_users.txt
+    chmod 600 /etc/vsftpd/virtual_users.txt
+
+    # Build initial (empty) PAM DB
+    db_load -T -t hash -f /etc/vsftpd/virtual_users.txt /etc/vsftpd/virtual_users.db 2>/dev/null || true
+    chmod 600 /etc/vsftpd/virtual_users.db
+
+    # PAM config for vsftpd virtual users
+    cat > /etc/pam.d/vsftpd <<'PAMEOF'
+auth    required pam_userdb.so db=/etc/vsftpd/virtual_users
+account required pam_userdb.so db=/etc/vsftpd/virtual_users
+PAMEOF
+
+    # vsftpd main config
+    cat > /etc/vsftpd.conf <<VSFTPDEOF
+listen=YES
+listen_ipv6=NO
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+local_umask=022
+dirmessage_enable=YES
+use_localtime=YES
+xferlog_enable=YES
+connect_from_port_20=YES
+xferlog_file=/var/log/vsftpd.log
+xferlog_std_format=YES
+idle_session_timeout=600
+data_connection_timeout=120
+ftpd_banner=FTP Service Ready
+
+# Virtual users
+guest_enable=YES
+guest_username=vsftpd_virtual
+virtual_use_local_privs=YES
+pam_service_name=vsftpd
+user_config_dir=/etc/vsftpd/users
+
+# Passive mode — adjust PASV_ADDRESS to your server's public IP
+pasv_enable=YES
+pasv_min_port=40000
+pasv_max_port=40100
+# pasv_address=YOUR_PUBLIC_IP
+
+# Chroot virtual users to their home dir
+chroot_local_user=YES
+allow_writeable_chroot=YES
+
+# SSL/TLS (optional — enable after placing certs)
+# ssl_enable=YES
+# rsa_cert_file=/etc/ssl/certs/vsftpd.pem
+# rsa_private_key_file=/etc/ssl/private/vsftpd.key
+VSFTPDEOF
+
+    systemctl enable vsftpd --quiet
+    systemctl restart vsftpd || log_warn "vsftpd start failed"
+
+    log_info "vsftpd installed ✓ (FTP on port 21, passive 40000-40100)"
+}
+
 install_go() {
     log_section "Installing Go ${GO_VERSION}"
 
@@ -1341,6 +1416,7 @@ BANNER
     setup_firewall
     setup_cgroups
     setup_quota
+    setup_vsftpd
     setup_logrotate
     save_install_info
     print_summary

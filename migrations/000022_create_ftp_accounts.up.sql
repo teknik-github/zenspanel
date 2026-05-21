@@ -1,0 +1,16 @@
+CREATE TABLE ftp_accounts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id BIGINT UNSIGNED NOT NULL,
+    ftp_username VARCHAR(64) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    home_dir VARCHAR(512) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_ftp_username (ftp_username),
+    KEY idx_ftp_user_id (user_id),
+    CONSTRAINT fk_ftp_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE packages ADD COLUMN max_ftp_accounts INT NOT NULL DEFAULT 0;

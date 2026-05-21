@@ -37,11 +37,23 @@ type Package struct {
 	IOReadBps          int64     `db:"io_read_bps" json:"io_read_bps"`
 	IOWriteBps         int64     `db:"io_write_bps" json:"io_write_bps"`
 	AntivirusEnabled   bool      `db:"antivirus_enabled" json:"antivirus_enabled"`
+	MaxFTPAccounts     int       `db:"max_ftp_accounts" json:"max_ftp_accounts"`
 	PHPVersionsAllowed string    `db:"php_versions_allowed" json:"php_versions_allowed"`
 	TerminalEnabled    bool      `db:"terminal_enabled" json:"terminal_enabled"`
 	BackupEnabled      bool      `db:"backup_enabled" json:"backup_enabled"`
 	CreatedAt          time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt          time.Time `db:"updated_at" json:"updated_at"`
+}
+
+type FTPAccount struct {
+	ID           uint64    `db:"id" json:"id"`
+	UserID       uint64    `db:"user_id" json:"user_id"`
+	FTPUsername  string    `db:"ftp_username" json:"ftp_username"`
+	PasswordHash string    `db:"password_hash" json:"-"`
+	HomeDir      string    `db:"home_dir" json:"home_dir"`
+	Enabled      bool      `db:"enabled" json:"enabled"`
+	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at" json:"updated_at"`
 }
 
 type Domain struct {

@@ -60,6 +60,7 @@ const navGroups = computed(() => [
       { path: '/installer', label: 'Website Installer', icon: 'download', show: true },
       { path: '/redirects', label: 'Redirects', icon: 'corner-down-right', show: true },
       { path: '/antivirus', label: 'Antivirus', icon: 'shield-check', show: true },
+      { path: '/ftp', label: 'FTP Accounts', icon: 'hard-drive', show: true },
       { path: '/file-manager', label: 'File Manager', icon: 'folder', show: true, external: true },
       { path: '/cron-jobs', label: 'Cron Jobs', icon: 'clock', show: true },
       { path: '/logs', label: 'Error Logs', icon: 'file-text', show: true },
@@ -89,6 +90,7 @@ const pageTitle = computed(() => {
     '/installer': 'Website Installer',
     '/redirects': 'Redirects',
     '/antivirus': 'Antivirus',
+    '/ftp': 'FTP Accounts',
   }
   return titles[route.path] || ''
 })

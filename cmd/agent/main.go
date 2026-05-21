@@ -26,6 +26,7 @@ import (
 	agentterminal "github.com/zenspanel/zenspanel/agent/terminal"
 	agentupdater "github.com/zenspanel/zenspanel/agent/updater"
 	agentuser "github.com/zenspanel/zenspanel/agent/user"
+	agentftp "github.com/zenspanel/zenspanel/agent/ftp"
 	"github.com/zenspanel/zenspanel/internal/config"
 )
 
@@ -969,6 +970,30 @@ func main() {
 			return nil, err
 		}
 		return nil, agentfilemanager.Extract(p.Username, cfg.Paths.HomeBase, p.Archive, p.DstDir)
+	})
+
+	// ftp
+	srv.Register("ftp.create", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			FTPUsername   string `json:"ftp_username"`
+			Password      string `json:"password"`
+			HomeDir       string `json:"home_dir"`
+			PanelUsername string `json:"panel_username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentftp.CreateAccount(p.FTPUsername, p.Password, p.HomeDir, p.PanelUsername)
+	})
+
+	srv.Register("ftp.delete", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			FTPUsername string `json:"ftp_username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentftp.DeleteAccount(p.FTPUsername)
 	})
 
 	log.Printf("ZensPanel Agent starting, socket: %s", cfg.Agent.Socket)

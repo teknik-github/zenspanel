@@ -25,6 +25,7 @@ const router = createRouter({
         { path: 'installer', component: () => import('@/pages/Installer.vue') },
         { path: 'redirects', component: () => import('@/pages/Redirects.vue') },
         { path: 'antivirus', component: () => import('@/pages/Antivirus.vue') },
+        { path: 'ftp', component: () => import('@/pages/FTPAccounts.vue') },
       ],
     },
   ],

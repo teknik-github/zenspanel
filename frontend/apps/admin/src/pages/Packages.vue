@@ -21,6 +21,7 @@ const defaultForm = () => ({
   max_procs: 200,
   io_read_mbps: 0,
   io_write_mbps: 0,
+  max_ftp_accounts: 0,
   php_versions_allowed: '["8.3","8.2","8.1"]',
   terminal_enabled: false,
   backup_enabled: false,
@@ -150,6 +151,7 @@ function formatBytes(bytes: number) {
           <div class="flex justify-between"><span>Domains</span><span class="font-medium text-gray-700">{{ pkg.max_domains }}</span></div>
           <div class="flex justify-between"><span>Databases</span><span class="font-medium text-gray-700">{{ pkg.max_databases }}</span></div>
           <div class="flex justify-between"><span>Max Procs</span><span class="font-medium text-gray-700">{{ pkg.max_procs ?? 200 }}</span></div>
+          <div class="flex justify-between"><span>FTP Accounts</span><span class="font-medium text-gray-700">{{ pkg.max_ftp_accounts === 0 ? 'Disabled' : pkg.max_ftp_accounts }}</span></div>
           <div v-if="pkg.io_read_mbps || pkg.io_write_mbps" class="flex justify-between">
             <span>I/O</span>
             <span class="font-medium text-gray-700">
@@ -212,6 +214,12 @@ function formatBytes(bytes: number) {
               <input v-model.number="form.max_procs" type="number" min="10" placeholder="200"
                 class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               <p class="text-[10px] text-gray-400 mt-0.5">Prevents fork bombs. Default: 200</p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Max FTP Accounts</label>
+              <input v-model.number="form.max_ftp_accounts" type="number" min="0" placeholder="0 = disabled"
+                class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <p class="text-[10px] text-gray-400 mt-0.5">0 = FTP disabled for this package</p>
             </div>
             <div>
               <label class="block text-xs font-medium text-gray-600 mb-1">I/O Read Limit (MB/s)</label>
