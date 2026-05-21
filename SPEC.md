@@ -339,9 +339,9 @@ V55: nginx config write for redirect/hotlink ! shell string interpolation. use t
 | T94 | x | `internal/api/handlers/packages.go`: accept `disk_quota_mb` + `memory_limit_mb` in Create/Update, convert MB→bytes before store (V49) | V49 |
 | T95 | x | admin panel: Packages page — change disk_quota + memory_limit inputs to MB with unit label | I.frontend,V49 |
 | T96 | x | `make build` + `pnpm -r build` clean | — |
-| T97 | . | extend `agent/installer/installer.go` catalog: add Joomla 5, Drupal 10, PrestaShop 8, CodeIgniter 4, plain PHP starter (V52) | V52 |
-| T98 | . | implement `installJoomla`, `installDrupal`, `installPrestaShop`, `installCodeIgniter` in agent/installer (V33,V52) | V33,V52 |
-| T99 | . | user panel: Installer page — add new app cards, show version badges | I.frontend |
+| T97 | x | extend `agent/installer/installer.go` catalog: add Joomla 5, Drupal 10, PrestaShop 8, CodeIgniter 4, plain PHP starter (V52) | V52 |
+| T98 | x | implement `installJoomla`, `installDrupal`, `installPrestaShop`, `installCodeIgniter` in agent/installer (V33,V52) | V33,V52 |
+| T99 | x | user panel: Installer page — add new app cards, show version badges | I.frontend |
 | T100 | . | migration 000020: `domain_redirects` table (id, domain_id, source_path, dest_url, type, enabled) | I.db |
 | T101 | . | `internal/store/redirects.go`: DomainRedirect model + store (List, Create, Update, Delete) | I.db,V53 |
 | T102 | . | `agent/nginx/nginx.go`: `SyncRedirects(domain string, redirects []Redirect)` — rewrite redirect block in vhost (V55) | V55 |

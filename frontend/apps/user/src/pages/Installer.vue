@@ -36,10 +36,6 @@ function selectApp(app: any) {
   jobStatus.value = null
 }
 
-function needsDB(appId: string) {
-  return appId === 'wordpress' || appId === 'laravel'
-}
-
 async function install() {
   if (!selectedApp.value || !selectedDomain.value) return
   error.value = ''
@@ -98,9 +94,18 @@ function reset() {
 }
 
 const appIcons: Record<string, string> = {
-  wordpress: '🌐',
-  laravel:   '🔺',
-  html:      '📄',
+  wordpress:   '🌐',
+  joomla:      '🔵',
+  drupal:      '💧',
+  prestashop:  '🛒',
+  codeigniter: '🔥',
+  laravel:     '🔺',
+  html:        '📄',
+}
+
+function needsDB(appId: string) {
+  const app = apps.value.find((a: any) => a.id === appId)
+  return app?.requires_db ?? (appId === 'wordpress' || appId === 'laravel' || appId === 'joomla' || appId === 'drupal' || appId === 'prestashop')
 }
 </script>
 
@@ -109,13 +114,17 @@ const appIcons: Record<string, string> = {
     <h1 class="text-lg font-semibold text-gray-800">Website Installer</h1>
 
     <!-- App selection -->
-    <div v-if="!selectedApp" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div v-if="!selectedApp" class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3">
       <button v-for="app in apps" :key="app.id" @click="selectApp(app)"
         class="bg-white border border-gray-200 rounded-lg p-4 text-left hover:border-indigo-400 hover:shadow-sm transition-all">
         <div class="text-2xl mb-2">{{ appIcons[app.id] || '📦' }}</div>
         <div class="text-sm font-semibold text-gray-800">{{ app.name }}</div>
         <div class="text-xs text-gray-400 mt-0.5" v-if="app.version !== '—'">v{{ app.version }}</div>
         <div class="text-xs text-gray-500 mt-2">{{ app.description }}</div>
+        <div class="mt-2 flex gap-1">
+          <span v-if="app.requires_db" class="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">DB required</span>
+          <span v-else class="text-[10px] bg-gray-50 text-gray-400 px-1.5 py-0.5 rounded">No DB</span>
+        </div>
       </button>
     </div>
 

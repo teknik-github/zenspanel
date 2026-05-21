@@ -18,28 +18,68 @@ type App struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`
 	Description string `json:"description"`
+	RequiresDB  bool   `json:"requires_db"`
+	DownloadURL string `json:"download_url"`
 }
 
 // Catalog is the list of supported apps. Versions are pinned so installs
-// are reproducible; bump them when a new stable release ships.
+// are reproducible; bump them when a new stable release ships (V52).
 var Catalog = []App{
 	{
 		ID:          "wordpress",
 		Name:        "WordPress",
 		Version:     "6.5.3",
 		Description: "The world's most popular CMS. Requires a MySQL database.",
+		RequiresDB:  true,
+		DownloadURL: "https://wordpress.org/wordpress-6.5.3.tar.gz",
+	},
+	{
+		ID:          "joomla",
+		Name:        "Joomla",
+		Version:     "5.1.2",
+		Description: "Flexible CMS for websites and web applications. Requires MySQL.",
+		RequiresDB:  true,
+		DownloadURL: "https://downloads.joomla.org/cms/joomla5/5-1-2/Joomla_5.1.2-Stable-Full_Package.tar.gz",
+	},
+	{
+		ID:          "drupal",
+		Name:        "Drupal",
+		Version:     "10.3.0",
+		Description: "Enterprise-grade CMS. Requires MySQL.",
+		RequiresDB:  true,
+		DownloadURL: "https://ftp.drupal.org/files/projects/drupal-10.3.0.tar.gz",
+	},
+	{
+		ID:          "prestashop",
+		Name:        "PrestaShop",
+		Version:     "8.1.7",
+		Description: "Open-source e-commerce platform. Requires MySQL.",
+		RequiresDB:  true,
+		DownloadURL: "https://github.com/PrestaShop/PrestaShop/releases/download/8.1.7/prestashop_8.1.7.zip",
+	},
+	{
+		ID:          "codeigniter",
+		Name:        "CodeIgniter",
+		Version:     "4.5.1",
+		Description: "Lightweight PHP framework. No database required.",
+		RequiresDB:  false,
+		DownloadURL: "https://github.com/CodeIgniter/CodeIgniter4/releases/download/v4.5.1/framework-4.5.1.zip",
 	},
 	{
 		ID:          "laravel",
 		Name:        "Laravel",
 		Version:     "11",
 		Description: "PHP web application framework. Installs via Composer.",
+		RequiresDB:  true,
+		DownloadURL: "",
 	},
 	{
 		ID:          "html",
 		Name:        "Plain HTML",
 		Version:     "—",
 		Description: "A simple index.html starter page. No database required.",
+		RequiresDB:  false,
+		DownloadURL: "",
 	},
 }
 
@@ -170,6 +210,14 @@ func runInstall(j *JobStatus, p RunParams) error {
 	switch p.AppID {
 	case "wordpress":
 		return installWordPress(j, p)
+	case "joomla":
+		return installJoomla(j, p)
+	case "drupal":
+		return installDrupal(j, p)
+	case "prestashop":
+		return installPrestaShop(j, p)
+	case "codeigniter":
+		return installCodeIgniter(j, p)
 	case "laravel":
 		return installLaravel(j, p)
 	case "html":
@@ -340,5 +388,186 @@ h1{color:#4f46e5;margin-bottom:.5rem}p{color:#6b7280}</style>
 	if err := chownR(p.DocRoot, p.Username); err != nil {
 		j.log("WARN: chown failed: " + err.Error())
 	}
+	return nil
+}
+
+// downloadAndExtract downloads a tarball or zip to a temp dir and returns
+// the path. Caller is responsible for cleanup via defer os.RemoveAll.
+func downloadAndExtract(j *JobStatus, jobID, url, ext string) (string, error) {
+	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("zp-install-%s%s", jobID, ext))
+	defer os.Remove(tmpFile)
+
+	j.log("Downloading " + url)
+	if out, err := exec.Command("curl", "-fsSL", "-o", tmpFile, url).CombinedOutput(); err != nil {
+		return "", fmt.Errorf("download: %w: %s", err, out)
+	}
+
+	tmpDir := filepath.Join(os.TempDir(), "zp-extract-"+jobID)
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		return "", fmt.Errorf("mkdir: %w", err)
+	}
+
+	j.log("Extracting...")
+	var cmd *exec.Cmd
+	if ext == ".zip" {
+		cmd = exec.Command("unzip", "-q", tmpFile, "-d", tmpDir)
+	} else {
+		cmd = exec.Command("tar", "-xzf", tmpFile, "-C", tmpDir)
+	}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("extract: %w: %s", err, out)
+	}
+	return tmpDir, nil
+}
+
+// deployDir copies src/* to docroot and chowns to username (V33).
+func deployDir(j *JobStatus, src, docroot, username string) error {
+	j.setPhase("deploying")
+	if out, err := exec.Command("rsync", "-a", "--delete", src+"/", docroot+"/").CombinedOutput(); err != nil {
+		if out2, err2 := exec.Command("cp", "-r", src+"/.", docroot+"/").CombinedOutput(); err2 != nil {
+			return fmt.Errorf("deploy: %w: %s %s", err, out, out2)
+		}
+	}
+	j.setPhase("setting_permissions")
+	if err := chownR(docroot, username); err != nil {
+		j.log("WARN: chown failed: " + err.Error())
+	}
+	return nil
+}
+
+func installJoomla(j *JobStatus, p RunParams) error {
+	j.setPhase("downloading")
+	tmpDir, err := downloadAndExtract(j, p.JobID, "https://downloads.joomla.org/cms/joomla5/5-1-2/Joomla_5.1.2-Stable-Full_Package.tar.gz", ".tar.gz")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Joomla extracts directly into tmpDir (no subdirectory).
+	if err := deployDir(j, tmpDir, p.DocRoot, p.Username); err != nil {
+		return err
+	}
+
+	// Write configuration.php with DB settings.
+	j.setPhase("configuring")
+	configPath := filepath.Join(p.DocRoot, "configuration.php")
+	config := fmt.Sprintf(`<?php
+class JConfig {
+	public $dbtype = 'mysqli';
+	public $host = '%s';
+	public $user = '%s';
+	public $password = '%s';
+	public $db = '%s';
+	public $dbprefix = 'jos_';
+	public $live_site = '';
+	public $secret = 'changeme';
+	public $sef = '1';
+	public $sef_rewrite = '1';
+}`, p.DBHost, p.DBUser, p.DBPass, p.DBName)
+	_ = os.WriteFile(configPath, []byte(config), 0644)
+	_ = chownR(p.DocRoot, p.Username)
+	return nil
+}
+
+func installDrupal(j *JobStatus, p RunParams) error {
+	j.setPhase("downloading")
+	tmpDir, err := downloadAndExtract(j, p.JobID, "https://ftp.drupal.org/files/projects/drupal-10.3.0.tar.gz", ".tar.gz")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Drupal extracts to tmpDir/drupal-10.3.0/
+	entries, _ := os.ReadDir(tmpDir)
+	src := tmpDir
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "drupal") {
+			src = filepath.Join(tmpDir, e.Name())
+			break
+		}
+	}
+
+	if err := deployDir(j, src, p.DocRoot, p.Username); err != nil {
+		return err
+	}
+
+	// Create sites/default/settings.php from default.settings.php.
+	j.setPhase("configuring")
+	defaultSettings := filepath.Join(p.DocRoot, "sites", "default", "default.settings.php")
+	settings := filepath.Join(p.DocRoot, "sites", "default", "settings.php")
+	if data, err := os.ReadFile(defaultSettings); err == nil {
+		s := string(data)
+		dbURL := fmt.Sprintf("mysql://%s:%s@%s/%s", p.DBUser, p.DBPass, p.DBHost, p.DBName)
+		s += fmt.Sprintf("\n$databases['default']['default'] = \\Drupal\\Core\\Database\\Database::convertDbUrlToConnectionInfo('%s', DRUPAL_ROOT);\n", dbURL)
+		_ = os.WriteFile(settings, []byte(s), 0644)
+	}
+	_ = os.MkdirAll(filepath.Join(p.DocRoot, "sites", "default", "files"), 0755)
+	_ = chownR(p.DocRoot, p.Username)
+	return nil
+}
+
+func installPrestaShop(j *JobStatus, p RunParams) error {
+	j.setPhase("downloading")
+	tmpDir, err := downloadAndExtract(j, p.JobID, "https://github.com/PrestaShop/PrestaShop/releases/download/8.1.7/prestashop_8.1.7.zip", ".zip")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// PrestaShop zip contains prestashop.zip inside — extract that too.
+	innerZip := filepath.Join(tmpDir, "prestashop.zip")
+	innerDir := filepath.Join(tmpDir, "prestashop-inner")
+	if _, err := os.Stat(innerZip); err == nil {
+		_ = os.MkdirAll(innerDir, 0755)
+		if out, err := exec.Command("unzip", "-q", innerZip, "-d", innerDir).CombinedOutput(); err != nil {
+			j.log("WARN: inner unzip: " + string(out))
+		}
+		if err := deployDir(j, innerDir, p.DocRoot, p.Username); err != nil {
+			return err
+		}
+	} else {
+		if err := deployDir(j, tmpDir, p.DocRoot, p.Username); err != nil {
+			return err
+		}
+	}
+	j.log("PrestaShop deployed. Complete installation via web browser.")
+	return nil
+}
+
+func installCodeIgniter(j *JobStatus, p RunParams) error {
+	j.setPhase("downloading")
+	tmpDir, err := downloadAndExtract(j, p.JobID, "https://github.com/CodeIgniter/CodeIgniter4/releases/download/v4.5.1/framework-4.5.1.zip", ".zip")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// CodeIgniter zip extracts to CodeIgniter4-framework-4.5.1/
+	entries, _ := os.ReadDir(tmpDir)
+	src := tmpDir
+	for _, e := range entries {
+		if e.IsDir() {
+			src = filepath.Join(tmpDir, e.Name())
+			break
+		}
+	}
+
+	if err := deployDir(j, src, p.DocRoot, p.Username); err != nil {
+		return err
+	}
+
+	// Write .env with DB settings.
+	j.setPhase("configuring")
+	envPath := filepath.Join(p.DocRoot, ".env")
+	envContent := fmt.Sprintf(`CI_ENVIRONMENT = production
+database.default.hostname = %s
+database.default.database = %s
+database.default.username = %s
+database.default.password = %s
+database.default.DBDriver = MySQLi
+`, p.DBHost, p.DBName, p.DBUser, p.DBPass)
+	_ = os.WriteFile(envPath, []byte(envContent), 0644)
+	_ = chownR(p.DocRoot, p.Username)
 	return nil
 }
