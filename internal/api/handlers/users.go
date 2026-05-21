@@ -29,6 +29,9 @@ type packageRequest struct {
 	MaxDomains         int    `json:"max_domains"`
 	MaxDatabases       int    `json:"max_databases"`
 	MaxCronJobs        int    `json:"max_cron_jobs"`
+	MaxProcs           int    `json:"max_procs"`
+	IOReadMbps         int64  `json:"io_read_mbps"`
+	IOWriteMbps        int64  `json:"io_write_mbps"`
 	PHPVersionsAllowed string `json:"php_versions_allowed"`
 	TerminalEnabled    bool   `json:"terminal_enabled"`
 	BackupEnabled      bool   `json:"backup_enabled"`
@@ -43,6 +46,9 @@ func (r packageRequest) toPackage() store.Package {
 		MaxDomains:         r.MaxDomains,
 		MaxDatabases:       r.MaxDatabases,
 		MaxCronJobs:        r.MaxCronJobs,
+		MaxProcs:           r.MaxProcs,
+		IOReadBps:          r.IOReadMbps * 1024 * 1024,
+		IOWriteBps:         r.IOWriteMbps * 1024 * 1024,
 		PHPVersionsAllowed: r.PHPVersionsAllowed,
 		TerminalEnabled:    r.TerminalEnabled,
 		BackupEnabled:      r.BackupEnabled,
@@ -62,6 +68,11 @@ func packageResponse(p store.Package) map[string]interface{} {
 		"max_domains":          p.MaxDomains,
 		"max_databases":        p.MaxDatabases,
 		"max_cron_jobs":        p.MaxCronJobs,
+		"max_procs":            p.MaxProcs,
+		"io_read_bps":          p.IOReadBps,
+		"io_read_mbps":         p.IOReadBps / (1024 * 1024),
+		"io_write_bps":         p.IOWriteBps,
+		"io_write_mbps":        p.IOWriteBps / (1024 * 1024),
 		"php_versions_allowed": p.PHPVersionsAllowed,
 		"terminal_enabled":     p.TerminalEnabled,
 		"backup_enabled":       p.BackupEnabled,
@@ -304,6 +315,9 @@ func (h *UserHandler) Create(c *gin.Context) {
 				"username":     user.Username,
 				"cpu_quota":    pkg.CPUQuota,
 				"memory_limit": pkg.MemoryLimit,
+				"max_procs":    pkg.MaxProcs,
+				"io_read_bps":  pkg.IOReadBps,
+				"io_write_bps": pkg.IOWriteBps,
 			}, nil); err != nil {
 				provisionWarnings = append(provisionWarnings, "cgroups: "+err.Error())
 			}
@@ -552,6 +566,9 @@ func (h *UserHandler) ChangePackage(c *gin.Context) {
 			"username":     user.Username,
 			"cpu_quota":    pkg.CPUQuota,
 			"memory_limit": pkg.MemoryLimit,
+			"max_procs":    pkg.MaxProcs,
+			"io_read_bps":  pkg.IOReadBps,
+			"io_write_bps": pkg.IOWriteBps,
 		}, nil)
 		if pkg.DiskQuota > 0 {
 			_ = agentClient.Call("quota.set", map[string]interface{}{

@@ -18,6 +18,9 @@ const defaultForm = () => ({
   max_domains: 5,
   max_databases: 5,
   max_cron_jobs: 10,
+  max_procs: 200,
+  io_read_mbps: 0,
+  io_write_mbps: 0,
   php_versions_allowed: '["8.3","8.2","8.1"]',
   terminal_enabled: false,
   backup_enabled: false,
@@ -44,6 +47,9 @@ function openEdit(pkg: any) {
     ...pkg,
     memory_limit_mb: pkg.memory_limit_mb ?? Math.round(pkg.memory_limit / (1024 * 1024)),
     disk_quota_mb: pkg.disk_quota_mb ?? Math.round(pkg.disk_quota / (1024 * 1024)),
+    max_procs: pkg.max_procs ?? 200,
+    io_read_mbps: pkg.io_read_mbps ?? 0,
+    io_write_mbps: pkg.io_write_mbps ?? 0,
   }
   showModal.value = true
 }
@@ -142,6 +148,13 @@ function formatBytes(bytes: number) {
           <div class="flex justify-between"><span>Disk</span><span class="font-medium text-gray-700">{{ pkg.disk_quota_mb ?? Math.round(pkg.disk_quota / 1048576) }} MB</span></div>
           <div class="flex justify-between"><span>Domains</span><span class="font-medium text-gray-700">{{ pkg.max_domains }}</span></div>
           <div class="flex justify-between"><span>Databases</span><span class="font-medium text-gray-700">{{ pkg.max_databases }}</span></div>
+          <div class="flex justify-between"><span>Max Procs</span><span class="font-medium text-gray-700">{{ pkg.max_procs ?? 200 }}</span></div>
+          <div v-if="pkg.io_read_mbps || pkg.io_write_mbps" class="flex justify-between">
+            <span>I/O</span>
+            <span class="font-medium text-gray-700">
+              R:{{ pkg.io_read_mbps ?? 0 }} / W:{{ pkg.io_write_mbps ?? 0 }} MB/s
+            </span>
+          </div>
         </div>
         <div class="flex gap-2 text-[10px] flex-wrap">
           <span v-if="pkg.terminal_enabled" class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">Terminal</span>
@@ -191,6 +204,28 @@ function formatBytes(bytes: number) {
               <label class="block text-xs font-medium text-gray-600 mb-1">Max Databases</label>
               <input v-model.number="form.max_databases" type="number"
                 class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Max Processes</label>
+              <input v-model.number="form.max_procs" type="number" min="10" placeholder="200"
+                class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <p class="text-[10px] text-gray-400 mt-0.5">Prevents fork bombs. Default: 200</p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">I/O Read Limit (MB/s)</label>
+              <div class="relative">
+                <input v-model.number="form.io_read_mbps" type="number" min="0" placeholder="0 = unlimited"
+                  class="w-full border border-gray-200 rounded-md px-3 py-2 pr-14 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <span class="absolute right-3 top-2 text-xs text-gray-400">MB/s</span>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">I/O Write Limit (MB/s)</label>
+              <div class="relative">
+                <input v-model.number="form.io_write_mbps" type="number" min="0" placeholder="0 = unlimited"
+                  class="w-full border border-gray-200 rounded-md px-3 py-2 pr-14 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <span class="absolute right-3 top-2 text-xs text-gray-400">MB/s</span>
+              </div>
             </div>
           </div>
           <div class="flex items-center gap-6">

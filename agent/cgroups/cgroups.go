@@ -19,6 +19,27 @@ const (
 	cgroupBase = "/sys/fs/cgroup/zenspanel"
 )
 
+// homeBaseDev is the block device major:minor for the filesystem that
+// contains the user home directories. Detected once at startup and used
+// for io.max throttling. Empty string = io throttling disabled.
+var homeBaseDev string
+
+// InitHomeBaseDev detects the block device for homeBase and caches it.
+// Called by the agent at startup with cfg.Paths.HomeBase.
+func InitHomeBaseDev(homeBase string) {
+	out, err := exec.Command("stat", "-c", "%d", homeBase).Output()
+	if err != nil {
+		return
+	}
+	devNum, err := strconv.ParseUint(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return
+	}
+	major := devNum >> 8
+	minor := devNum & 0xff
+	homeBaseDev = fmt.Sprintf("%d:%d", major, minor)
+}
+
 func slicePath(username string) string {
 	return filepath.Join(cgroupBase, username)
 }
@@ -61,7 +82,7 @@ func enableSubtreeControllers(parent string) error {
 		avail[c] = true
 	}
 
-	wanted := []string{"cpu", "memory"}
+	wanted := []string{"cpu", "memory", "pids", "io"}
 	tokens := []string{}
 	for _, c := range wanted {
 		if avail[c] {
@@ -80,6 +101,13 @@ func enableSubtreeControllers(parent string) error {
 }
 
 func CreateSlice(username string, cpuQuota int, memoryLimit int64) error {
+	return CreateSliceWithLimits(username, cpuQuota, memoryLimit, 0, 0, 0)
+}
+
+// CreateSliceWithLimits creates a cgroup slice with full resource limits.
+// maxProcs: max number of processes (0 = unlimited, prevents fork bombs)
+// ioReadBps/ioWriteBps: I/O bandwidth limit in bytes/sec (0 = unlimited)
+func CreateSliceWithLimits(username string, cpuQuota int, memoryLimit int64, maxProcs int, ioReadBps, ioWriteBps int64) error {
 	if err := safe.Username(username); err != nil {
 		return err
 	}
@@ -97,20 +125,43 @@ func CreateSlice(username string, cpuQuota int, memoryLimit int64) error {
 	if err := os.WriteFile(filepath.Join(path, "memory.max"), []byte(strconv.FormatInt(memoryLimit, 10)), 0644); err != nil {
 		return fmt.Errorf("write memory.max: %w", err)
 	}
-	// memory.swap.max is optional — kernels built without swap accounting
-	// don't expose it, and the file may also be missing on some distros.
-	// We treat its absence as non-fatal.
 	swapPath := filepath.Join(path, "memory.swap.max")
 	if _, err := os.Stat(swapPath); err == nil {
 		if err := os.WriteFile(swapPath, []byte("0"), 0644); err != nil {
 			return fmt.Errorf("write memory.swap.max: %w", err)
 		}
 	}
+
+	// NPROC limit via pids.max — prevents fork bombs (V50).
+	// Default 200 if not specified; 0 means unlimited.
+	pidsMax := "200"
+	if maxProcs > 0 {
+		pidsMax = strconv.Itoa(maxProcs)
+	} else if maxProcs < 0 {
+		pidsMax = "max"
+	}
+	pidsPath := filepath.Join(path, "pids.max")
+	if _, err := os.Stat(pidsPath); err == nil {
+		_ = os.WriteFile(pidsPath, []byte(pidsMax), 0644)
+	}
+
+	// I/O throttling via io.max — prevents disk abuse (V51).
+	// Requires the block device major:minor number. We detect the device
+	// that homeBase lives on and apply the limit there.
+	if (ioReadBps > 0 || ioWriteBps > 0) && homeBaseDev != "" {
+		ioVal := fmt.Sprintf("%s rbps=%d wbps=%d riops=max wiops=max",
+			homeBaseDev, ioReadBps, ioWriteBps)
+		ioPath := filepath.Join(path, "io.max")
+		if _, err := os.Stat(ioPath); err == nil {
+			_ = os.WriteFile(ioPath, []byte(ioVal), 0644)
+		}
+	}
+
 	return nil
 }
 
 func UpdateSlice(username string, cpuQuota int, memoryLimit int64) error {
-	return CreateSlice(username, cpuQuota, memoryLimit)
+	return CreateSliceWithLimits(username, cpuQuota, memoryLimit, 0, 0, 0)
 }
 
 func DeleteSlice(username string) error {

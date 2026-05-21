@@ -152,16 +152,23 @@ func main() {
 	})
 
 	// cgroups
+	// Detect block device for homeBase once at startup so io.max throttling
+	// knows which device to apply limits to.
+	agentcgroups.InitHomeBaseDev(cfg.Paths.HomeBase)
+
 	srv.Register("cgroups.create_slice", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
 			Username    string `json:"username"`
 			CPUQuota    int    `json:"cpu_quota"`
 			MemoryLimit int64  `json:"memory_limit"`
+			MaxProcs    int    `json:"max_procs"`
+			IOReadBps   int64  `json:"io_read_bps"`
+			IOWriteBps  int64  `json:"io_write_bps"`
 		}
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		return nil, agentcgroups.CreateSlice(p.Username, p.CPUQuota, p.MemoryLimit)
+		return nil, agentcgroups.CreateSliceWithLimits(p.Username, p.CPUQuota, p.MemoryLimit, p.MaxProcs, p.IOReadBps, p.IOWriteBps)
 	})
 
 	srv.Register("cgroups.update_slice", func(params json.RawMessage) (interface{}, error) {
@@ -169,11 +176,14 @@ func main() {
 			Username    string `json:"username"`
 			CPUQuota    int    `json:"cpu_quota"`
 			MemoryLimit int64  `json:"memory_limit"`
+			MaxProcs    int    `json:"max_procs"`
+			IOReadBps   int64  `json:"io_read_bps"`
+			IOWriteBps  int64  `json:"io_write_bps"`
 		}
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		return nil, agentcgroups.UpdateSlice(p.Username, p.CPUQuota, p.MemoryLimit)
+		return nil, agentcgroups.CreateSliceWithLimits(p.Username, p.CPUQuota, p.MemoryLimit, p.MaxProcs, p.IOReadBps, p.IOWriteBps)
 	})
 
 	srv.Register("cgroups.delete_slice", func(params json.RawMessage) (interface{}, error) {
