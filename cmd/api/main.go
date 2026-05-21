@@ -105,6 +105,7 @@ func main() {
 		apiKeyStore, auditLogStore,
 		rdb,
 		cfg.JWT.Secret,
+		cfg.Paths.FrontendDir,
 	)
 	engine := router.Setup()
 

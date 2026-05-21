@@ -1,6 +1,10 @@
 package api
 
 import (
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -37,6 +41,7 @@ type Router struct {
 	auditLogStore *store.AuditLogStore
 	redis         *redis.Client
 	jwtSecret     string
+	frontendDir   string // path to /opt/zenspanel/frontend
 }
 
 func NewRouter(
@@ -65,6 +70,7 @@ func NewRouter(
 	auditLogStore *store.AuditLogStore,
 	rdb *redis.Client,
 	jwtSecret string,
+	frontendDir string,
 ) *Router {
 	return &Router{
 		auth:          authH,
@@ -92,6 +98,7 @@ func NewRouter(
 		auditLogStore: auditLogStore,
 		redis:         rdb,
 		jwtSecret:     jwtSecret,
+		frontendDir:   frontendDir,
 	}
 }
 
@@ -310,5 +317,53 @@ func (r *Router) Setup() *gin.Engine {
 		ext.GET("/packages/:id", auth.RequirePermission("read_package"), r.packages.Get)
 	}
 
+	// Serve frontend SPAs when frontendDir is configured. Allows direct
+	// port access without nginx. nginx is still preferred for production.
+	if r.frontendDir != "" {
+		adminDir := filepath.Join(r.frontendDir, "admin")
+		userDir := filepath.Join(r.frontendDir, "user")
+		if _, err := os.Stat(adminDir); err == nil {
+			e.GET("/admin", func(c *gin.Context) {
+				c.Redirect(http.StatusMovedPermanently, "/admin/")
+			})
+			e.GET("/admin/*path", spaHandler(adminDir, "/admin"))
+		}
+		if _, err := os.Stat(userDir); err == nil {
+			// User SPA catch-all — skip API/WS/service paths.
+			e.NoRoute(func(c *gin.Context) {
+				p := c.Request.URL.Path
+				if strings.HasPrefix(p, "/api") || strings.HasPrefix(p, "/ws") ||
+					strings.HasPrefix(p, "/phpmyadmin") || strings.HasPrefix(p, "/filebrowser") ||
+					strings.HasPrefix(p, "/admin") {
+					c.Status(http.StatusNotFound)
+					return
+				}
+				spaHandler(userDir, "")(c)
+			})
+		}
+	}
+
 	return e
+}
+
+// spaHandler serves a Vue SPA from dir with SPA fallback to index.html.
+// stripPrefix is removed from the URL path before looking up files
+// (e.g. "/admin/" so /admin/updates → /updates inside the admin dist dir).
+func spaHandler(dir, stripPrefix string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Strip the mount prefix to get the file path within the dist dir.
+		urlPath := strings.TrimPrefix(c.Request.URL.Path, stripPrefix)
+		if urlPath == "" {
+			urlPath = "/"
+		}
+		fullPath := filepath.Join(dir, filepath.Clean("/"+urlPath))
+
+		// If the file exists, serve it directly (assets, JS, CSS).
+		if _, err := os.Stat(fullPath); err == nil {
+			http.ServeFile(c.Writer, c.Request, fullPath)
+			return
+		}
+		// Otherwise serve index.html — the SPA router handles the route.
+		http.ServeFile(c.Writer, c.Request, filepath.Join(dir, "index.html"))
+	}
 }
