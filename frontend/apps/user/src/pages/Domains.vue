@@ -5,6 +5,7 @@ import { useDomainsStore } from '@/stores/domains'
 import { phpVersionsApi } from '@/api/phpVersions'
 import { domainsApi } from '@/api/domains'
 import { subdomainsApi } from '@/api/subdomains'
+import { hotlinkApi } from '@/api/hotlink'
 
 const router = useRouter()
 const domainsStore = useDomainsStore()
@@ -31,9 +32,22 @@ const subError = ref('')
 const confirmSubDelete = ref<{ id: number; parentId: number; fqdn: string } | null>(null)
 
 function manageFiles(docPath: string) {
-  // Open FileBrowser at any path (relative to user home). Same-origin
-  // request — auth_request bridge logs the user in automatically.
   window.open(`/filebrowser/files/${docPath}/`, '_blank', 'noopener')
+}
+
+// Hotlink protection state per domain
+const hotlinkState = ref<Record<number, boolean>>({})
+const hotlinkSaving = ref<number | null>(null)
+
+async function toggleHotlink(domainId: number) {
+  const current = hotlinkState.value[domainId] ?? false
+  hotlinkSaving.value = domainId
+  try {
+    await hotlinkApi.set(domainId, !current, [])
+    hotlinkState.value[domainId] = !current
+  } finally {
+    hotlinkSaving.value = null
+  }
 }
 
 onMounted(async () => {
@@ -231,6 +245,24 @@ async function deleteSubdomain() {
                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                       </svg>
                       <span class="hidden sm:inline">Files</span>
+                    </button>
+                    <button @click="$router.push(`/redirects?domain=${d.id}`)" title="Manage redirects"
+                      class="text-xs text-purple-600 border border-purple-200 px-2 py-1 rounded hover:bg-purple-50 inline-flex items-center gap-1 transition-colors">
+                      <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>
+                      </svg>
+                      <span class="hidden sm:inline">Redirects</span>
+                    </button>
+                    <button @click="toggleHotlink(d.id)" :disabled="hotlinkSaving === d.id"
+                      :title="(hotlinkState[d.id] ?? false) ? 'Disable hotlink protection' : 'Enable hotlink protection'"
+                      class="text-xs px-2 py-1 rounded border inline-flex items-center gap-1 transition-colors disabled:opacity-50"
+                      :class="(hotlinkState[d.id] ?? false)
+                        ? 'text-orange-600 border-orange-200 hover:bg-orange-50'
+                        : 'text-gray-500 border-gray-200 hover:bg-gray-50'">
+                      <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                      </svg>
+                      <span class="hidden sm:inline">{{ (hotlinkState[d.id] ?? false) ? 'Hotlink On' : 'Hotlink Off' }}</span>
                     </button>
                     <button @click="confirmDelete = d.id" title="Delete domain" class="text-red-400 hover:text-red-600 transition-colors">
                       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

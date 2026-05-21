@@ -349,12 +349,12 @@ V55: nginx config write for redirect/hotlink ! shell string interpolation. use t
 | T104 | x | `internal/api/handlers/redirects.go`: List/Create/Update/Delete — ownership check (V53), call `nginx.sync_redirects` after mutation | I.api,V53 |
 | T105 | x | wire redirect routes + construct RedirectHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
 | T106 | x | user panel: Redirect Manager page — table per domain, add/edit modal (source path, dest URL, 301/302), enable/disable toggle | I.frontend,V53 |
-| T107 | . | `agent/nginx/nginx.go`: `SetHotlinkProtection(domain string, enabled bool, allowedDomains []string)` — write valid_referers block (V54,V55) | V54,V55 |
-| T108 | . | register `nginx.set_hotlink` RPC @ `cmd/agent/main.go` | V54 |
-| T109 | . | `internal/api/handlers/hotlink.go`: Get/Set — ownership check, call agent | I.api,V54 |
-| T110 | . | wire hotlink routes + construct HotlinkHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
-| T111 | . | user panel: Domains page — add "Hotlink Protection" toggle per domain row; Redirect Manager link per domain | I.frontend,V54 |
-| T112 | . | `make build` + `pnpm -r build` clean | — |
+| T107 | x | `agent/nginx/nginx.go`: `SetHotlinkProtection(domain string, enabled bool, allowedDomains []string)` — write valid_referers block (V54,V55) | V54,V55 |
+| T108 | x | register `nginx.set_hotlink` RPC @ `cmd/agent/main.go` | V54 |
+| T109 | x | `internal/api/handlers/hotlink.go`: Get/Set — ownership check, call agent | I.api,V54 |
+| T110 | x | wire hotlink routes + construct HotlinkHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T111 | x | user panel: Domains page — add "Hotlink Protection" toggle per domain row; Redirect Manager link per domain | I.frontend,V54 |
+| T112 | x | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 

@@ -87,6 +87,18 @@ func main() {
 		return nil, agentnginx.SyncRedirects(cfg.Paths.NginxConf, p.Domain, p.Redirects)
 	})
 
+	srv.Register("nginx.set_hotlink", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Domain         string   `json:"domain"`
+			Enabled        bool     `json:"enabled"`
+			AllowedDomains []string `json:"allowed_domains"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentnginx.SetHotlinkProtection(cfg.Paths.NginxConf, p.Domain, p.Enabled, p.AllowedDomains)
+	})
+
 	srv.Register("nginx.suspend_vhost", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
 			Domain string `json:"domain"`

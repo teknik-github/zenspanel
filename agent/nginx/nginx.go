@@ -284,3 +284,58 @@ location = {{.SourcePath}} {
 
 	return ReloadNginx()
 }
+
+
+// SetHotlinkProtection writes or removes a hotlink protection block in the
+// domain's vhost. Uses text/template — no shell string interpolation (V55).
+// Only applies to static asset extensions so API/WS paths are unaffected (V54).
+func SetHotlinkProtection(nginxConf, domain string, enabled bool, allowedDomains []string) error {
+	if err := safe.Domain(domain); err != nil {
+		return err
+	}
+
+	snippetPath := filepath.Join(nginxConf, domain+".hotlink.conf")
+
+	if !enabled {
+		_ = os.Remove(snippetPath)
+		vhostFile := confPath(nginxConf, domain)
+		if content, err := os.ReadFile(vhostFile); err == nil {
+			includeDirective := fmt.Sprintf("include %s;", snippetPath)
+			updated := strings.ReplaceAll(string(content), "\n    "+includeDirective, "")
+			_ = os.WriteFile(vhostFile, []byte(updated), 0644)
+		}
+		return ReloadNginx()
+	}
+
+	referers := []string{"$server_name"}
+	for _, d := range allowedDomains {
+		if d != "" {
+			referers = append(referers, d)
+		}
+	}
+
+	const hotlinkTmpl = "# Managed by ZensPanel\nlocation ~* \\.(jpg|jpeg|png|gif|webp|svg|ico|woff|woff2|ttf|eot)$ {\n    valid_referers none blocked {{range .}}{{.}} {{end}};\n    if ($invalid_referer) {\n        return 403;\n    }\n}\n"
+
+	tmpl, err := template.New("hotlink").Parse(hotlinkTmpl)
+	if err != nil {
+		return fmt.Errorf("parse hotlink template: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, referers); err != nil {
+		return fmt.Errorf("execute hotlink template: %w", err)
+	}
+	if err := os.WriteFile(snippetPath, buf.Bytes(), 0644); err != nil {
+		return fmt.Errorf("write hotlink snippet: %w", err)
+	}
+
+	vhostFile := confPath(nginxConf, domain)
+	if content, err := os.ReadFile(vhostFile); err == nil {
+		includeDirective := fmt.Sprintf("include %s;", snippetPath)
+		if !strings.Contains(string(content), includeDirective) {
+			updated := strings.Replace(string(content), "\n}", fmt.Sprintf("\n    %s\n}", includeDirective), 1)
+			_ = os.WriteFile(vhostFile, []byte(updated), 0644)
+		}
+	}
+
+	return ReloadNginx()
+}

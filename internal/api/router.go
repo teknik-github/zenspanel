@@ -31,6 +31,7 @@ type Router struct {
 	antivirus     *handlers.AntivirusHandler
 	backupTargets *handlers.BackupTargetHandler
 	redirects     *handlers.RedirectHandler
+	hotlink       *handlers.HotlinkHandler
 	apiKeys       *handlers.APIKeyHandler
 	auditLogs     *handlers.AuditLogHandler
 	ssl           *handlers.SSLHandler
@@ -61,6 +62,7 @@ func NewRouter(
 	antivirusH *handlers.AntivirusHandler,
 	backupTargetsH *handlers.BackupTargetHandler,
 	redirectsH     *handlers.RedirectHandler,
+	hotlinkH       *handlers.HotlinkHandler,
 	apiKeysH *handlers.APIKeyHandler,
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
@@ -90,6 +92,7 @@ func NewRouter(
 		antivirus:     antivirusH,
 		backupTargets: backupTargetsH,
 		redirects:     redirectsH,
+		hotlink:       hotlinkH,
 		apiKeys:       apiKeysH,
 		auditLogs:     auditLogsH,
 		ssl:           sslH,
@@ -194,6 +197,8 @@ func (r *Router) Setup() *gin.Engine {
 		api.POST("/domains/:id/redirects", r.redirects.Create)
 		api.PUT("/domains/:id/redirects/:rid", r.redirects.Update)
 		api.DELETE("/domains/:id/redirects/:rid", r.redirects.Delete)
+		api.GET("/domains/:id/hotlink", r.hotlink.Get)
+		api.PUT("/domains/:id/hotlink", r.hotlink.Set)
 
 		// subdomains
 		api.GET("/subdomains", r.subdomains.List)
