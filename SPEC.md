@@ -238,6 +238,8 @@ V52: installer app catalog ! hardcode URLs. store version + download URL in cata
 V53: redirect rule source ! ⊂ user's own domains. ⊥ user redirect other users' domains. external destination OK
 V54: hotlink protection ! affect API/WS paths. only static asset extensions (jpg,png,gif,css,js,woff,etc). ⊥ break panel
 V55: nginx config write for redirect/hotlink ! shell string interpolation. use text/template + safe.Domain. ⊥ nginx config injection
+V56: DB password reset ! expose new password in API response body. return once + store nowhere. user must copy immediately
+V57: antivirus_enabled flag in packages ! default TRUE for existing packages (migration DEFAULT TRUE). ⊥ silent disable on upgrade
 
 ## §T TASKS
 
@@ -355,6 +357,13 @@ V55: nginx config write for redirect/hotlink ! shell string interpolation. use t
 | T110 | x | wire hotlink routes + construct HotlinkHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
 | T111 | x | user panel: Domains page — add "Hotlink Protection" toggle per domain row; Redirect Manager link per domain | I.frontend,V54 |
 | T112 | x | `make build` + `pnpm -r build` clean | — |
+| T113 | . | `POST /api/v1/databases/:id/reset-password` user JWT → 200 `{db_user, new_password}` — generate random password, call agent `mysql.reset_password`, return once (V56) | I.api,V56 |
+| T114 | . | user panel: Databases page — "Reset Password" button per DB row, show new password in modal (copy-to-clipboard, one-time display) | I.frontend,V56 |
+| T115 | . | migration 000021: add `antivirus_enabled BOOLEAN NOT NULL DEFAULT TRUE` to packages table | I.db |
+| T116 | . | `internal/store/models.go` + `internal/api/handlers/users.go`: add `AntivirusEnabled` to Package model + packageRequest/Response | I.db,V57 |
+| T117 | . | admin panel: Packages page — add "Antivirus" checkbox to package form | I.frontend,V57 |
+| T118 | . | user panel: Antivirus page — check `auth.user.package.antivirus_enabled`; show "not available in your plan" if disabled | I.frontend,V57 |
+| T119 | . | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 
