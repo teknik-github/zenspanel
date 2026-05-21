@@ -209,6 +209,7 @@ func (r *Router) Setup() *gin.Engine {
 		// php extensions — admin manages global catalog, users toggle per-user overrides
 		api.GET("/admin/php-extensions", auth.RequireRole("admin"), r.phpExtensions.AdminList)
 		api.PUT("/admin/php-extensions/:id", auth.RequireRole("admin"), r.phpExtensions.AdminUpdate)
+		api.POST("/admin/php-extensions/seed", auth.RequireRole("admin"), r.phpExtensions.AdminSeed)
 
 		// backup targets — admin manages S3/remote destinations
 		api.GET("/admin/backup-targets", auth.RequireRole("admin"), r.backupTargets.List)

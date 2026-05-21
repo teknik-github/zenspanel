@@ -43,6 +43,23 @@ func NewPHPExtensionStore(db *sqlx.DB) *PHPExtensionStore {
 	return &PHPExtensionStore{db: db}
 }
 
+// Create inserts a new extension into the global catalog.
+// Returns an error if the (name, php_version) pair already exists.
+func (s *PHPExtensionStore) Create(ext *PHPExtension) error {
+	q := `INSERT IGNORE INTO php_extensions (name, php_version, enabled)
+	      VALUES (?, ?, ?)`
+	res, err := s.db.Exec(q, ext.Name, ext.PHPVersion, ext.Enabled)
+	if err != nil {
+		return fmt.Errorf("insert php_extension: %w", err)
+	}
+	id, _ := res.LastInsertId()
+	if id == 0 {
+		return fmt.Errorf("already exists")
+	}
+	ext.ID = uint64(id)
+	return nil
+}
+
 // List returns all rows in the global catalog, optionally filtered by
 // php_version. Used by the admin page.
 func (s *PHPExtensionStore) List(phpVersion string) ([]PHPExtension, error) {

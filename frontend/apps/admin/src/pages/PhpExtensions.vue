@@ -5,9 +5,14 @@ import { phpExtensionsApi } from '@/api/phpExtensions'
 const exts = ref<any[]>([])
 const loading = ref(false)
 const saving = ref<number | null>(null)
+const seeding = ref(false)
 const phpVersionFilter = ref('')
 
 onMounted(async () => {
+  await fetchExts()
+})
+
+async function fetchExts() {
   loading.value = true
   try {
     const res = await phpExtensionsApi.adminList()
@@ -15,7 +20,17 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+async function seed() {
+  seeding.value = true
+  try {
+    await phpExtensionsApi.adminSeed()
+    await fetchExts()
+  } finally {
+    seeding.value = false
+  }
+}
 
 const phpVersions = computed(() => {
   const vers = new Set(exts.value.map((e: any) => e.php_version))
@@ -52,11 +67,17 @@ async function toggle(ext: any) {
   <div class="space-y-4">
     <div class="flex items-center justify-between">
       <h1 class="text-lg font-semibold text-gray-800">PHP Extensions</h1>
-      <select v-model="phpVersionFilter"
-        class="border border-gray-200 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-        <option value="">All versions</option>
-        <option v-for="v in phpVersions" :key="v" :value="v">PHP {{ v }}</option>
-      </select>
+      <div class="flex items-center gap-2">
+        <button v-if="!exts.length" @click="seed" :disabled="seeding"
+          class="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 disabled:opacity-50">
+          {{ seeding ? 'Seeding...' : 'Seed Default Extensions' }}
+        </button>
+        <select v-model="phpVersionFilter"
+          class="border border-gray-200 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="">All versions</option>
+          <option v-for="v in phpVersions" :key="v" :value="v">PHP {{ v }}</option>
+        </select>
+      </div>
     </div>
 
     <div v-if="loading" class="space-y-3">

@@ -20,7 +20,44 @@ func NewPHPExtensionHandler(exts *store.PHPExtensionStore, users *store.UserStor
 	return &PHPExtensionHandler{exts: exts, users: users, agentSock: agentSock}
 }
 
-// AdminList returns the full global catalog, optionally filtered by
+// AdminSeed inserts the default extension catalog if the table is empty.
+// Idempotent — uses INSERT IGNORE so re-running is safe.
+func (h *PHPExtensionHandler) AdminSeed(c *gin.Context) {
+	existing, err := h.exts.List("")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(existing) > 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "already seeded", "count": len(existing)})
+		return
+	}
+
+	type extDef struct{ name, ver string }
+	defaults := []extDef{}
+	for _, ver := range []string{"8.1", "8.2", "8.3", "8.4"} {
+		for _, name := range []string{
+			"bcmath", "curl", "gd", "intl", "mbstring", "mysqli",
+			"opcache", "pdo_mysql", "redis", "soap", "xml", "zip",
+			"imagick", "exif", "fileinfo", "iconv", "json",
+		} {
+			defaults = append(defaults, extDef{name, ver})
+		}
+	}
+
+	count := 0
+	for _, d := range defaults {
+		ext := &store.PHPExtension{
+			Name:       d.name,
+			PHPVersion: d.ver,
+			Enabled:    true,
+		}
+		if err := h.exts.Create(ext); err == nil {
+			count++
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "seeded", "count": count})
+}
 // ?php_version=8.3. Admin-only.
 func (h *PHPExtensionHandler) AdminList(c *gin.Context) {
 	ver := c.Query("php_version")
