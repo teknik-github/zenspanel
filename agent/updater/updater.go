@@ -301,6 +301,19 @@ func runDownloadUpdate(srcDir, binDir, frontendDir, downloadURL string) {
 			}
 			return runStreaming("", "systemctl", "reload", "nginx")
 		}},
+		{"setup_dependencies", func() error {
+			setupScript := filepath.Join(srcDir, "scripts", "setup.sh")
+			if _, err := os.Stat(setupScript); err != nil {
+				appendLog("WARN: setup.sh not found, skipping dependency setup")
+				return nil
+			}
+			if err := runStreaming("", "bash", setupScript); err != nil {
+				// Non-fatal — binaries are already deployed; a missing
+				// optional dependency shouldn't block the restart.
+				appendLog("WARN: setup.sh had errors (non-fatal): " + err.Error())
+			}
+			return nil
+		}},
 		{"pulling_source", func() error {
 			// Keep the source tree current too so the next Check sees
 			// the right HEAD. Failure here is non-fatal — the binaries
@@ -365,6 +378,17 @@ func runBuildUpdate(srcDir, binDir, frontendDir string) {
 				_ = runStreaming("", "chmod", "-R", "a+rX", dst)
 			}
 			return runStreaming("", "systemctl", "reload", "nginx")
+		}},
+		{"setup_dependencies", func() error {
+			setupScript := filepath.Join(srcDir, "scripts", "setup.sh")
+			if _, err := os.Stat(setupScript); err != nil {
+				appendLog("WARN: setup.sh not found, skipping dependency setup")
+				return nil
+			}
+			if err := runStreaming("", "bash", setupScript); err != nil {
+				appendLog("WARN: setup.sh had errors (non-fatal): " + err.Error())
+			}
+			return nil
 		}},
 		{"restarting", func() error {
 			return runStreaming("", "systemctl", "restart", "zenspanel-api")
