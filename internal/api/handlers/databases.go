@@ -303,7 +303,8 @@ func (h *DatabaseHandler) RedeemPHPMyAdmin(c *gin.Context) {
 	defer cancel()
 
 	key := "pma_sso:" + token
-	val, err := h.redis.GetDel(ctx, key).Result()
+	// Use GET + DEL instead of GETDEL for Redis < 6.2 compatibility.
+	val, err := h.redis.Get(ctx, key).Result()
 	if errors.Is(err, redis.Nil) {
 		c.String(http.StatusGone, "token expired or already used")
 		return
@@ -312,6 +313,8 @@ func (h *DatabaseHandler) RedeemPHPMyAdmin(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "redis: "+err.Error())
 		return
 	}
+	// Delete immediately — one-time use.
+	_ = h.redis.Del(ctx, key).Err()
 
 	var p pmaSSOPayload
 	if err := json.Unmarshal([]byte(val), &p); err != nil {

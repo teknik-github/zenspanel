@@ -966,6 +966,15 @@ server {
 
     client_max_body_size 100M;
 
+    # Hide nginx version for security.
+    server_tokens off;
+
+    # Security headers
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
     # Redirect /admin to /admin/
     location = /admin {
         return 301 /admin/;
