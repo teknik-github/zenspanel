@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { antivirusApi } from '@/api/antivirus'
+import { packagesApi } from '@/api/packages'
 import { useToast } from '../notify'
+import { useAuthStore } from '@/stores/auth'
 
 const { error: toastError } = useToast()
+const auth = useAuthStore()
+const antivirusAllowed = ref<boolean | null>(null) // null = loading
 
 const daemonRunning = ref<boolean | null>(null)
 const scanning = ref(false)
@@ -20,6 +24,18 @@ const storedAlerts = ref<any[]>([])
 let alertPollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(async () => {
+  // Check if antivirus is enabled in the user's package (V57).
+  if (auth.user?.package_id) {
+    try {
+      const pkgRes = await packagesApi.get(auth.user.package_id)
+      antivirusAllowed.value = pkgRes.data.antivirus_enabled ?? true
+    } catch {
+      antivirusAllowed.value = true // fail-open
+    }
+  } else {
+    antivirusAllowed.value = true // no package = no restriction
+  }
+
   try {
     const res = await antivirusApi.status()
     daemonRunning.value = res.data.running ?? false
@@ -117,6 +133,18 @@ function stopAlertPoll() {
 <template>
   <div class="space-y-4 max-w-2xl">
     <h1 class="text-lg font-semibold text-gray-800">Antivirus Scanner</h1>
+
+    <!-- Package gate (V57) -->
+    <div v-if="antivirusAllowed === false"
+      class="bg-white border border-gray-200 rounded-lg flex flex-col items-center justify-center py-12 text-center px-4">
+      <svg class="w-10 h-10 text-gray-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+      <p class="text-sm font-medium text-gray-700">Antivirus not available</p>
+      <p class="text-xs text-gray-400 mt-1">This feature is not included in your current plan. Contact your administrator to upgrade.</p>
+    </div>
+
+    <template v-else-if="antivirusAllowed === true">
 
     <!-- Daemon status -->
     <div class="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between">
@@ -257,5 +285,6 @@ function stopAlertPoll() {
         </tbody>
       </table>
     </div>
+  </template>
   </div>
 </template>

@@ -5,7 +5,7 @@ import { databasesApi } from '@/api/databases'
 import { useToast } from '../notify'
 
 const databasesStore = useDatabasesStore()
-const { error: toastError } = useToast()
+const { error: toastError, success: toastSuccess } = useToast()
 const showModal = ref(false)
 const newDBName = ref('')
 const newDBUser = ref('')
@@ -14,6 +14,10 @@ const loading = ref(false)
 const confirmDelete = ref<number | null>(null)
 const createdCreds = ref<{ db_name: string; db_user: string; db_password: string } | null>(null)
 const loaded = ref(false)
+
+// Reset password state
+const resetResult = ref<{ db_user: string; new_password: string } | null>(null)
+const resetting = ref<number | null>(null)
 
 function generatePassword() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$'
@@ -55,6 +59,18 @@ async function deleteDatabase(id: number) {
   await databasesApi.drop(id)
   confirmDelete.value = null
   await databasesStore.fetch()
+}
+
+async function resetPassword(id: number) {
+  resetting.value = id
+  try {
+    const res = await databasesApi.resetPassword(id)
+    resetResult.value = res.data
+  } catch (e: any) {
+    toastError(e.response?.data?.error || 'Failed to reset password')
+  } finally {
+    resetting.value = null
+  }
 }
 
 function copyToClipboard(text: string) {
@@ -135,6 +151,11 @@ function copyToClipboard(text: string) {
                     class="text-xs text-indigo-600 hover:text-indigo-800 border border-indigo-200 px-2 py-1 rounded hover:bg-indigo-50 transition-colors">
                     phpMyAdmin
                   </button>
+                  <button @click="resetPassword(db.id)" :disabled="resetting === db.id"
+                    title="Reset database password"
+                    class="text-xs text-amber-600 hover:text-amber-800 border border-amber-200 px-2 py-1 rounded hover:bg-amber-50 transition-colors disabled:opacity-50">
+                    {{ resetting === db.id ? '...' : 'Reset PW' }}
+                  </button>
                   <button @click="confirmDelete = db.id" title="Drop database" class="text-red-400 hover:text-red-600 transition-colors">
                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
@@ -210,6 +231,36 @@ function copyToClipboard(text: string) {
           <button @click="deleteDatabase(confirmDelete!)"
             class="flex-1 bg-red-600 text-white rounded-md py-2 text-sm hover:bg-red-700">Drop</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Reset password result — one-time display (V56) -->
+    <div v-if="resetResult" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+        <h2 class="font-semibold text-gray-800 mb-1">New Database Password</h2>
+        <p class="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded px-3 py-2 mb-4">
+          Copy this password now — it will not be shown again.
+        </p>
+        <div class="space-y-2 text-xs mb-4">
+          <div>
+            <span class="text-gray-500">DB User:</span>
+            <span class="font-mono ml-2 text-gray-800">{{ resetResult.db_user }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-gray-500">Password:</span>
+            <span class="font-mono text-gray-800 bg-gray-50 border border-gray-200 rounded px-2 py-1 flex-1 select-all">
+              {{ resetResult.new_password }}
+            </span>
+            <button @click="copyToClipboard(resetResult!.new_password)"
+              class="text-indigo-600 hover:text-indigo-800 border border-indigo-200 px-2 py-1 rounded text-xs">
+              Copy
+            </button>
+          </div>
+        </div>
+        <button @click="resetResult = null"
+          class="w-full bg-indigo-600 text-white rounded-md py-2 text-sm hover:bg-indigo-700">
+          I've saved the password
+        </button>
       </div>
     </div>
   </div>

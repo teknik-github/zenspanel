@@ -213,6 +213,7 @@ func (r *Router) Setup() *gin.Engine {
 		api.GET("/databases", r.databases.List)
 		api.POST("/databases", r.databases.Create)
 		api.DELETE("/databases/:id", r.databases.Delete)
+		api.POST("/databases/:id/reset-password", r.databases.ResetPassword)
 		api.GET("/databases/:id/phpmyadmin", r.databases.GetPHPMyAdminToken)
 		// LaunchPHPMyAdmin: resets the DB user password, mints a one-time
 		// SSO token in Redis, returns the redeem URL. Frontend opens that

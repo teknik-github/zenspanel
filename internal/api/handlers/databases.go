@@ -136,7 +136,50 @@ func (h *DatabaseHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
-// GetPHPMyAdminToken is kept for backward compatibility with the
+// ResetPassword generates a new random password for the database user,
+// updates MySQL via the agent, and returns the new password once (V56).
+// The password is never stored — the user must copy it immediately.
+func (h *DatabaseHandler) ResetPassword(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	db, err := h.databases.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "database not found"})
+		return
+	}
+	if auth.GetRole(c) == "user" && db.UserID != auth.GetUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
+	// Generate a strong random password (16 bytes = 32 hex chars).
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "rand: " + err.Error()})
+		return
+	}
+	// Use alphanumeric chars from the safe charset so the password is
+	// valid for MySQL's IDENTIFIED BY clause without escaping.
+	const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+	newPassword := make([]byte, 16)
+	for i, v := range b {
+		newPassword[i] = chars[int(v)%len(chars)]
+	}
+	pwd := string(newPassword)
+
+	if err := agent.NewClient(h.agentSock).Call("mysql.reset_password", map[string]interface{}{
+		"db_user":      db.DBUser,
+		"new_password": pwd,
+	}, nil); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "reset password: " + err.Error()})
+		return
+	}
+
+	// Return the new password once — it is never stored (V56).
+	c.JSON(http.StatusOK, gin.H{
+		"db_user":      db.DBUser,
+		"new_password": pwd,
+	})
+}
 // frontend that still calls /databases/:id/phpmyadmin. It now hands back
 // a launch URL that the user can open to bounce through the SSO flow.
 func (h *DatabaseHandler) GetPHPMyAdminToken(c *gin.Context) {

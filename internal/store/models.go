@@ -36,6 +36,7 @@ type Package struct {
 	MaxProcs           int       `db:"max_procs" json:"max_procs"`
 	IOReadBps          int64     `db:"io_read_bps" json:"io_read_bps"`
 	IOWriteBps         int64     `db:"io_write_bps" json:"io_write_bps"`
+	AntivirusEnabled   bool      `db:"antivirus_enabled" json:"antivirus_enabled"`
 	PHPVersionsAllowed string    `db:"php_versions_allowed" json:"php_versions_allowed"`
 	TerminalEnabled    bool      `db:"terminal_enabled" json:"terminal_enabled"`
 	BackupEnabled      bool      `db:"backup_enabled" json:"backup_enabled"`

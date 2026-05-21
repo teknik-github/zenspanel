@@ -361,13 +361,13 @@ V61: max_ftp_accounts per package. 0 = disabled. ⊥ unlimited FTP on restricted
 | T110 | x | wire hotlink routes + construct HotlinkHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
 | T111 | x | user panel: Domains page — add "Hotlink Protection" toggle per domain row; Redirect Manager link per domain | I.frontend,V54 |
 | T112 | x | `make build` + `pnpm -r build` clean | — |
-| T113 | . | `POST /api/v1/databases/:id/reset-password` user JWT → 200 `{db_user, new_password}` — generate random password, call agent `mysql.reset_password`, return once (V56) | I.api,V56 |
-| T114 | . | user panel: Databases page — "Reset Password" button per DB row, show new password in modal (copy-to-clipboard, one-time display) | I.frontend,V56 |
-| T115 | . | migration 000021: add `antivirus_enabled BOOLEAN NOT NULL DEFAULT TRUE` to packages table | I.db |
-| T116 | . | `internal/store/models.go` + `internal/api/handlers/users.go`: add `AntivirusEnabled` to Package model + packageRequest/Response | I.db,V57 |
-| T117 | . | admin panel: Packages page — add "Antivirus" checkbox to package form | I.frontend,V57 |
-| T118 | . | user panel: Antivirus page — check `auth.user.package.antivirus_enabled`; show "not available in your plan" if disabled | I.frontend,V57 |
-| T119 | . | `make build` + `pnpm -r build` clean | — |
+| T113 | x | `POST /api/v1/databases/:id/reset-password` user JWT → 200 `{db_user, new_password}` — generate random password, call agent `mysql.reset_password`, return once (V56) | I.api,V56 |
+| T114 | x | user panel: Databases page — "Reset Password" button per DB row, show new password in modal (copy-to-clipboard, one-time display) | I.frontend,V56 |
+| T115 | x | migration 000021: add `antivirus_enabled BOOLEAN NOT NULL DEFAULT TRUE` to packages table | I.db |
+| T116 | x | `internal/store/models.go` + `internal/api/handlers/users.go`: add `AntivirusEnabled` to Package model + packageRequest/Response | I.db,V57 |
+| T117 | x | admin panel: Packages page — add "Antivirus" checkbox to package form | I.frontend,V57 |
+| T118 | x | user panel: Antivirus page — check `auth.user.package.antivirus_enabled`; show "not available in your plan" if disabled | I.frontend,V57 |
+| T119 | x | `make build` + `pnpm -r build` clean | — |
 | T120 | . | `POST /api/v1/domains/:id/backup` user JWT → 202 `{job_id}` — backup domain docroot only (V58) | I.api,V58 |
 | T121 | . | `agent/backup/backup.go`: `BackupDomain(username, docroot, backupBase, jobID)` — tar docroot, async (V58,V33) | V58,V33 |
 | T122 | . | register `backup.domain` RPC @ `cmd/agent/main.go` | V58 |

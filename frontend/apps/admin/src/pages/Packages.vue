@@ -24,6 +24,7 @@ const defaultForm = () => ({
   php_versions_allowed: '["8.3","8.2","8.1"]',
   terminal_enabled: false,
   backup_enabled: false,
+  antivirus_enabled: true,
 })
 
 onMounted(async () => {
@@ -159,6 +160,7 @@ function formatBytes(bytes: number) {
         <div class="flex gap-2 text-[10px] flex-wrap">
           <span v-if="pkg.terminal_enabled" class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">Terminal</span>
           <span v-if="pkg.backup_enabled" class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">Backup</span>
+          <span v-if="pkg.antivirus_enabled ?? true" class="bg-green-100 text-green-700 px-2 py-0.5 rounded">Antivirus</span>
         </div>
       </div>
     </div>
@@ -236,6 +238,10 @@ function formatBytes(bytes: number) {
             <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-600">
               <input type="checkbox" v-model="form.backup_enabled" class="rounded border-gray-300 text-indigo-600" />
               Backup Enabled
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-600">
+              <input type="checkbox" v-model="form.antivirus_enabled" class="rounded border-gray-300 text-green-600" />
+              Antivirus Enabled
             </label>
           </div>
         </div>

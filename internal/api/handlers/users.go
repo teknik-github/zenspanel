@@ -32,6 +32,7 @@ type packageRequest struct {
 	MaxProcs           int    `json:"max_procs"`
 	IOReadMbps         int64  `json:"io_read_mbps"`
 	IOWriteMbps        int64  `json:"io_write_mbps"`
+	AntivirusEnabled   bool   `json:"antivirus_enabled"`
 	PHPVersionsAllowed string `json:"php_versions_allowed"`
 	TerminalEnabled    bool   `json:"terminal_enabled"`
 	BackupEnabled      bool   `json:"backup_enabled"`
@@ -49,13 +50,13 @@ func (r packageRequest) toPackage() store.Package {
 		MaxProcs:           r.MaxProcs,
 		IOReadBps:          r.IOReadMbps * 1024 * 1024,
 		IOWriteBps:         r.IOWriteMbps * 1024 * 1024,
+		AntivirusEnabled:   r.AntivirusEnabled,
 		PHPVersionsAllowed: r.PHPVersionsAllowed,
 		TerminalEnabled:    r.TerminalEnabled,
 		BackupEnabled:      r.BackupEnabled,
 	}
 }
 
-// packageResponse converts a Package to a JSON-friendly map with MB units.
 func packageResponse(p store.Package) map[string]interface{} {
 	return map[string]interface{}{
 		"id":                   p.ID,
@@ -73,6 +74,7 @@ func packageResponse(p store.Package) map[string]interface{} {
 		"io_read_mbps":         p.IOReadBps / (1024 * 1024),
 		"io_write_bps":         p.IOWriteBps,
 		"io_write_mbps":        p.IOWriteBps / (1024 * 1024),
+		"antivirus_enabled":    p.AntivirusEnabled,
 		"php_versions_allowed": p.PHPVersionsAllowed,
 		"terminal_enabled":     p.TerminalEnabled,
 		"backup_enabled":       p.BackupEnabled,
