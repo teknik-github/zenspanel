@@ -88,8 +88,17 @@ func RestoreFiles(username, homeBase, backupBase, archivePath string) error {
 		return fmt.Errorf("recreate home base: %w", err)
 	}
 
-	// tar restores <username>/ as a child of homeBase
-	cmd := exec.Command("tar", "-xzf", archivePath, "-C", homeBase, username)
+	// tar restores <username>/ as a child of homeBase.
+	// --no-same-owner: don't restore ownership (we chown after)
+	// --no-overwrite-dir: don't change existing dir permissions
+	// --no-same-permissions: use umask instead of stored permissions
+	// These flags prevent a malicious archive from creating setuid files
+	// or symlinks pointing outside the home directory.
+	cmd := exec.Command("tar", "-xzf", archivePath, "-C", homeBase, username,
+		"--no-same-owner",
+		"--no-overwrite-dir",
+		"--no-same-permissions",
+	)
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("tar extract: %w", err)
