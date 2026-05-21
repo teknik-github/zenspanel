@@ -240,6 +240,10 @@ V54: hotlink protection ! affect API/WS paths. only static asset extensions (jpg
 V55: nginx config write for redirect/hotlink ! shell string interpolation. use text/template + safe.Domain. ⊥ nginx config injection
 V56: DB password reset ! expose new password in API response body. return once + store nowhere. user must copy immediately
 V57: antivirus_enabled flag in packages ! default TRUE for existing packages (migration DEFAULT TRUE). ⊥ silent disable on upgrade
+V58: domain backup ! include files outside domain docroot. scope = docroot only (! full home). ⊥ cross-domain data leak
+V59: FTP account ! share credentials w/ panel login. separate vsftpd/pure-ftpd user per FTP account. ⊥ privilege escalation
+V60: FTP account ! allow access outside user home jail. chroot to user home. ⊥ escape home dir
+V61: max_ftp_accounts per package. 0 = disabled. ⊥ unlimited FTP on restricted plans
 
 ## §T TASKS
 
@@ -364,6 +368,20 @@ V57: antivirus_enabled flag in packages ! default TRUE for existing packages (mi
 | T117 | . | admin panel: Packages page — add "Antivirus" checkbox to package form | I.frontend,V57 |
 | T118 | . | user panel: Antivirus page — check `auth.user.package.antivirus_enabled`; show "not available in your plan" if disabled | I.frontend,V57 |
 | T119 | . | `make build` + `pnpm -r build` clean | — |
+| T120 | . | `POST /api/v1/domains/:id/backup` user JWT → 202 `{job_id}` — backup domain docroot only (V58) | I.api,V58 |
+| T121 | . | `agent/backup/backup.go`: `BackupDomain(username, docroot, backupBase, jobID)` — tar docroot, async (V58,V33) | V58,V33 |
+| T122 | . | register `backup.domain` RPC @ `cmd/agent/main.go` | V58 |
+| T123 | . | user panel: Domains page — "Backup" button per domain row; status modal with download link | I.frontend,V58 |
+| T124 | . | migration 000022: `ftp_accounts` table (id, user_id, ftp_username, password_hash, home_dir, enabled) + add `max_ftp_accounts INT DEFAULT 0` to packages | I.db |
+| T125 | . | `agent/ftp/ftp.go`: `CreateAccount(ftpUser, password, homeDir)` + `DeleteAccount(ftpUser)` — manage vsftpd virtual users via PAM/db (V59,V60) | V59,V60 |
+| T126 | . | register `ftp.create` + `ftp.delete` RPCs @ `cmd/agent/main.go` | V59 |
+| T127 | . | `internal/store/ftpaccounts.go`: FTPAccount model + store (List, Create, Delete, CountByUserID) | I.db,V61 |
+| T128 | . | `internal/api/handlers/ftp.go`: List/Create/Delete — ownership check, quota check vs package.max_ftp_accounts (V61) | I.api,V61 |
+| T129 | . | wire FTP routes + construct FTPHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T130 | . | admin panel: Packages page — add `max_ftp_accounts` field (0=disabled) | I.frontend,V61 |
+| T131 | . | user panel: FTP Accounts page — list accounts, create (username+password), delete; show server/port info | I.frontend,V59 |
+| T132 | . | `scripts/install.sh`: install vsftpd, configure virtual users via PAM + db file, enable passive mode | — |
+| T133 | . | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 
