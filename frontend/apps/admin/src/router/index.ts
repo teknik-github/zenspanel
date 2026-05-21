@@ -27,6 +27,7 @@ const router = createRouter({
         { path: 'api-keys', component: () => import('@/pages/ApiKeys.vue') },
         { path: 'audit-logs', component: () => import('@/pages/AuditLogs.vue') },
         { path: 'settings', component: () => import('@/pages/Settings.vue') },
+        { path: 'updates', component: () => import('@/pages/Updates.vue') },
         { path: 'terminal', component: () => import('@/pages/Terminal.vue') },
       ],
     },

@@ -61,8 +61,8 @@ const navGroups = [
     items: [
       { path: '/audit-logs', label: 'Audit Logs', icon: 'file-text' },
       { path: '/terminal', label: 'Terminal', icon: 'terminal' },
+      { path: '/updates', label: 'Updates', icon: 'refresh-cw' },
       { path: '/settings', label: 'Settings', icon: 'settings' },
-      { path: '/settings', label: 'Updates', icon: 'refresh-cw' },
     ],
   },
 ]
