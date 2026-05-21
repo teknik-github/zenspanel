@@ -136,6 +136,26 @@ CREATE TABLE user_php_extensions (
 - `GET /api/v1/installer/status/:job_id` JWT → 200 `{phase, log, done, error}`
 - agent rpc `installer.run {app_id, username, docroot, db_name, db_user, db_pass}` — async, streams status via sync.Map
 
+### app installer (softaculous-style)
+
+- `GET /api/v1/installer/apps` — existing, extend catalog: add Joomla, Drupal, PrestaShop, CodeIgniter, plain PHP
+- installer catalog: `{id, name, version, description, requires_db, download_url}`
+- agent: each app has `install_<app>()` func; WordPress already done; add others
+
+### redirect manager
+
+- `GET  /api/v1/domains/:id/redirects`          user JWT → 200 `{data: [{id, source_path, dest_url, type, enabled}]}`
+- `POST /api/v1/domains/:id/redirects`          user JWT body `{source_path, dest_url, type: "301"|"302", enabled?}` → 201
+- `PUT  /api/v1/domains/:id/redirects/:rid`     user JWT → 200
+- `DELETE /api/v1/domains/:id/redirects/:rid`   user JWT → 200
+- agent rpc `nginx.sync_redirects {domain, redirects:[{source_path,dest_url,type}]}` — rewrite redirect block in vhost
+
+### hotlink protection
+
+- `GET  /api/v1/domains/:id/hotlink`            user JWT → 200 `{enabled, allowed_domains: [str]}`
+- `PUT  /api/v1/domains/:id/hotlink`            user JWT body `{enabled: bool, allowed_domains: [str]}` → 200
+- agent rpc `nginx.set_hotlink {domain, enabled, allowed_domains}` — write valid_referers block in vhost
+
 ### antivirus realtime
 
 - agent rpc `antivirus.watch_start {username}` → `{watch_id}` — inotifywait on user home, scan new/modified files
@@ -212,6 +232,12 @@ V46: antivirus realtime → inotifywait watch on user home. ! scan outside user 
 V47: S3/remote backup ! store credentials in DB plaintext. encrypt w/ AES-256-GCM (same pattern as TOTP key V27). support S3-compatible + rclone targets
 V48: admin terminal ! run as root. spawn bash as `zenspanel` system user or specific panel user. ⊥ arbitrary root shell
 V49: package disk_quota + memory_limit ! stored + displayed in MB in UI. converted to bytes before passing to agent (×1024×1024). ⊥ raw bytes in form fields
+V50: NPROC limit via cgroup pids.max. default 200. ⊥ fork bomb. 0 = unlimited
+V51: I/O throttle via cgroup io.max. 0 = unlimited. unit MB/s in UI → bytes/s in agent
+V52: installer app catalog ! hardcode URLs. store version + download URL in catalog struct. ⊥ broken installs on upstream rename
+V53: redirect rule source ! ⊂ user's own domains. ⊥ user redirect other users' domains. external destination OK
+V54: hotlink protection ! affect API/WS paths. only static asset extensions (jpg,png,gif,css,js,woff,etc). ⊥ break panel
+V55: nginx config write for redirect/hotlink ! shell string interpolation. use text/template + safe.Domain. ⊥ nginx config injection
 
 ## §T TASKS
 
@@ -313,6 +339,22 @@ V49: package disk_quota + memory_limit ! stored + displayed in MB in UI. convert
 | T94 | x | `internal/api/handlers/packages.go`: accept `disk_quota_mb` + `memory_limit_mb` in Create/Update, convert MB→bytes before store (V49) | V49 |
 | T95 | x | admin panel: Packages page — change disk_quota + memory_limit inputs to MB with unit label | I.frontend,V49 |
 | T96 | x | `make build` + `pnpm -r build` clean | — |
+| T97 | . | extend `agent/installer/installer.go` catalog: add Joomla 5, Drupal 10, PrestaShop 8, CodeIgniter 4, plain PHP starter (V52) | V52 |
+| T98 | . | implement `installJoomla`, `installDrupal`, `installPrestaShop`, `installCodeIgniter` in agent/installer (V33,V52) | V33,V52 |
+| T99 | . | user panel: Installer page — add new app cards, show version badges | I.frontend |
+| T100 | . | migration 000020: `domain_redirects` table (id, domain_id, source_path, dest_url, type, enabled) | I.db |
+| T101 | . | `internal/store/redirects.go`: DomainRedirect model + store (List, Create, Update, Delete) | I.db,V53 |
+| T102 | . | `agent/nginx/nginx.go`: `SyncRedirects(domain string, redirects []Redirect)` — rewrite redirect block in vhost (V55) | V55 |
+| T103 | . | register `nginx.sync_redirects` RPC @ `cmd/agent/main.go` | V55 |
+| T104 | . | `internal/api/handlers/redirects.go`: List/Create/Update/Delete — ownership check (V53), call `nginx.sync_redirects` after mutation | I.api,V53 |
+| T105 | . | wire redirect routes + construct RedirectHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T106 | . | user panel: Redirect Manager page — table per domain, add/edit modal (source path, dest URL, 301/302), enable/disable toggle | I.frontend,V53 |
+| T107 | . | `agent/nginx/nginx.go`: `SetHotlinkProtection(domain string, enabled bool, allowedDomains []string)` — write valid_referers block (V54,V55) | V54,V55 |
+| T108 | . | register `nginx.set_hotlink` RPC @ `cmd/agent/main.go` | V54 |
+| T109 | . | `internal/api/handlers/hotlink.go`: Get/Set — ownership check, call agent | I.api,V54 |
+| T110 | . | wire hotlink routes + construct HotlinkHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T111 | . | user panel: Domains page — add "Hotlink Protection" toggle per domain row; Redirect Manager link per domain | I.frontend,V54 |
+| T112 | . | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 
