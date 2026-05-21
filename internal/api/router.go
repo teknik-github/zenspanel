@@ -152,6 +152,7 @@ func (r *Router) Setup() *gin.Engine {
 
 		// users
 		api.GET("/users", auth.RequireRole("admin"), r.users.List)
+		api.GET("/users/metrics", auth.RequireRole("admin"), r.users.AllMetrics)
 		api.GET("/users/:id", r.users.Get)
 		api.POST("/users", auth.RequireRole("admin"), r.users.Create)
 		api.PUT("/users/:id", auth.RequireRole("admin"), r.users.Update)

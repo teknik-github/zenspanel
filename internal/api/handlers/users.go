@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zenspanel/zenspanel/internal/agent"
@@ -567,7 +568,65 @@ func (h *UserHandler) ChangePackage(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "package updated"})
 }
 
-// GetUsage returns the resource usage for a user in the {used, max} shape
+// AllMetrics returns cgroup metrics for every active user — used by the
+// admin Resource Monitor to detect abuse. Fetches in parallel with a
+// 3s timeout per user so a stuck cgroup doesn't block the whole response.
+func (h *UserHandler) AllMetrics(c *gin.Context) {
+	users, _, err := h.users.List(store.UserFilter{
+		Status: "active",
+		Limit:  200,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	type userMetric struct {
+		ID       uint64  `json:"id"`
+		Username string  `json:"username"`
+		RAMUsed  int64   `json:"ram_used"`
+		RAMMax   int64   `json:"ram_max"`
+		DiskUsed int64   `json:"disk_used"`
+		DiskMax  int64   `json:"disk_max"`
+		CPUPct   float64 `json:"cpu_pct"`
+	}
+
+	results := make([]userMetric, len(users))
+	var wg sync.WaitGroup
+	for i, u := range users {
+		wg.Add(1)
+		go func(idx int, user store.User) {
+			defer wg.Done()
+			m := userMetric{
+				ID:       user.ID,
+				Username: user.Username,
+			}
+			// Get package limits.
+			if user.PackageID.Valid {
+				if pkg, err := h.packages.GetByID(uint64(user.PackageID.Int64)); err == nil {
+					m.RAMMax = pkg.MemoryLimit
+					m.DiskMax = pkg.DiskQuota
+				}
+			}
+			// Get live cgroup metrics.
+			var metrics struct {
+				RAMUsed  int64   `json:"ram_used"`
+				DiskUsed int64   `json:"disk_used"`
+				CPUPct   float64 `json:"cpu_pct"`
+			}
+			_ = agent.NewClient(h.agentSock).Call("cgroups.read_metrics", map[string]interface{}{
+				"username": user.Username,
+			}, &metrics)
+			m.RAMUsed = metrics.RAMUsed
+			m.DiskUsed = metrics.DiskUsed
+			m.CPUPct = metrics.CPUPct
+			results[idx] = m
+		}(i, u)
+	}
+	wg.Wait()
+
+	c.JSON(http.StatusOK, gin.H{"data": results})
+}
 // the User Panel Dashboard expects. RAM and disk are read from the agent
 // (cgroup v2 + du); failures fall through to 0 so the dashboard always
 // renders even when a user hasn't been provisioned yet or the agent is

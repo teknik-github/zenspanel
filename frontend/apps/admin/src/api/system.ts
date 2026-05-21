@@ -37,4 +37,5 @@ export const systemApi = {
   runUpdate:    (downloadURL?: string) => client.post<{ started: boolean; error: string }>('/system/update/run', { download_url: downloadURL || '' }),
   updateStatus: () => client.get<UpdateStatus>('/system/update/status'),
   maintenance:  (action: string) => client.post('/system/maintenance', { action }),
+  userMetrics:  () => client.get('/users/metrics'),
 }

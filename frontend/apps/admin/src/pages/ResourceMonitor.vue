@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { systemApi, type SystemStats } from '@/api/system'
 
 const stats = ref<SystemStats | null>(null)
+const userMetrics = ref<any[]>([])
 const error = ref('')
 let timer: ReturnType<typeof setInterval> | null = null
 
@@ -27,10 +28,36 @@ const uptimeLabel = computed(() => {
   return `${days}d ${hours}h ${mins}m`
 })
 
+// Sort users by CPU desc so abusers float to top
+const sortedUsers = computed(() =>
+  [...userMetrics.value].sort((a, b) => b.cpu_pct - a.cpu_pct)
+)
+
+function pct(used: number, max: number) {
+  if (!max) return 0
+  return Math.min(100, (used / max) * 100)
+}
+
+function fmtBytes(b: number) {
+  if (b >= 1073741824) return (b / 1073741824).toFixed(1) + ' GB'
+  if (b >= 1048576) return (b / 1048576).toFixed(0) + ' MB'
+  return b + ' B'
+}
+
+function barColor(pct: number) {
+  if (pct >= 90) return 'bg-red-500'
+  if (pct >= 70) return 'bg-amber-500'
+  return 'bg-indigo-500'
+}
+
 async function load() {
   try {
-    const res = await systemApi.stats()
-    stats.value = res.data
+    const [statsRes, metricsRes] = await Promise.all([
+      systemApi.stats(),
+      systemApi.userMetrics(),
+    ])
+    stats.value = statsRes.data
+    userMetrics.value = metricsRes.data.data || []
     error.value = ''
   } catch (e: any) {
     error.value = e.response?.data?.error || 'Failed to load stats'
@@ -62,6 +89,7 @@ function svcClass(s?: string) {
 
     <p v-if="error" class="text-xs text-red-600 bg-red-50 border border-red-100 rounded px-2 py-1.5">{{ error }}</p>
 
+    <!-- Server overview -->
     <div class="grid grid-cols-3 gap-4">
       <div class="bg-white border border-gray-200 rounded-lg p-5">
         <div class="text-xs text-gray-400 uppercase tracking-wide">CPU</div>
@@ -120,6 +148,76 @@ function svcClass(s?: string) {
             <span class="px-2 py-0.5 rounded text-[10px] font-medium" :class="svcClass(status)">{{ status }}</span>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Per-user resource usage -->
+    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-800">Per-User Resource Usage</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Sorted by CPU — high usage floats to top. Red = over 90% of quota.</p>
+        </div>
+        <span class="text-xs text-gray-400">{{ userMetrics.length }} active users</span>
+      </div>
+
+      <div v-if="!userMetrics.length" class="px-4 py-8 text-center text-xs text-gray-400">
+        No active users or cgroup metrics unavailable.
+      </div>
+
+      <div v-else class="overflow-x-auto">
+        <table class="w-full text-xs min-w-[700px]">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr class="text-gray-500">
+              <th class="text-left px-4 py-2.5 font-medium">User</th>
+              <th class="text-left px-4 py-2.5 font-medium w-40">CPU</th>
+              <th class="text-left px-4 py-2.5 font-medium w-48">RAM</th>
+              <th class="text-left px-4 py-2.5 font-medium w-48">Disk</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="u in sortedUsers" :key="u.id"
+              class="border-b border-gray-50 hover:bg-gray-50"
+              :class="{ 'bg-red-50': u.cpu_pct >= 90 || pct(u.ram_used, u.ram_max) >= 90 || pct(u.disk_used, u.disk_max) >= 90 }">
+              <td class="px-4 py-2.5">
+                <div class="font-medium text-gray-800">{{ u.username }}</div>
+                <div v-if="u.cpu_pct >= 90 || pct(u.ram_used, u.ram_max) >= 90 || pct(u.disk_used, u.disk_max) >= 90"
+                  class="text-[10px] text-red-500 font-medium">⚠ High usage</div>
+              </td>
+              <td class="px-4 py-2.5">
+                <div class="flex items-center gap-2">
+                  <div class="flex-1 bg-gray-100 rounded-full h-1.5">
+                    <div class="h-1.5 rounded-full transition-all" :class="barColor(u.cpu_pct)"
+                      :style="{ width: u.cpu_pct + '%' }"></div>
+                  </div>
+                  <span class="text-gray-600 w-10 text-right">{{ u.cpu_pct.toFixed(1) }}%</span>
+                </div>
+              </td>
+              <td class="px-4 py-2.5">
+                <div class="flex items-center gap-2">
+                  <div class="flex-1 bg-gray-100 rounded-full h-1.5">
+                    <div class="h-1.5 rounded-full transition-all" :class="barColor(pct(u.ram_used, u.ram_max))"
+                      :style="{ width: pct(u.ram_used, u.ram_max) + '%' }"></div>
+                  </div>
+                  <span class="text-gray-600 w-20 text-right">
+                    {{ fmtBytes(u.ram_used) }}<span v-if="u.ram_max"> / {{ fmtBytes(u.ram_max) }}</span>
+                  </span>
+                </div>
+              </td>
+              <td class="px-4 py-2.5">
+                <div class="flex items-center gap-2">
+                  <div class="flex-1 bg-gray-100 rounded-full h-1.5">
+                    <div class="h-1.5 rounded-full transition-all" :class="barColor(pct(u.disk_used, u.disk_max))"
+                      :style="{ width: pct(u.disk_used, u.disk_max) + '%' }"></div>
+                  </div>
+                  <span class="text-gray-600 w-20 text-right">
+                    {{ fmtBytes(u.disk_used) }}<span v-if="u.disk_max"> / {{ fmtBytes(u.disk_max) }}</span>
+                  </span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
