@@ -20,10 +20,16 @@ type SystemHandler struct {
 	domains   *store.DomainStore
 	databases *store.DatabaseStore
 	agentSock string
+	version   string // set at binary build time via -ldflags
 }
 
-func NewSystemHandler(users *store.UserStore, domains *store.DomainStore, databases *store.DatabaseStore, agentSock string) *SystemHandler {
-	return &SystemHandler{users: users, domains: domains, databases: databases, agentSock: agentSock}
+func NewSystemHandler(users *store.UserStore, domains *store.DomainStore, databases *store.DatabaseStore, agentSock, version string) *SystemHandler {
+	return &SystemHandler{users: users, domains: domains, databases: databases, agentSock: agentSock, version: version}
+}
+
+// Version returns the running binary version (release tag or "dev").
+func (h *SystemHandler) Version(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"version": h.version})
 }
 
 // CheckUpdate asks the agent to fetch the remote and report whether the

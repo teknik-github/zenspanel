@@ -256,6 +256,7 @@ func (r *Router) Setup() *gin.Engine {
 
 		// system stats — admin dashboard host metrics
 		api.GET("/system/stats", auth.RequireRole("admin"), r.system.Stats)
+		api.GET("/system/version", auth.RequireRole("admin"), r.system.Version)
 		api.GET("/system/update/check", auth.RequireRole("admin"), r.system.CheckUpdate)
 		api.POST("/system/update/run", auth.RequireRole("admin"), r.system.RunUpdate)
 		api.GET("/system/update/status", auth.RequireRole("admin"), r.system.UpdateStatus)

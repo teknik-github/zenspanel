@@ -14,6 +14,10 @@ import (
 	"github.com/zenspanel/zenspanel/internal/store"
 )
 
+// version is set at build time via -ldflags "-X main.version=vX.Y.Z".
+// Falls back to "dev" when running from source without a tag.
+var version = "dev"
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -91,7 +95,7 @@ func main() {
 	backupsH := handlers.NewBackupHandler(backupStore, userStore, databaseStore, cfg.Paths.HomeBase, cfg.Paths.BackupBase, cfg.Agent.Socket)
 	backupsH.BackupTargets = backupTargetStore
 	filesH := handlers.NewFileManagerHandler(userStore, cfg.Agent.Socket)
-	systemH := handlers.NewSystemHandler(userStore, domainStore, databaseStore, cfg.Agent.Socket)
+	systemH := handlers.NewSystemHandler(userStore, domainStore, databaseStore, cfg.Agent.Socket, version)
 	terminalH := handlers.NewTerminalHandler(userStore, cfg.Agent.Socket)
 
 	// router

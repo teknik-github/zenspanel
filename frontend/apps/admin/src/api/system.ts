@@ -32,6 +32,7 @@ export interface UpdateStatus {
 
 export const systemApi = {
   stats:        () => client.get<SystemStats>('/system/stats'),
+  version:      () => client.get<{version: string}>('/system/version'),
   checkUpdate:  () => client.get<UpdateInfo>('/system/update/check'),
   runUpdate:    (downloadURL?: string) => client.post<{ started: boolean; error: string }>('/system/update/run', { download_url: downloadURL || '' }),
   updateStatus: () => client.get<UpdateStatus>('/system/update/status'),

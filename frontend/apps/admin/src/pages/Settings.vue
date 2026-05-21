@@ -5,6 +5,7 @@ import { phpVersionsApi } from '@/api/phpVersions'
 
 const stats = ref<SystemStats | null>(null)
 const phpVersions = ref<any[]>([])
+const currentVersion = ref('—')
 
 async function loadStats() {
   const s = await systemApi.stats()
@@ -39,6 +40,10 @@ async function runMaintenance(action: string) {
 onMounted(async () => {
   await Promise.all([loadStats(), loadPhp()])
   runMaintenance('service_status')
+  try {
+    const r = await systemApi.version()
+    currentVersion.value = r.data.version
+  } catch { /* ignore */ }
 })
 </script>
 
@@ -96,7 +101,7 @@ onMounted(async () => {
       <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
         <div class="flex justify-between border-b border-gray-50 py-1">
           <dt class="text-gray-500">Panel version</dt>
-          <dd class="text-gray-800 font-medium font-mono text-gray-400">—</dd>
+          <dd class="text-gray-800 font-medium font-mono">{{ currentVersion }}</dd>
         </div>
         <div class="flex justify-between border-b border-gray-50 py-1">
           <dt class="text-gray-500">License</dt>
