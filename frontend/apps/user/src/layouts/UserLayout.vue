@@ -58,6 +58,7 @@ const navGroups = computed(() => [
     label: 'Tools',
     items: [
       { path: '/installer', label: 'Website Installer', icon: 'download', show: true },
+      { path: '/redirects', label: 'Redirects', icon: 'corner-down-right', show: true },
       { path: '/antivirus', label: 'Antivirus', icon: 'shield-check', show: true },
       { path: '/file-manager', label: 'File Manager', icon: 'folder', show: true, external: true },
       { path: '/cron-jobs', label: 'Cron Jobs', icon: 'clock', show: true },
@@ -86,6 +87,7 @@ const pageTitle = computed(() => {
     '/backups': 'Backups',
     '/2fa': 'Two-Factor Auth',
     '/installer': 'Website Installer',
+    '/redirects': 'Redirects',
     '/antivirus': 'Antivirus',
   }
   return titles[route.path] || ''
@@ -203,6 +205,9 @@ const pageTitle = computed(() => {
               </svg>
               <svg v-else-if="item.icon === 'download'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <svg v-else-if="item.icon === 'corner-down-right'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>
               </svg>
               <svg v-else-if="item.icon === 'shield-check'" class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>

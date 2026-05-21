@@ -342,13 +342,13 @@ V55: nginx config write for redirect/hotlink ! shell string interpolation. use t
 | T97 | x | extend `agent/installer/installer.go` catalog: add Joomla 5, Drupal 10, PrestaShop 8, CodeIgniter 4, plain PHP starter (V52) | V52 |
 | T98 | x | implement `installJoomla`, `installDrupal`, `installPrestaShop`, `installCodeIgniter` in agent/installer (V33,V52) | V33,V52 |
 | T99 | x | user panel: Installer page — add new app cards, show version badges | I.frontend |
-| T100 | . | migration 000020: `domain_redirects` table (id, domain_id, source_path, dest_url, type, enabled) | I.db |
-| T101 | . | `internal/store/redirects.go`: DomainRedirect model + store (List, Create, Update, Delete) | I.db,V53 |
-| T102 | . | `agent/nginx/nginx.go`: `SyncRedirects(domain string, redirects []Redirect)` — rewrite redirect block in vhost (V55) | V55 |
-| T103 | . | register `nginx.sync_redirects` RPC @ `cmd/agent/main.go` | V55 |
-| T104 | . | `internal/api/handlers/redirects.go`: List/Create/Update/Delete — ownership check (V53), call `nginx.sync_redirects` after mutation | I.api,V53 |
-| T105 | . | wire redirect routes + construct RedirectHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
-| T106 | . | user panel: Redirect Manager page — table per domain, add/edit modal (source path, dest URL, 301/302), enable/disable toggle | I.frontend,V53 |
+| T100 | x | migration 000020: `domain_redirects` table (id, domain_id, source_path, dest_url, type, enabled) | I.db |
+| T101 | x | `internal/store/redirects.go`: DomainRedirect model + store (List, Create, Update, Delete) | I.db,V53 |
+| T102 | x | `agent/nginx/nginx.go`: `SyncRedirects(domain string, redirects []Redirect)` — rewrite redirect block in vhost (V55) | V55 |
+| T103 | x | register `nginx.sync_redirects` RPC @ `cmd/agent/main.go` | V55 |
+| T104 | x | `internal/api/handlers/redirects.go`: List/Create/Update/Delete — ownership check (V53), call `nginx.sync_redirects` after mutation | I.api,V53 |
+| T105 | x | wire redirect routes + construct RedirectHandler @ `cmd/api/main.go` + `internal/api/router.go` | I.api |
+| T106 | x | user panel: Redirect Manager page — table per domain, add/edit modal (source path, dest URL, 301/302), enable/disable toggle | I.frontend,V53 |
 | T107 | . | `agent/nginx/nginx.go`: `SetHotlinkProtection(domain string, enabled bool, allowedDomains []string)` — write valid_referers block (V54,V55) | V54,V55 |
 | T108 | . | register `nginx.set_hotlink` RPC @ `cmd/agent/main.go` | V54 |
 | T109 | . | `internal/api/handlers/hotlink.go`: Get/Set — ownership check, call agent | I.api,V54 |

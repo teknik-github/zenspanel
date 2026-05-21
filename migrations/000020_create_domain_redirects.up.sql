@@ -1,0 +1,12 @@
+CREATE TABLE domain_redirects (
+  id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  domain_id   BIGINT UNSIGNED NOT NULL,
+  source_path VARCHAR(512)    NOT NULL,
+  dest_url    VARCHAR(2048)   NOT NULL,
+  type        VARCHAR(8)      NOT NULL DEFAULT '301',
+  enabled     BOOLEAN         NOT NULL DEFAULT TRUE,
+  created_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE,
+  INDEX idx_domain (domain_id)
+);

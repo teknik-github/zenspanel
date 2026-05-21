@@ -82,6 +82,8 @@ func main() {
 	installerH := handlers.NewInstallerHandler(domainStore, userStore, cfg.Agent.Socket)
 	firewallH := handlers.NewFirewallHandler(cfg.Agent.Socket)
 	antivirusH := handlers.NewAntivirusHandler(userStore, store.NewAntivirusAlertStore(db), cfg.Agent.Socket)
+	redirectStore := store.NewRedirectStore(db)
+	redirectsH := handlers.NewRedirectHandler(redirectStore, domainStore, cfg.Agent.Socket)
 	backupTargetStore := store.NewBackupTargetStore(db)
 	backupTargetsH := handlers.NewBackupTargetHandler(
 		backupTargetStore,
@@ -101,7 +103,7 @@ func main() {
 	// router
 	router := api.NewRouter(
 		authH, usersH, packagesH, domainsH, subdomainsH, databasesH,
-		phpVersionsH, phpExtensionsH, cronJobsH, logsH, installerH, firewallH, antivirusH, backupTargetsH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH, terminalH,
+		phpVersionsH, phpExtensionsH, cronJobsH, logsH, installerH, firewallH, antivirusH, backupTargetsH, redirectsH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH, terminalH,
 		apiKeyStore, auditLogStore,
 		rdb,
 		cfg.JWT.Secret,

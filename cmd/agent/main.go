@@ -76,6 +76,17 @@ func main() {
 		return nil, agentnginx.DeleteVhost(cfg.Paths.NginxConf, p.Domain)
 	})
 
+	srv.Register("nginx.sync_redirects", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Domain    string              `json:"domain"`
+			Redirects []agentnginx.Redirect `json:"redirects"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentnginx.SyncRedirects(cfg.Paths.NginxConf, p.Domain, p.Redirects)
+	})
+
 	srv.Register("nginx.suspend_vhost", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
 			Domain string `json:"domain"`

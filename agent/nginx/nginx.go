@@ -9,7 +9,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"text/template"
+
+	"github.com/zenspanel/zenspanel/agent/safe"
 )
 
 var validDomain = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9\-\.]{0,253}[a-zA-Z0-9]$`)
@@ -211,4 +214,73 @@ func ReloadNginx() error {
 		return fmt.Errorf("nginx reload failed: %w: %s", err, out)
 	}
 	return nil
+}
+
+// Redirect holds a single redirect rule for SyncRedirects.
+type Redirect struct {
+	SourcePath string `json:"source_path"`
+	DestURL    string `json:"dest_url"`
+	Type       string `json:"type"` // "301" or "302"
+	Enabled    bool   `json:"enabled"`
+}
+
+// redirectSnippetPath returns the path for the per-domain redirect snippet.
+func redirectSnippetPath(nginxConf, domain string) string {
+	return filepath.Join(nginxConf, domain+".redirects.conf")
+}
+
+// SyncRedirects rewrites the redirect snippet for a domain and reloads nginx.
+// Uses text/template — no shell string interpolation (V55).
+// Only enabled redirects are written; disabled ones are omitted.
+func SyncRedirects(nginxConf, domain string, redirects []Redirect) error {
+	if err := safe.Domain(domain); err != nil {
+		return err
+	}
+
+	const redirectTmpl = `# Managed by ZensPanel — do not edit manually
+{{- range .}}
+{{- if .Enabled}}
+location = {{.SourcePath}} {
+    return {{.Type}} {{.DestURL}};
+}
+{{- end}}
+{{- end}}
+`
+	tmpl, err := template.New("redirects").Parse(redirectTmpl)
+	if err != nil {
+		return fmt.Errorf("parse redirect template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, redirects); err != nil {
+		return fmt.Errorf("execute redirect template: %w", err)
+	}
+
+	snippetPath := redirectSnippetPath(nginxConf, domain)
+	if len(redirects) == 0 || buf.Len() == 0 {
+		// No redirects — remove snippet if it exists.
+		_ = os.Remove(snippetPath)
+	} else {
+		if err := os.WriteFile(snippetPath, buf.Bytes(), 0644); err != nil {
+			return fmt.Errorf("write redirect snippet: %w", err)
+		}
+	}
+
+	// Ensure the main vhost includes the snippet. If the vhost doesn't
+	// exist yet, skip — redirects will be picked up when vhost is created.
+	vhostFile := confPath(nginxConf, domain)
+	if _, err := os.Stat(vhostFile); err == nil {
+		content, err := os.ReadFile(vhostFile)
+		if err == nil {
+			includeDirective := fmt.Sprintf("include %s;", snippetPath)
+			if !strings.Contains(string(content), includeDirective) {
+				// Inject include before the closing brace of the server block.
+				updated := strings.Replace(string(content), "\n}",
+					fmt.Sprintf("\n    %s\n}", includeDirective), 1)
+				_ = os.WriteFile(vhostFile, []byte(updated), 0644)
+			}
+		}
+	}
+
+	return ReloadNginx()
 }
