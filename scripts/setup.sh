@@ -253,16 +253,20 @@ VSFTPDEOF
 
     # fail2ban jail for vsftpd brute-force protection
     JAIL_CONF="/etc/fail2ban/jail.d/zenspanel-vsftpd.conf"
+    # Create log file so fail2ban doesn't fail with "no log file found"
+    touch /var/log/vsftpd.log 2>/dev/null || true
+    chmod 640 /var/log/vsftpd.log 2>/dev/null || true
     if [[ ! -f "$JAIL_CONF" ]]; then
         cat > "$JAIL_CONF" <<'EOF'
 [vsftpd]
-enabled  = true
-port     = ftp,ftp-data,ftps,ftps-data
-filter   = vsftpd
-logpath  = /var/log/vsftpd.log
-maxretry = 5
-bantime  = 3600
-findtime = 600
+enabled      = true
+port         = ftp,ftp-data,ftps,ftps-data
+filter       = vsftpd
+logpath      = /var/log/vsftpd.log
+maxretry     = 5
+bantime      = 3600
+findtime     = 600
+allowmissing = true
 EOF
         systemctl reload fail2ban 2>/dev/null || systemctl restart fail2ban 2>/dev/null || true
         log_info "fail2ban vsftpd jail enabled (5 attempts / 10 min → 1h ban)"
