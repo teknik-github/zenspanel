@@ -268,13 +268,20 @@ func runDownloadUpdate(srcDir, binDir, frontendDir, downloadURL string) {
 		{"extracting", func() error {
 			return runStreaming("", "tar", "-xzf", tarPath, "-C", tmpDir)
 		}},
+		{"stopping_services", func() error {
+			// Stop services before replacing binaries — Linux refuses to
+			// overwrite a running executable ("Text file busy"). We stop
+			// both here; the restart step below brings them back up.
+			_ = runStreaming("", "systemctl", "stop", "zenspanel-api")
+			_ = runStreaming("", "systemctl", "stop", "zenspanel-agent")
+			return nil
+		}},
 		{"deploying_binaries", func() error {
 			extracted := filepath.Join(tmpDir, "zenspanel")
 			for _, name := range []string{"zenspanel-api", "zenspanel-agent", "zenspanel-cli"} {
 				src := filepath.Join(extracted, "bin", name)
 				dst := filepath.Join(binDir, name)
 				if _, err := os.Stat(src); err != nil {
-					// Older bundles may skip a binary — skip silently.
 					continue
 				}
 				if err := runStreaming("", "install", "-m", "0755", src, dst); err != nil {
@@ -352,6 +359,11 @@ func runBuildUpdate(srcDir, binDir, frontendDir string) {
 	}{
 		{"pulling", func() error {
 			return runStreaming(srcDir, "git", "pull", "origin", "main")
+		}},
+		{"stopping_services", func() error {
+			_ = runStreaming("", "systemctl", "stop", "zenspanel-api")
+			_ = runStreaming("", "systemctl", "stop", "zenspanel-agent")
+			return nil
 		}},
 		{"building_api", func() error {
 			return runStreaming(srcDir, "go", "build", "-o", filepath.Join(binDir, "zenspanel-api"), "./cmd/api")
