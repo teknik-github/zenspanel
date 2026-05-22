@@ -133,7 +133,7 @@ function statusClass(status?: string) {
     </div>
 
     <!-- Recent users + server status. Stacks on small screens. -->
-    <div class="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 items-start">
       <div class="bg-white border border-gray-200 rounded-lg p-4">
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-semibold text-gray-800 text-sm">Recent Users</h2>

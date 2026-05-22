@@ -115,7 +115,7 @@ function svcClass(s?: string) {
       </div>
     </div>
 
-    <div class="grid grid-cols-[1fr_280px] gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
       <div class="bg-white border border-gray-200 rounded-lg p-4">
         <h2 class="font-semibold text-gray-800 text-sm mb-3">Panel Inventory</h2>
         <div class="grid grid-cols-3 gap-3 text-xs">

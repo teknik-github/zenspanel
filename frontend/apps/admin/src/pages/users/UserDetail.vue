@@ -141,7 +141,7 @@ function pkgName(id: any) {
 </script>
 
 <template>
-  <div v-if="user" class="space-y-5 max-w-4xl">
+  <div v-if="user" class="space-y-5 max-w-6xl">
 
     <!-- Header -->
     <div class="flex items-center gap-3 flex-wrap">
