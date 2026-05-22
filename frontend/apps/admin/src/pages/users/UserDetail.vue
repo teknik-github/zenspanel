@@ -246,9 +246,9 @@ function pkgName(id: any) {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
 
-      <!-- User info + edit -->
+      <!-- LEFT: User info + edit -->
       <div class="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
         <h2 class="text-sm font-semibold text-gray-800">Account Settings</h2>
         <div class="space-y-3">
@@ -297,7 +297,7 @@ function pkgName(id: any) {
         </div>
 
         <!-- Meta info -->
-        <div class="border-t border-gray-100 pt-3 space-y-1 text-xs text-gray-500">
+        <div class="border-t border-gray-100 pt-3 space-y-1.5 text-xs text-gray-500">
           <div class="flex justify-between">
             <span>Role</span><span class="font-medium text-gray-700 capitalize">{{ user.role }}</span>
           </div>
@@ -316,68 +316,72 @@ function pkgName(id: any) {
         </div>
       </div>
 
-      <!-- Domains -->
-      <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-gray-800">Domains</h2>
-          <span class="text-xs text-gray-400">{{ domains.length }} total</span>
-        </div>
-        <div v-if="!domains.length" class="px-4 py-6 text-center text-xs text-gray-400">No domains</div>
-        <div v-else class="divide-y divide-gray-50 max-h-64 overflow-y-auto">
-          <div v-for="d in domains" :key="d.id" class="px-4 py-2.5 flex items-center justify-between">
-            <div>
-              <p class="text-xs font-medium text-gray-700">{{ d.domain }}</p>
-              <p class="text-[10px] text-gray-400">PHP {{ d.php_version }} · {{ d.ssl_type === 'none' ? 'No SSL' : d.ssl_type }}</p>
+      <!-- RIGHT: stacked cards -->
+      <div class="space-y-4">
+
+        <!-- Domains -->
+        <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-800">Domains</h2>
+            <span class="text-xs text-gray-400">{{ domains.length }} total</span>
+          </div>
+          <div v-if="!domains.length" class="px-4 py-5 text-center text-xs text-gray-400">No domains</div>
+          <div v-else class="divide-y divide-gray-50 max-h-52 overflow-y-auto">
+            <div v-for="d in domains" :key="d.id" class="px-4 py-2.5 flex items-center justify-between">
+              <div>
+                <p class="text-xs font-medium text-gray-700">{{ d.domain }}</p>
+                <p class="text-[10px] text-gray-400">PHP {{ d.php_version }} · {{ d.ssl_type === 'none' ? 'No SSL' : d.ssl_type }}</p>
+              </div>
+              <span class="text-[10px] px-2 py-0.5 rounded font-medium flex-shrink-0"
+                :class="d.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+                {{ d.status }}
+              </span>
             </div>
-            <span class="text-[10px] px-2 py-0.5 rounded font-medium"
-              :class="d.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
-              {{ d.status }}
-            </span>
           </div>
         </div>
-      </div>
 
-      <!-- FTP Accounts -->
-      <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-gray-800">FTP Accounts</h2>
-          <span class="text-xs text-gray-400">{{ ftpAccounts.length }} total</span>
-        </div>
-        <div v-if="!ftpAccounts.length" class="px-4 py-6 text-center text-xs text-gray-400">No FTP accounts</div>
-        <div v-else class="divide-y divide-gray-50 max-h-48 overflow-y-auto">
-          <div v-for="a in ftpAccounts" :key="a.id" class="px-4 py-2.5 flex items-center justify-between">
-            <div>
-              <p class="text-xs font-mono font-medium text-gray-700">{{ a.ftp_username }}</p>
-              <p class="text-[10px] text-gray-400 truncate max-w-[200px]">{{ a.home_dir }}</p>
+        <!-- FTP Accounts -->
+        <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-800">FTP Accounts</h2>
+            <span class="text-xs text-gray-400">{{ ftpAccounts.length }} total</span>
+          </div>
+          <div v-if="!ftpAccounts.length" class="px-4 py-5 text-center text-xs text-gray-400">No FTP accounts</div>
+          <div v-else class="divide-y divide-gray-50 max-h-40 overflow-y-auto">
+            <div v-for="a in ftpAccounts" :key="a.id" class="px-4 py-2.5 flex items-center justify-between">
+              <div class="min-w-0">
+                <p class="text-xs font-mono font-medium text-gray-700">{{ a.ftp_username }}</p>
+                <p class="text-[10px] text-gray-400 truncate">{{ a.home_dir }}</p>
+              </div>
+              <span class="text-[10px] px-2 py-0.5 rounded font-medium flex-shrink-0 ml-2"
+                :class="a.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'">
+                {{ a.enabled ? 'Active' : 'Disabled' }}
+              </span>
             </div>
-            <span class="text-[10px] px-2 py-0.5 rounded font-medium"
-              :class="a.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'">
-              {{ a.enabled ? 'Active' : 'Disabled' }}
-            </span>
           </div>
         </div>
-      </div>
 
-      <!-- Disk breakdown -->
-      <div v-if="usage?.disk" class="bg-white border border-gray-200 rounded-lg p-4">
-        <h2 class="text-sm font-semibold text-gray-800 mb-3">Disk Breakdown</h2>
-        <div class="space-y-2 text-xs">
-          <div class="flex justify-between text-gray-600">
-            <span>Files</span><span class="font-medium text-gray-800">{{ formatBytes(usage.disk.files ?? 0) }}</span>
-          </div>
-          <div class="flex justify-between text-gray-600">
-            <span>Databases</span><span class="font-medium text-gray-800">{{ formatBytes(usage.disk.db ?? 0) }}</span>
-          </div>
-          <div class="flex justify-between text-gray-600 border-t border-gray-100 pt-2">
-            <span class="font-medium">Total</span>
-            <span class="font-semibold text-gray-800">
-              {{ formatBytes(usage.disk.used ?? 0) }}
-              <span class="text-gray-400 font-normal"> / {{ formatBytes(usage.disk.max ?? 0) }}</span>
-            </span>
+        <!-- Disk breakdown -->
+        <div v-if="usage?.disk" class="bg-white border border-gray-200 rounded-lg p-4">
+          <h2 class="text-sm font-semibold text-gray-800 mb-3">Disk Breakdown</h2>
+          <div class="space-y-2 text-xs">
+            <div class="flex justify-between text-gray-600">
+              <span>Files</span><span class="font-medium text-gray-800">{{ formatBytes(usage.disk.files ?? 0) }}</span>
+            </div>
+            <div class="flex justify-between text-gray-600">
+              <span>Databases</span><span class="font-medium text-gray-800">{{ formatBytes(usage.disk.db ?? 0) }}</span>
+            </div>
+            <div class="flex justify-between text-gray-600 border-t border-gray-100 pt-2">
+              <span class="font-medium">Total</span>
+              <span class="font-semibold text-gray-800">
+                {{ formatBytes(usage.disk.used ?? 0) }}
+                <span class="text-gray-400 font-normal"> / {{ formatBytes(usage.disk.max ?? 0) }}</span>
+              </span>
+            </div>
           </div>
         </div>
-      </div>
 
+      </div>
     </div>
 
     <!-- Confirm Delete -->
