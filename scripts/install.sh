@@ -442,9 +442,7 @@ pam_service_name=vsftpd
 user_config_dir=/etc/vsftpd/users
 
 # Passive mode — adjust PASV_ADDRESS to your server's public IP
-pasv_enable=YES
-pasv_min_port=40000
-pasv_max_port=40100
+pasv_enable=NO
 # pasv_address=YOUR_PUBLIC_IP
 
 # Chroot virtual users to their home dir
@@ -478,7 +476,7 @@ allowmissing = true
 EOF
     systemctl reload fail2ban 2>/dev/null || systemctl restart fail2ban 2>/dev/null || true
 
-    log_info "vsftpd installed ✓ (FTP on port 21, passive 40000-40100, fail2ban enabled)"
+    log_info "vsftpd installed ✓ (FTP on port 21, fail2ban enabled)"
 }
 
 install_go() {
@@ -1212,7 +1210,6 @@ setup_firewall() {
     ufw allow 443/tcp > /dev/null 2>&1
     ufw allow "${PANEL_PORT}/tcp" > /dev/null 2>&1
     ufw allow 21/tcp > /dev/null 2>&1           # FTP
-    ufw allow 40000:40100/tcp > /dev/null 2>&1  # FTP passive mode
     ufw --force enable > /dev/null 2>&1
 
     log_info "Firewall configured ✓ (SSH, HTTP, HTTPS, panel, FTP)"

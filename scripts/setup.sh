@@ -239,9 +239,7 @@ guest_username=vsftpd_virtual
 virtual_use_local_privs=YES
 pam_service_name=vsftpd
 user_config_dir=/etc/vsftpd/users
-pasv_enable=YES
-pasv_min_port=40000
-pasv_max_port=40100
+pasv_enable=NO
 chroot_local_user=YES
 allow_writeable_chroot=YES
 VSFTPDEOF
