@@ -349,6 +349,20 @@ logpath  = /var/log/nginx/error.log
 maxretry = 20
 EOF
 
+    # Recidive jail — permanent ban for repeat offenders.
+    # If an IP gets banned 3+ times across any jail within 12 hours,
+    # it gets a permanent ban (bantime = -1) until manually unblocked
+    # via Admin → Firewall.
+    cat > /etc/fail2ban/jail.d/zenspanel-recidive.conf <<'EOF'
+[recidive]
+enabled  = true
+logpath  = /var/log/fail2ban.log
+banaction = %(banaction_allports)s
+bantime  = -1
+findtime = 43200
+maxretry = 3
+EOF
+
     systemctl enable fail2ban --quiet
     systemctl restart fail2ban || log_warn "fail2ban restart failed, continuing..."
 

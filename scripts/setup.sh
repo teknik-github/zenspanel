@@ -171,8 +171,26 @@ setup_firewall() {
     else
         log_info "fail2ban already installed ✓"
     fi
+
+    # Recidive jail — permanent ban for repeat offenders (idempotent)
+    RECIDIVE_CONF="/etc/fail2ban/jail.d/zenspanel-recidive.conf"
+    if [[ ! -f "$RECIDIVE_CONF" ]]; then
+        cat > "$RECIDIVE_CONF" <<'EOF'
+[recidive]
+enabled  = true
+logpath  = /var/log/fail2ban.log
+banaction = %(banaction_allports)s
+bantime  = -1
+findtime = 43200
+maxretry = 3
+EOF
+        log_info "fail2ban recidive jail enabled (3 bans in 12h → permanent ban)"
+    else
+        log_info "fail2ban recidive jail already configured ✓"
+    fi
+
     systemctl enable fail2ban --quiet 2>/dev/null || true
-    systemctl start fail2ban 2>/dev/null || true
+    systemctl reload fail2ban 2>/dev/null || systemctl restart fail2ban 2>/dev/null || true
 }
 
 # ── vsftpd ────────────────────────────────────────────────────────────────────
