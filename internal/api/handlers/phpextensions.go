@@ -109,7 +109,42 @@ func (h *PHPExtensionHandler) AdminUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "updated"})
 }
 
-// UserList returns the merged extension state for the calling user:
+// AdminCreate adds a new extension to the global catalog.
+func (h *PHPExtensionHandler) AdminCreate(c *gin.Context) {
+	var req struct {
+		Name       string `json:"name" binding:"required"`
+		PHPVersion string `json:"php_version" binding:"required"`
+		Enabled    bool   `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ext := &store.PHPExtension{
+		Name:       req.Name,
+		PHPVersion: req.PHPVersion,
+		Enabled:    req.Enabled,
+	}
+	if err := h.exts.Create(ext); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, ext)
+}
+
+// AdminDelete removes an extension from the global catalog.
+func (h *PHPExtensionHandler) AdminDelete(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	if err := h.exts.Delete(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+}
 // global catalog + per-user overrides. Requires ?php_version=X.Y.
 func (h *PHPExtensionHandler) UserList(c *gin.Context) {
 	userID := auth.GetUserID(c)

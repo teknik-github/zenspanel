@@ -181,3 +181,8 @@ func (s *PHPExtensionStore) SetUserState(userID, extID uint64, enabled bool) err
 		userID, extID, enabled)
 	return err
 }
+
+func (s *PHPExtensionStore) Delete(id uint64) error {
+	_, err := s.db.Exec("DELETE FROM php_extensions WHERE id = ?", id)
+	return err
+}
