@@ -79,21 +79,24 @@ jobs:
       - name: Extract changelog excerpt
         id: changelog
         run: |
-          # Pull the section between [Unreleased] / first heading and the
-          # next ## heading; ship that as the release body. Fallback to a
-          # one-liner if extraction fails.
+          # Pull content between first ## heading and the next ## heading.
+          # Strips leading/trailing blank lines for a clean release body.
           awk '
-            /^## \[/ { if (count++) exit }
-            count == 1 { print }
-          ' CHANGELOG.md > release-body.md || echo "See CHANGELOG.md" > release-body.md
+            /^## / { if (count++) exit; next }
+            count == 1 && NF { found=1 }
+            count == 1 && found { print }
+          ' CHANGELOG.md | sed '/^[[:space:]]*$/d' > release-body.md
+          # Fallback if empty
+          [ -s release-body.md ] || echo "See CHANGELOG.md for details." > release-body.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ZensPanel ${{ github.ref_name }}
+          name: "ZensPanel ${{ github.ref_name }}"
           body_path: release-body.md
           draft: false
           prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') }}
+          generate_release_notes: false
           files: |
             zenspanel-${{ github.ref_name }}.tar.gz
             zenspanel-${{ github.ref_name }}.tar.gz.sha256
