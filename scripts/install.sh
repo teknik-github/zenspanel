@@ -1211,9 +1211,11 @@ setup_firewall() {
     ufw allow 80/tcp > /dev/null 2>&1
     ufw allow 443/tcp > /dev/null 2>&1
     ufw allow "${PANEL_PORT}/tcp" > /dev/null 2>&1
+    ufw allow 21/tcp > /dev/null 2>&1           # FTP
+    ufw allow 40000:40100/tcp > /dev/null 2>&1  # FTP passive mode
     ufw --force enable > /dev/null 2>&1
 
-    log_info "Firewall configured ✓"
+    log_info "Firewall configured ✓ (SSH, HTTP, HTTPS, panel, FTP)"
 }
 
 # =============================================================================
