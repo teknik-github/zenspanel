@@ -760,6 +760,7 @@ paths:
 letsencrypt:
   email: "${LE_EMAIL}"
   staging: false
+  hook_secret: "$(openssl rand -hex 32)"
 EOF
 
     chmod 600 "$ZENSPANEL_CONF/config.yaml"
@@ -1305,6 +1306,17 @@ setup_quota() {
 # =============================================================================
 # STEP 15: Setup log rotation
 # =============================================================================
+setup_certbot_hook() {
+    log_section "Certbot deploy hook"
+    HOOK_DIR="/etc/letsencrypt/renewal-hooks/deploy"
+    HOOK_SCRIPT="${HOOK_DIR}/zenspanel-update.sh"
+    mkdir -p "$HOOK_DIR"
+    cp "${ZENSPANEL_DIR}/src/scripts/certbot-deploy-hook.sh" "$HOOK_SCRIPT"
+    chmod +x "$HOOK_SCRIPT"
+    log_info "Certbot deploy hook installed ✓ (auto-updates ssl_expires_at after renewal)"
+}
+
+# =============================================================================
 setup_logrotate() {
     cat > /etc/logrotate.d/zenspanel <<EOF
 ${ZENSPANEL_LOG}/*.log {
@@ -1418,6 +1430,7 @@ BANNER
     setup_quota
     setup_vsftpd
     setup_logrotate
+    setup_certbot_hook
     save_install_info
     print_summary
 }

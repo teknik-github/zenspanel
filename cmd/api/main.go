@@ -95,6 +95,9 @@ func main() {
 	apiKeysH := handlers.NewAPIKeyHandler(apiKeyStore)
 	auditLogsH := handlers.NewAuditLogHandler(auditLogStore)
 	sslH := handlers.NewSSLHandler(domainStore, subdomainStore, cfg.Agent.Socket, cfg.LetsEncrypt.Email, cfg.LetsEncrypt.Staging)
+	if cfg.LetsEncrypt.HookSecret != "" {
+		sslH.SetHookSecret(cfg.LetsEncrypt.HookSecret)
+	}
 	backupsH := handlers.NewBackupHandler(backupStore, userStore, databaseStore, cfg.Paths.HomeBase, cfg.Paths.BackupBase, cfg.Agent.Socket)
 	backupsH.BackupTargets = backupTargetStore
 	backupsH.Domains = domainStore

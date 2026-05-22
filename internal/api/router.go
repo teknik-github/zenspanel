@@ -141,6 +141,12 @@ func (r *Router) Setup() *gin.Engine {
 	e.POST("/api/v1/auth/2fa/verify", r.auth.TOTPVerify)
 	e.POST("/api/v1/auth/2fa/recover", r.auth.TOTPRecover)
 
+	// Certbot deploy hook — called by /etc/letsencrypt/renewal-hooks/deploy/
+	// after a successful renewal. Auth via X-Hook-Secret header (shared secret
+	// written to /etc/zenspanel/config.yaml by the installer). No JWT needed
+	// because certbot runs as root on the same server.
+	e.POST("/api/v1/system/ssl-renewed", r.ssl.RenewedHook)
+
 	// phpMyAdmin SSO redeem — no JWT required, the URL token is the
 	// credential. Lives outside the protected /api/v1 group because the
 	// browser opens this in a new tab where the JWT bearer header isn't

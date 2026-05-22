@@ -82,3 +82,11 @@ func (s *DomainStore) Delete(id uint64) error {
 	_, err := s.db.Exec("DELETE FROM domains WHERE id = ?", id)
 	return err
 }
+
+func (s *DomainStore) GetByDomain(domain string) (*Domain, error) {
+	var d Domain
+	if err := s.db.Get(&d, "SELECT * FROM domains WHERE domain = ?", domain); err != nil {
+		return nil, fmt.Errorf("get domain by name: %w", err)
+	}
+	return &d, nil
+}

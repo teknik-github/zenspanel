@@ -55,8 +55,9 @@ type PathsConfig struct {
 }
 
 type LetsEncryptConfig struct {
-	Email   string
-	Staging bool
+	Email      string
+	Staging    bool
+	HookSecret string `mapstructure:"hook_secret"`
 }
 
 func Load() (*Config, error) {

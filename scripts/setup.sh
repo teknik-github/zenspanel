@@ -337,6 +337,24 @@ EOF
     fi
 }
 
+# ── certbot deploy hook ───────────────────────────────────────────────────────
+
+setup_certbot_hook() {
+    log_section "Certbot deploy hook"
+    HOOK_DIR="/etc/letsencrypt/renewal-hooks/deploy"
+    HOOK_SCRIPT="${HOOK_DIR}/zenspanel-update.sh"
+    # Find the source script relative to this setup.sh
+    SRC="$(dirname "${BASH_SOURCE[0]}")/certbot-deploy-hook.sh"
+    if [[ ! -f "$SRC" ]]; then
+        log_warn "certbot-deploy-hook.sh not found at $SRC, skipping"
+        return 0
+    fi
+    mkdir -p "$HOOK_DIR"
+    cp "$SRC" "$HOOK_SCRIPT"
+    chmod +x "$HOOK_SCRIPT"
+    log_info "Certbot deploy hook installed ✓"
+}
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 main() {
@@ -355,6 +373,7 @@ main() {
     setup_cgroups
     setup_composer
     setup_logrotate
+    setup_certbot_hook
     echo ""
     log_info "All dependencies OK ✓"
 }

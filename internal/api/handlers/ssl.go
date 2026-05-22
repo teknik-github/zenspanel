@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ type SSLHandler struct {
 	agentSock  string
 	leEmail    string
 	leStaging  bool
+	hookSecret string
 }
 
 func NewSSLHandler(
@@ -35,6 +37,67 @@ func NewSSLHandler(
 		leEmail:    leEmail,
 		leStaging:  leStaging,
 	}
+}
+
+// SetHookSecret sets the shared secret used to authenticate certbot deploy hooks.
+func (h *SSLHandler) SetHookSecret(secret string) {
+	h.hookSecret = secret
+}
+
+// RenewedHook is called by the certbot deploy hook script after a successful
+// renewal. It reads the new cert expiry from disk and updates ssl_expires_at
+// in the DB so the panel shows the correct date without manual intervention.
+//
+// Auth: X-Hook-Secret header must match the configured hook secret.
+// Body: {domain: "example.com"}
+func (h *SSLHandler) RenewedHook(c *gin.Context) {
+	if h.hookSecret == "" || c.GetHeader("X-Hook-Secret") != h.hookSecret {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid hook secret"})
+		return
+	}
+	var req struct {
+		Domain string `json:"domain" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Read the renewed cert from disk to get the new NotAfter
+	certPath := "/etc/letsencrypt/live/" + req.Domain + "/cert.pem"
+	certData, err := readFileSafe(certPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "read cert: " + err.Error()})
+		return
+	}
+	notAfter, err := certNotAfter(certData)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "parse cert: " + err.Error()})
+		return
+	}
+	expires := notAfter.Format("2006-01-02 15:04:05")
+
+	// Update domain or subdomain DB row
+	updated := false
+	if domain, err := h.domains.GetByDomain(req.Domain); err == nil {
+		_ = h.domains.Update(domain.ID, map[string]interface{}{
+			"ssl_expires_at": expires,
+		})
+		updated = true
+	}
+	if !updated {
+		if sub, err := h.subdomains.GetByFQDN(req.Domain); err == nil {
+			_ = h.subdomains.Update(sub.ID, map[string]interface{}{
+				"ssl_expires_at": expires,
+			})
+			updated = true
+		}
+	}
+	if !updated {
+		c.JSON(http.StatusNotFound, gin.H{"error": "domain not found in panel DB"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "updated", "expires_at": expires})
 }
 
 // Issue handles both Let's Encrypt and custom-cert uploads, dispatched on
@@ -303,4 +366,12 @@ func validateLEEmail(email string) string {
 		return "Let's Encrypt rejects '" + domain + "' as a contact email domain. Set `letsencrypt.email` in /etc/zenspanel/config.yaml to a real email address you control (not a reserved/example domain), then restart the API."
 	}
 	return ""
+}
+
+func readFileSafe(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
