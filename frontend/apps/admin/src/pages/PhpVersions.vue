@@ -145,8 +145,9 @@ async function deleteVersion(v: any) {
     </div>
 
     <!-- Add PHP Version Modal -->
+    <Transition name="modal">
     <div v-if="showModal" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-4">Add PHP Version</h2>
         <div class="space-y-3">
           <div>
@@ -175,10 +176,12 @@ async function deleteVersion(v: any) {
         </div>
       </div>
     </div>
+    </Transition>
 
     <!-- Confirm Toggle -->
+    <Transition name="modal">
     <div v-if="confirmToggle" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-2">
           {{ confirmToggle.enabled ? 'Disable' : 'Enable' }} PHP {{ confirmToggle.version }}?
         </h2>
@@ -198,5 +201,6 @@ async function deleteVersion(v: any) {
         </div>
       </div>
     </div>
+    </Transition>
   </div>
 </template>

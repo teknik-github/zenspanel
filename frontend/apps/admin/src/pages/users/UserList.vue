@@ -243,8 +243,9 @@ async function deleteUser(id: number) {
     </div>
 
     <!-- Add User modal -->
+    <Transition name="modal">
     <div v-if="showCreate" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 class="font-semibold text-gray-800 mb-4">Add User</h2>
         <div class="space-y-3">
           <div>
@@ -299,10 +300,12 @@ async function deleteUser(id: number) {
         </div>
       </div>
     </div>
+    </Transition>
 
     <!-- Confirm Delete -->
+    <Transition name="modal">
     <div v-if="confirmDelete" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-2">Delete User?</h2>
         <p class="text-sm text-gray-500 mb-4">This will permanently delete the user and all their data.</p>
         <div class="flex gap-2">
@@ -313,5 +316,6 @@ async function deleteUser(id: number) {
         </div>
       </div>
     </div>
+    </Transition>
   </div>
 </template>

@@ -156,8 +156,9 @@ async function remove(entry: any) {
     </div>
 
     <!-- Add modal -->
+    <Transition name="modal">
     <div v-if="showModal" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-4">Add IP / CIDR</h2>
         <div class="space-y-3">
           <div>
@@ -181,5 +182,6 @@ async function remove(entry: any) {
         </div>
       </div>
     </div>
+    </Transition>
   </div>
 </template>

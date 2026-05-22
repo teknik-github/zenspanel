@@ -129,8 +129,9 @@ function permLabel(p: string) {
     </div>
 
     <!-- Create Modal -->
+    <Transition name="modal">
     <div v-if="showModal" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 class="font-semibold text-gray-800 mb-4">Create API Key</h2>
         <div class="space-y-4">
           <div>
@@ -170,10 +171,12 @@ function permLabel(p: string) {
         </div>
       </div>
     </div>
+    </Transition>
 
     <!-- Show created key -->
+    <Transition name="modal">
     <div v-if="createdKey" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-1">API Key Created</h2>
         <p class="text-xs text-amber-600 mb-4">Copy this key now — it will not be shown again.</p>
         <div class="flex gap-2">
@@ -191,10 +194,12 @@ function permLabel(p: string) {
           class="w-full mt-4 bg-indigo-600 text-white rounded-md py-2 text-sm hover:bg-indigo-700">Done</button>
       </div>
     </div>
+    </Transition>
 
     <!-- Confirm Revoke -->
+    <Transition name="modal">
     <div v-if="confirmRevoke" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-2">Revoke API Key?</h2>
         <p class="text-sm text-gray-500 mb-4">Any integrations using this key will stop working immediately.</p>
         <div class="flex gap-2">
@@ -205,5 +210,6 @@ function permLabel(p: string) {
         </div>
       </div>
     </div>
+    </Transition>
   </div>
 </template>

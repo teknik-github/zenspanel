@@ -168,8 +168,9 @@ function formatBytes(bytes: number) {
     </div>
 
     <!-- Create/Edit Modal -->
+    <Transition name="modal">
     <div v-if="showModal" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 class="font-semibold text-gray-800 mb-4">{{ editingPackage ? 'Edit' : 'Create' }} Package</h2>
         <div class="space-y-3">
           <div>
@@ -263,10 +264,12 @@ function formatBytes(bytes: number) {
         </div>
       </div>
     </div>
+    </Transition>
 
     <!-- Confirm Delete -->
+    <Transition name="modal">
     <div v-if="confirmDelete" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-2">Delete Package?</h2>
         <p class="text-sm text-gray-500 mb-4">Users assigned to this package will have no package.</p>
         <div class="flex gap-2">
@@ -277,5 +280,6 @@ function formatBytes(bytes: number) {
         </div>
       </div>
     </div>
+    </Transition>
   </div>
 </template>

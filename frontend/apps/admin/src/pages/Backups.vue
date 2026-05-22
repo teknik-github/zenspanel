@@ -185,8 +185,9 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
     </div>
 
     <!-- Confirm Restore -->
+    <Transition name="modal">
     <div v-if="confirmRestore" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-2">Restore "{{ confirmRestore.type }}" backup?</h2>
         <p class="text-sm text-gray-500 mb-2">
           User <span class="font-medium text-gray-700">{{ users.get(confirmRestore.user_id) || `#${confirmRestore.user_id}` }}</span> will have:
@@ -209,5 +210,6 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
         </div>
       </div>
     </div>
+    </Transition>
   </div>
 </template>

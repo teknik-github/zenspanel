@@ -187,8 +187,9 @@ const typeLabels: Record<string, string> = {
     </div>
 
     <!-- Add/Edit modal -->
+    <Transition name="modal">
     <div v-if="showModal" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 class="font-semibold text-gray-800 mb-4">{{ editingTarget ? 'Edit' : 'Add' }} Backup Target</h2>
         <div class="space-y-3">
           <div class="grid grid-cols-2 gap-3">
@@ -257,10 +258,12 @@ const typeLabels: Record<string, string> = {
         </div>
       </div>
     </div>
+    </Transition>
 
     <!-- Confirm delete -->
+    <Transition name="modal">
     <div v-if="confirmDelete" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-2">Delete backup target?</h2>
         <p class="text-sm text-gray-500 mb-4">Existing backups in the remote storage will not be deleted.</p>
         <div class="flex gap-2">
@@ -271,5 +274,6 @@ const typeLabels: Record<string, string> = {
         </div>
       </div>
     </div>
+    </Transition>
   </div>
 </template>

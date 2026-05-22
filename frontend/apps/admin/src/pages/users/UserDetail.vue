@@ -385,8 +385,9 @@ function pkgName(id: any) {
     </div>
 
     <!-- Confirm Delete -->
+    <Transition name="modal">
     <div v-if="confirmDelete" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-2">Delete {{ user.username }}?</h2>
         <p class="text-sm text-gray-500 mb-4">This will permanently delete the user and all their data.</p>
         <div class="flex gap-2">
@@ -397,6 +398,7 @@ function pkgName(id: any) {
         </div>
       </div>
     </div>
+    </Transition>
 
   </div>
   <div v-else class="flex items-center justify-center py-16 text-gray-400 text-sm">Loading...</div>
