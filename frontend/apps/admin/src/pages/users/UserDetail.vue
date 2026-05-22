@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { usersApi } from '@/api/users'
 import { packagesApi } from '@/api/packages'
 import { domainsApi } from '@/api/domains'
@@ -67,6 +67,22 @@ function barColor(pct: number) {
   if (pct >= 70) return 'bg-amber-500'
   return 'bg-indigo-500'
 }
+
+// Soft enforcement warnings — existing resources over new package limits.
+// We block new creates but don't remove existing ones (Option A).
+const overLimitWarnings = computed(() => {
+  if (!usage.value) return []
+  const warnings: string[] = []
+  const d = usage.value.domains
+  const db = usage.value.databases
+  if (d?.max > 0 && d?.used > d?.max)
+    warnings.push(`Domains: ${d.used} active but package allows ${d.max}. New domains blocked until below limit.`)
+  if (db?.max > 0 && db?.used > db?.max)
+    warnings.push(`Databases: ${db.used} active but package allows ${db.max}. New databases blocked until below limit.`)
+  if (usage.value.disk?.max > 0 && usage.value.disk?.used > usage.value.disk?.max)
+    warnings.push(`Disk: using ${formatBytes(usage.value.disk.used)} but package limit is ${formatBytes(usage.value.disk.max)}. Writes will fail (EDQUOT).`)
+  return warnings
+})
 
 async function save() {
   loading.value = true
@@ -167,6 +183,20 @@ function pkgName(id: any) {
         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
       </svg>
       <p class="text-sm text-red-700">Account suspended — all websites, FTP, and sessions are disabled.</p>
+    </div>
+
+    <!-- Over-limit warnings (soft enforcement) -->
+    <div v-if="overLimitWarnings.length"
+      class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 space-y-1">
+      <div class="flex items-center gap-2 mb-1">
+        <svg class="w-4 h-4 text-amber-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <p class="text-xs font-semibold text-amber-800">Over package limits — existing resources kept, new ones blocked</p>
+      </div>
+      <ul class="space-y-0.5">
+        <li v-for="w in overLimitWarnings" :key="w" class="text-xs text-amber-700 pl-6">· {{ w }}</li>
+      </ul>
     </div>
 
     <!-- Resource usage -->
