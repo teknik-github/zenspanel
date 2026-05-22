@@ -22,8 +22,7 @@ const selectedRow = ref<SSLRow | null>(null)
 const certPEM = ref('')
 const keyPEM = ref('')
 const loaded = ref(false)
-// Per-row pending-state map keyed by `<kind>:<id>` so a domain and a
-// subdomain with overlapping IDs don't collide.
+const search = ref('')
 const pending = ref<Record<string, string>>({})
 const confirmRemove = ref<SSLRow | null>(null)
 const uploading = ref(false)
@@ -34,11 +33,6 @@ function rowKey(r: SSLRow) {
 
 const rows = computed<SSLRow[]>(() => {
   const out: SSLRow[] = []
-  // Render each parent followed immediately by its subdomains so the UI
-  // mirrors the Domains page grouping. Subdomain `parent` is only used
-  // for display indent — sorting is done by parent's domain field.
-  const parentsByDomain = new Map<string, any>()
-  for (const d of domains.value) parentsByDomain.set(d.domain, d)
   for (const d of domains.value) {
     out.push({
       kind: 'domain', id: d.id, name: d.domain,
@@ -54,6 +48,12 @@ const rows = computed<SSLRow[]>(() => {
     }
   }
   return out
+})
+
+const filteredRows = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return rows.value
+  return rows.value.filter(r => r.name.toLowerCase().includes(q))
 })
 
 async function refresh() {
@@ -161,6 +161,15 @@ function isExpiringSoon(expiresAt: string | null) {
     </div>
 
     <div v-else class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <!-- Search bar -->
+      <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+        <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input v-model="search" type="text" placeholder="Search domains..."
+          class="flex-1 text-xs focus:outline-none text-gray-700 placeholder-gray-400 bg-transparent" />
+        <span v-if="search" class="text-[10px] text-gray-400">{{ filteredRows.length }} result{{ filteredRows.length !== 1 ? 's' : '' }}</span>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full text-xs min-w-[680px]">
           <thead class="bg-gray-50 border-b border-gray-200">
@@ -172,7 +181,10 @@ function isExpiringSoon(expiresAt: string | null) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="r in rows" :key="rowKey(r)"
+            <tr v-if="filteredRows.length === 0">
+              <td colspan="4" class="px-4 py-6 text-center text-gray-400">No domains match "{{ search }}"</td>
+            </tr>
+            <tr v-for="r in filteredRows" :key="rowKey(r)"
               class="border-b border-gray-50 hover:bg-gray-50"
               :class="r.kind === 'subdomain' ? 'bg-gray-50/40' : ''">
               <td class="px-4 py-3 font-medium text-gray-700">
