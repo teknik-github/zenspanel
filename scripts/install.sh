@@ -565,9 +565,18 @@ build_zenspanel() {
         tar -xzf "$tarball" -C "$tmpdir" || die "Failed to extract release"
         rm -f "$tarball"
 
+        # Stop services before replacing binaries — Linux refuses to
+        # overwrite a running executable ("Text file busy").
+        systemctl stop zenspanel-api zenspanel-agent 2>/dev/null || true
+
         # Bundle layout: zenspanel/bin/, zenspanel/frontend/, zenspanel/migrations/
         local bundle="$tmpdir/zenspanel"
-        cp -r "$bundle/bin/"* "$ZENSPANEL_DIR/bin/"
+        install -m 0755 "$bundle/bin/zenspanel-api"   "$ZENSPANEL_DIR/bin/zenspanel-api"   2>/dev/null || \
+            cp "$bundle/bin/zenspanel-api"   "$ZENSPANEL_DIR/bin/zenspanel-api"
+        install -m 0755 "$bundle/bin/zenspanel-agent" "$ZENSPANEL_DIR/bin/zenspanel-agent" 2>/dev/null || \
+            cp "$bundle/bin/zenspanel-agent" "$ZENSPANEL_DIR/bin/zenspanel-agent"
+        install -m 0755 "$bundle/bin/zenspanel-cli"   "$ZENSPANEL_DIR/bin/zenspanel-cli"   2>/dev/null || \
+            cp "$bundle/bin/zenspanel-cli"   "$ZENSPANEL_DIR/bin/zenspanel-cli" 2>/dev/null || true
         chmod +x "$ZENSPANEL_DIR/bin/"*
         cp -r "$bundle/frontend/admin" "$ZENSPANEL_DIR/frontend/admin"
         cp -r "$bundle/frontend/user"  "$ZENSPANEL_DIR/frontend/user"
