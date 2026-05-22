@@ -460,7 +460,21 @@ VSFTPDEOF
     systemctl enable vsftpd --quiet
     systemctl restart vsftpd || log_warn "vsftpd start failed"
 
-    log_info "vsftpd installed ✓ (FTP on port 21, passive 40000-40100)"
+    # fail2ban jail for vsftpd brute-force protection
+    mkdir -p /etc/fail2ban/jail.d
+    cat > /etc/fail2ban/jail.d/zenspanel-vsftpd.conf <<'EOF'
+[vsftpd]
+enabled  = true
+port     = ftp,ftp-data,ftps,ftps-data
+filter   = vsftpd
+logpath  = /var/log/vsftpd.log
+maxretry = 5
+bantime  = 3600
+findtime = 600
+EOF
+    systemctl reload fail2ban 2>/dev/null || systemctl restart fail2ban 2>/dev/null || true
+
+    log_info "vsftpd installed ✓ (FTP on port 21, passive 40000-40100, fail2ban enabled)"
 }
 
 install_go() {

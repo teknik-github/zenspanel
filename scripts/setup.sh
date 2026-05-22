@@ -250,6 +250,25 @@ VSFTPDEOF
 
     systemctl enable vsftpd --quiet
     systemctl restart vsftpd || log_warn "vsftpd restart failed"
+
+    # fail2ban jail for vsftpd brute-force protection
+    JAIL_CONF="/etc/fail2ban/jail.d/zenspanel-vsftpd.conf"
+    if [[ ! -f "$JAIL_CONF" ]]; then
+        cat > "$JAIL_CONF" <<'EOF'
+[vsftpd]
+enabled  = true
+port     = ftp,ftp-data,ftps,ftps-data
+filter   = vsftpd
+logpath  = /var/log/vsftpd.log
+maxretry = 5
+bantime  = 3600
+findtime = 600
+EOF
+        systemctl reload fail2ban 2>/dev/null || systemctl restart fail2ban 2>/dev/null || true
+        log_info "fail2ban vsftpd jail enabled (5 attempts / 10 min → 1h ban)"
+    else
+        log_info "fail2ban vsftpd jail already configured ✓"
+    fi
 }
 
 # ── quota ─────────────────────────────────────────────────────────────────────
