@@ -94,13 +94,14 @@ function reset() {
 }
 
 const appIcons: Record<string, string> = {
-  wordpress:   '🌐',
-  joomla:      '🔵',
-  drupal:      '💧',
-  prestashop:  '🛒',
-  codeigniter: '🔥',
-  laravel:     '🔺',
-  html:        '📄',
+  wordpress:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8"><circle cx="12" cy="12" r="10"/><path d="M2 12h4m12 0h4M12 2v4m0 12v4"/><circle cx="12" cy="12" r="3"/></svg>`,
+  joomla:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+  drupal:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8"><path d="M12 2c-2 2-6 4-6 9a6 6 0 0 0 12 0c0-5-4-7-6-9z"/><path d="M9 17c0 2 1.5 3 3 3s3-1 3-3"/></svg>`,
+  prestashop:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8"><path d="M6 2h12l2 6-8 3-8-3 2-6z"/><path d="M3 8l9 4 9-4"/><path d="M12 12v10"/><path d="M5 19h14"/></svg>`,
+  codeigniter: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>`,
+  laravel:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>`,
+  html:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>`,
+  default:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="w-8 h-8"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>`,
 }
 
 function needsDB(appId: string) {
@@ -117,7 +118,7 @@ function needsDB(appId: string) {
     <div v-if="!selectedApp" class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3">
       <button v-for="app in apps" :key="app.id" @click="selectApp(app)"
         class="bg-white border border-gray-200 rounded-lg p-4 text-left hover:border-indigo-400 hover:shadow-sm transition-all">
-        <div class="text-2xl mb-2">{{ appIcons[app.id] || '📦' }}</div>
+        <div class="text-indigo-500 mb-2" v-html="appIcons[app.id] || appIcons.default"></div>
         <div class="text-sm font-semibold text-gray-800">{{ app.name }}</div>
         <div class="text-xs text-gray-400 mt-0.5" v-if="app.version !== '—'">v{{ app.version }}</div>
         <div class="text-xs text-gray-500 mt-2">{{ app.description }}</div>
@@ -131,7 +132,7 @@ function needsDB(appId: string) {
     <!-- Install form -->
     <div v-else-if="!jobId" class="bg-white border border-gray-200 rounded-lg p-5 space-y-4 max-w-lg">
       <div class="flex items-center gap-3">
-        <span class="text-2xl">{{ appIcons[selectedApp.id] || '📦' }}</span>
+        <div class="text-indigo-500 flex-shrink-0" v-html="appIcons[selectedApp.id] || appIcons.default"></div>
         <div>
           <h2 class="text-sm font-semibold text-gray-800">Install {{ selectedApp.name }}</h2>
           <p class="text-xs text-gray-400">{{ selectedApp.description }}</p>
