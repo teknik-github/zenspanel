@@ -31,7 +31,7 @@ async function toggle(id: number, enabled: boolean) {
 </script>
 
 <template>
-  <div class="space-y-4 max-w-2xl">
+  <div class="space-y-4">
     <div>
       <h1 class="text-lg font-semibold text-gray-800">PHP Versions</h1>
       <p class="text-xs text-gray-400 mt-0.5">Enable or disable PHP versions available to users</p>
@@ -55,37 +55,39 @@ async function toggle(id: number, enabled: boolean) {
     </div>
 
     <div v-else class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <table class="w-full text-xs">
-        <thead class="bg-gray-50 border-b border-gray-200">
-          <tr class="text-gray-500">
-            <th class="text-left px-4 py-3 font-medium">Version</th>
-            <th class="text-left px-4 py-3 font-medium">FPM Socket</th>
-            <th class="text-left px-4 py-3 font-medium">Status</th>
-            <th class="text-left px-4 py-3 font-medium">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="v in versions" :key="v.id" class="border-b border-gray-50 hover:bg-gray-50">
-            <td class="px-4 py-3 font-medium text-gray-700">PHP {{ v.version }}</td>
-            <td class="px-4 py-3 text-gray-400 font-mono text-[10px]">{{ v.fpm_socket }}</td>
-            <td class="px-4 py-3">
-              <span class="px-2 py-0.5 rounded text-[10px] font-medium"
-                :class="v.enabled ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'">
-                {{ v.enabled ? 'Enabled' : 'Disabled' }}
-              </span>
-            </td>
-            <td class="px-4 py-3">
-              <button @click="confirmToggle = { id: v.id, enabled: v.enabled, version: v.version }"
-                class="text-xs border px-3 py-1 rounded transition-colors"
-                :class="v.enabled
-                  ? 'border-red-200 text-red-600 hover:bg-red-50'
-                  : 'border-green-200 text-green-600 hover:bg-green-50'">
-                {{ v.enabled ? 'Disable' : 'Enable' }}
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs min-w-[480px]">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr class="text-gray-500">
+              <th class="text-left px-4 py-3 font-medium">Version</th>
+              <th class="text-left px-4 py-3 font-medium">FPM Socket</th>
+              <th class="text-left px-4 py-3 font-medium">Status</th>
+              <th class="text-right px-4 py-3 font-medium">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="v in versions" :key="v.id" class="border-b border-gray-50 hover:bg-gray-50">
+              <td class="px-4 py-3 font-medium text-gray-700">PHP {{ v.version }}</td>
+              <td class="px-4 py-3 text-gray-400 font-mono text-[10px]">{{ v.fpm_socket }}</td>
+              <td class="px-4 py-3">
+                <span class="px-2 py-0.5 rounded text-[10px] font-medium"
+                  :class="v.enabled ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'">
+                  {{ v.enabled ? 'Enabled' : 'Disabled' }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <button @click="confirmToggle = { id: v.id, enabled: v.enabled, version: v.version }"
+                  class="text-xs border px-3 py-1 rounded transition-colors"
+                  :class="v.enabled
+                    ? 'border-red-200 text-red-600 hover:bg-red-50'
+                    : 'border-green-200 text-green-600 hover:bg-green-50'">
+                  {{ v.enabled ? 'Disable' : 'Enable' }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Confirm Toggle -->
