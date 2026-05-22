@@ -1080,7 +1080,7 @@ server {
     location ^~ /admin/ {
         # IP allowlist — managed by ZensPanel admin panel
         # Empty file = allow all (default). Add IPs via Admin → IP Allowlist.
-        include ${NGINX_CONF}/admin-allowlist.conf;
+        include /etc/nginx/zenspanel/admin-allowlist.conf;
         alias ${ZENSPANEL_DIR}/frontend/admin/;
         index index.html;
         try_files \$uri \$uri/ /admin/index.html;
