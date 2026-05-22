@@ -10,18 +10,14 @@ import (
 )
 
 const (
-	ContextKeyUserID         = "user_id"
-	ContextKeyRole           = "role"
-	ContextKeyAPIKeyID       = "api_key_id"
+	ContextKeyUserID            = "user_id"
+	ContextKeyRole              = "role"
+	ContextKeyAPIKeyID          = "api_key_id"
 	ContextKeyAPIKeyPermissions = "api_key_permissions"
 )
 
-func JWTMiddleware(secret string) gin.HandlerFunc {
+func JWTMiddleware(secret string, users *store.UserStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Accept the JWT either in the Authorization header (axios path
-		// from the SPAs) or in the zenspanel_token cookie set by Login
-		// (used by browser-driven requests like the iframe to
-		// /filebrowser/, which don't carry custom headers).
 		var tokenStr string
 		if header := c.GetHeader("Authorization"); strings.HasPrefix(header, "Bearer ") {
 			tokenStr = strings.TrimPrefix(header, "Bearer ")
@@ -36,6 +32,16 @@ func JWTMiddleware(secret string) gin.HandlerFunc {
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			return
+		}
+		// Validate token_version against DB — BumpTokenVersion on suspend
+		// increments the DB value, making all previously issued tokens stale.
+		// Only check for user/admin roles (not api_key which has no version).
+		if users != nil && (claims.Role == "user" || claims.Role == "admin") {
+			dbVersion, err := users.GetTokenVersion(claims.UserID)
+			if err != nil || claims.TokenVersion < dbVersion {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "session revoked"})
+				return
+			}
 		}
 		c.Set(ContextKeyUserID, claims.UserID)
 		c.Set(ContextKeyRole, claims.Role)

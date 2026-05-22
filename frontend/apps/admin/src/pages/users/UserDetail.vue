@@ -3,15 +3,20 @@ import { onMounted, ref } from 'vue'
 import { usersApi } from '@/api/users'
 import { packagesApi } from '@/api/packages'
 import { useRoute, useRouter } from 'vue-router'
+import { useToast, useConfirm } from '@/notify'
 
 const route = useRoute()
 const router = useRouter()
+const { success: toastSuccess, error: toastError } = useToast()
+const { confirm } = useConfirm()
+
 const user = ref<any>(null)
 const packages = ref<any[]>([])
 const form = ref<any>({})
 const loading = ref(false)
 const saved = ref(false)
 const confirmDelete = ref(false)
+const suspendLoading = ref(false)
 
 onMounted(async () => {
   const [userRes, pkgRes] = await Promise.all([
@@ -25,7 +30,6 @@ onMounted(async () => {
     package_id: user.value.package_id,
     terminal_enabled: user.value.terminal_enabled,
     backup_enabled: user.value.backup_enabled,
-    status: user.value.status,
   }
 })
 
@@ -51,6 +55,36 @@ async function loginAs() {
   const url = `${window.location.origin}/#impersonate=${encodeURIComponent(token)}`
   window.open(url, '_blank')
 }
+
+async function suspendUser() {
+  const ok = await confirm(
+    `Suspend ${user.value.username}? This will disable all their websites, FTP access, and revoke all active sessions immediately.`
+  )
+  if (!ok) return
+  suspendLoading.value = true
+  try {
+    await usersApi.suspend(user.value.id)
+    user.value = { ...user.value, status: 'suspended' }
+    toastSuccess('User suspended — all sessions revoked')
+  } catch (e: any) {
+    toastError(e?.response?.data?.error || 'Failed to suspend user')
+  } finally {
+    suspendLoading.value = false
+  }
+}
+
+async function unsuspendUser() {
+  suspendLoading.value = true
+  try {
+    await usersApi.unsuspend(user.value.id)
+    user.value = { ...user.value, status: 'active' }
+    toastSuccess('User unsuspended — services restored')
+  } catch (e: any) {
+    toastError(e?.response?.data?.error || 'Failed to unsuspend user')
+  } finally {
+    suspendLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -63,9 +97,22 @@ async function loginAs() {
       </button>
       <h1 class="text-lg font-semibold text-gray-800">{{ user.username }}</h1>
       <span class="px-2 py-0.5 rounded text-[10px] font-medium"
-        :class="user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'">
+        :class="user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
         {{ user.status }}
       </span>
+    </div>
+
+    <!-- Suspend/Unsuspend banner -->
+    <div v-if="user.status === 'suspended'"
+      class="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-center justify-between">
+      <div>
+        <p class="text-sm font-medium text-red-800">Account suspended</p>
+        <p class="text-xs text-red-600 mt-0.5">All websites, FTP, and sessions are disabled.</p>
+      </div>
+      <button @click="unsuspendUser" :disabled="suspendLoading"
+        class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 disabled:opacity-50">
+        {{ suspendLoading ? 'Restoring...' : 'Unsuspend' }}
+      </button>
     </div>
 
     <div class="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
@@ -88,14 +135,6 @@ async function loginAs() {
             <option v-for="p in packages" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
         </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
-          <select v-model="form.status"
-            class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="active">Active</option>
-            <option value="suspended">Suspended</option>
-          </select>
-        </div>
       </div>
 
       <div class="flex items-center gap-6 pt-2">
@@ -109,7 +148,7 @@ async function loginAs() {
         </label>
       </div>
 
-      <div class="flex items-center gap-3 pt-2">
+      <div class="flex items-center gap-3 pt-2 flex-wrap">
         <button @click="save" :disabled="loading"
           class="bg-indigo-600 text-white text-sm px-4 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50">
           {{ loading ? 'Saving...' : 'Save Changes' }}
@@ -118,6 +157,14 @@ async function loginAs() {
         <button @click="loginAs"
           class="text-sm text-purple-600 border border-purple-200 px-4 py-2 rounded-md hover:bg-purple-50">
           Login as User
+        </button>
+        <button v-if="user.status === 'active'" @click="suspendUser" :disabled="suspendLoading"
+          class="text-sm text-orange-600 border border-orange-200 px-4 py-2 rounded-md hover:bg-orange-50 disabled:opacity-50">
+          {{ suspendLoading ? 'Suspending...' : 'Suspend User' }}
+        </button>
+        <button v-else @click="unsuspendUser" :disabled="suspendLoading"
+          class="text-sm text-green-600 border border-green-200 px-4 py-2 rounded-md hover:bg-green-50 disabled:opacity-50">
+          {{ suspendLoading ? 'Restoring...' : 'Unsuspend User' }}
         </button>
         <button @click="confirmDelete = true"
           class="ml-auto text-sm text-red-600 border border-red-200 px-4 py-2 rounded-md hover:bg-red-50">

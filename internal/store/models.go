@@ -20,6 +20,7 @@ type User struct {
 	TOTPSecretEnc     sql.NullString `db:"totp_secret_enc" json:"-"`
 	TOTPEnabled       bool           `db:"totp_enabled" json:"totp_enabled"`
 	TOTPRecoveryCodes sql.NullString `db:"totp_recovery_codes" json:"-"`
+	TokenVersion      int            `db:"token_version" json:"-"`
 	CreatedAt         time.Time      `db:"created_at" json:"created_at"`
 	UpdatedAt         time.Time      `db:"updated_at" json:"updated_at"`
 }

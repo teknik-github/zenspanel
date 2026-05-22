@@ -10,17 +10,25 @@ import (
 type Claims struct {
 	UserID         uint64 `json:"user_id"`
 	Role           string `json:"role"`
+	TokenVersion   int    `json:"token_version,omitempty"`
 	ImpersonatedBy uint64 `json:"impersonated_by,omitempty"`
 	jwt.RegisteredClaims
 }
 
 func GenerateToken(userID uint64, role, secret, expiry string) (string, error) {
-	return GenerateTokenAs(userID, role, 0, secret, expiry)
+	return GenerateTokenWithVersion(userID, role, 0, 0, secret, expiry)
 }
 
 // GenerateTokenAs mints a token for userID/role. When impersonatedBy > 0
 // the claim is embedded so audit logs can trace who initiated the session.
 func GenerateTokenAs(userID uint64, role string, impersonatedBy uint64, secret, expiry string) (string, error) {
+	return GenerateTokenWithVersion(userID, role, impersonatedBy, 0, secret, expiry)
+}
+
+// GenerateTokenWithVersion mints a token embedding the user's current
+// token_version. The middleware rejects tokens whose version is lower than
+// the DB value — this is how suspend immediately invalidates all sessions.
+func GenerateTokenWithVersion(userID uint64, role string, impersonatedBy uint64, tokenVersion int, secret, expiry string) (string, error) {
 	dur, err := time.ParseDuration(expiry)
 	if err != nil {
 		return "", fmt.Errorf("parse expiry: %w", err)
@@ -28,6 +36,7 @@ func GenerateTokenAs(userID uint64, role string, impersonatedBy uint64, secret, 
 	claims := Claims{
 		UserID:         userID,
 		Role:           role,
+		TokenVersion:   tokenVersion,
 		ImpersonatedBy: impersonatedBy,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(dur)),

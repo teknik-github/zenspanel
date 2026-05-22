@@ -70,7 +70,7 @@ func main() {
 
 	// handlers
 	authH := handlers.NewAuthHandler(userStore, cfg.JWT.Secret, cfg.JWT.Expiry, cfg.JWT.TOTPKey)
-	usersH := handlers.NewUserHandler(userStore, packageStore, domainStore, subdomainStore, databaseStore, cfg.Agent.Socket)
+	usersH := handlers.NewUserHandler(userStore, packageStore, domainStore, subdomainStore, databaseStore, store.NewFTPAccountStore(db), cfg.Agent.Socket)
 	packagesH := handlers.NewPackageHandler(packageStore)
 	domainsH := handlers.NewDomainHandler(domainStore, subdomainStore, userStore, cfg.Agent.Socket, cfg.Paths.HomeBase)
 	subdomainsH := handlers.NewSubdomainHandler(subdomainStore, domainStore, userStore, phpVersionStore, cfg.Agent.Socket, cfg.Paths.HomeBase)
@@ -108,6 +108,7 @@ func main() {
 		authH, usersH, packagesH, domainsH, subdomainsH, databasesH,
 		phpVersionsH, phpExtensionsH, cronJobsH, logsH, installerH, firewallH, antivirusH, backupTargetsH, redirectsH, hotlinkH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH, terminalH, ftpH,
 		apiKeyStore, auditLogStore,
+		userStore,
 		rdb,
 		cfg.JWT.Secret,
 		cfg.Paths.FrontendDir,

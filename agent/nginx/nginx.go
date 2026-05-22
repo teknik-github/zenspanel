@@ -339,3 +339,81 @@ func SetHotlinkProtection(nginxConf, domain string, enabled bool, allowedDomains
 
 	return ReloadNginx()
 }
+
+// SuspendAllVhosts replaces every vhost config owned by username with a
+// 503 suspend page. Ownership is determined by the username embedded in
+// the pool socket path inside the config file. Reloads nginx once after
+// all files are rewritten so there is only one reload per suspend op.
+func SuspendAllVhosts(nginxConf, username string) error {
+	if err := safe.Username(username); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(nginxConf)
+	if err != nil {
+		return fmt.Errorf("readdir %s: %w", nginxConf, err)
+	}
+	changed := false
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".conf") {
+			continue
+		}
+		path := filepath.Join(nginxConf, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if !strings.Contains(string(data), "zenspanel-"+username+"-") {
+			continue
+		}
+		domain := strings.TrimSuffix(e.Name(), ".conf")
+		if !strings.Contains(domain, ".") {
+			continue
+		}
+		_ = os.WriteFile(path+".presuspend", data, 0644)
+		tmpl := template.Must(template.New("s").Parse(suspendTmpl))
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, vhostData{Domain: domain}); err != nil {
+			continue
+		}
+		_ = os.WriteFile(path, buf.Bytes(), 0644)
+		changed = true
+	}
+	if changed {
+		return ReloadNginx()
+	}
+	return nil
+}
+
+// UnsuspendAllVhosts restores vhost configs from .presuspend backups for
+// all domains owned by username.
+func UnsuspendAllVhosts(nginxConf, username string) error {
+	if err := safe.Username(username); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(nginxConf)
+	if err != nil {
+		return fmt.Errorf("readdir %s: %w", nginxConf, err)
+	}
+	changed := false
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".conf.presuspend") {
+			continue
+		}
+		backupPath := filepath.Join(nginxConf, e.Name())
+		data, err := os.ReadFile(backupPath)
+		if err != nil {
+			continue
+		}
+		if !strings.Contains(string(data), "zenspanel-"+username+"-") {
+			continue
+		}
+		origPath := strings.TrimSuffix(backupPath, ".presuspend")
+		_ = os.WriteFile(origPath, data, 0644)
+		_ = os.Remove(backupPath)
+		changed = true
+	}
+	if changed {
+		return ReloadNginx()
+	}
+	return nil
+}

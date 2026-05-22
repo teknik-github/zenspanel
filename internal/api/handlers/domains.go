@@ -258,3 +258,55 @@ func (h *DomainHandler) Delete(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
+
+func (h *DomainHandler) SuspendDomain(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	domain, err := h.domains.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "domain not found"})
+		return
+	}
+	if auth.GetRole(c) == "user" && domain.UserID != auth.GetUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	if err := agent.NewClient(h.agentSock).Call("nginx.suspend_vhost", map[string]interface{}{
+		"domain": domain.Domain,
+	}, nil); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	_ = h.domains.Update(id, map[string]interface{}{"status": "suspended"})
+	c.JSON(http.StatusOK, gin.H{"message": "domain suspended"})
+}
+
+func (h *DomainHandler) UnsuspendDomain(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	domain, err := h.domains.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "domain not found"})
+		return
+	}
+	if auth.GetRole(c) == "user" && domain.UserID != auth.GetUserID(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
+	// Get user to recreate the vhost properly
+	user, err := h.users.GetByID(domain.UserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup user"})
+		return
+	}
+	if err := agent.NewClient(h.agentSock).Call("nginx.create_vhost", map[string]interface{}{
+		"domain":      domain.Domain,
+		"username":    user.Username,
+		"php_version": domain.PHPVersion,
+		"doc_root":    domain.DocumentRoot,
+	}, nil); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	_ = h.domains.Update(id, map[string]interface{}{"status": "active"})
+	c.JSON(http.StatusOK, gin.H{"message": "domain unsuspended"})
+}

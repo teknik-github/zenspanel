@@ -996,6 +996,46 @@ func main() {
 		return nil, agentftp.DeleteAccount(p.FTPUsername)
 	})
 
+	srv.Register("ftp.suspend_user", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			FTPUsername string `json:"ftp_username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentftp.SuspendUser(p.FTPUsername)
+	})
+
+	srv.Register("ftp.unsuspend_user", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			FTPUsername string `json:"ftp_username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentftp.UnsuspendUser(p.FTPUsername)
+	})
+
+	srv.Register("nginx.suspend_all_vhosts", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentnginx.SuspendAllVhosts(cfg.Paths.NginxConf, p.Username)
+	})
+
+	srv.Register("nginx.unsuspend_all_vhosts", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentnginx.UnsuspendAllVhosts(cfg.Paths.NginxConf, p.Username)
+	})
+
 	log.Printf("ZensPanel Agent starting, socket: %s", cfg.Agent.Socket)
 	if err := srv.Listen(); err != nil {
 		log.Fatalf("agent listen: %v", err)

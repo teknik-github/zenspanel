@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Full suspend/unsuspend system (T134–T145). Suspending a user now atomically: disables all nginx vhosts (503 page), suspends all FTP accounts (removed from PAM DB), and revokes all active JWT sessions immediately via `token_version` increment in DB. New `token_version` column on users (migration 000023); JWT middleware validates the claim on every request and returns 401 if the token version is lower than the DB value — suspended users cannot use existing tokens even before expiry (V62, V63). New agent RPCs: `nginx.suspend_all_vhosts`, `nginx.unsuspend_all_vhosts`, `ftp.suspend_user`, `ftp.unsuspend_user`. Admin User Detail page gains dedicated Suspend/Unsuspend buttons with confirm dialog and suspended banner. Per-domain suspend/unsuspend: new `POST /api/v1/domains/:id/suspend` and `unsuspend` routes + `SuspendDomain`/`UnsuspendDomain` handlers (V64).
+
+### Added
 - Auto dependency setup on update. New `scripts/setup.sh` — idempotent script that installs and configures all ZensPanel dependencies (nginx, MySQL, Redis, PHP 8.1/8.2/8.3, Certbot, phpMyAdmin, ClamAV, fail2ban, vsftpd, quota, cgroups, Composer, logrotate). Each step checks before acting so it's safe to run repeatedly. The updater now runs this script as a `setup_dependencies` phase after deploying binaries and frontend (both download and build-from-source paths). Failures are non-fatal — binaries are already deployed and the restart proceeds. This means new features that require new system packages (e.g. vsftpd for FTP accounts) are automatically provisioned on existing servers when the admin clicks "Apply Update".
 
 ### Added

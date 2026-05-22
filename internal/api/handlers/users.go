@@ -151,6 +151,7 @@ type UserHandler struct {
 	domains    *store.DomainStore
 	subdomains *store.SubdomainStore
 	databases  *store.DatabaseStore
+	ftp        *store.FTPAccountStore
 	agentSock  string
 }
 
@@ -160,6 +161,7 @@ func NewUserHandler(
 	domains *store.DomainStore,
 	subdomains *store.SubdomainStore,
 	databases *store.DatabaseStore,
+	ftp *store.FTPAccountStore,
 	agentSock string,
 ) *UserHandler {
 	return &UserHandler{
@@ -168,6 +170,7 @@ func NewUserHandler(
 		domains:    domains,
 		subdomains: subdomains,
 		databases:  databases,
+		ftp:        ftp,
 		agentSock:  agentSock,
 	}
 }
@@ -528,20 +531,83 @@ func (h *UserHandler) Delete(c *gin.Context) {
 
 func (h *UserHandler) Suspend(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	user, err := h.users.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
 	if err := h.users.Update(id, map[string]interface{}{"status": "suspended"}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "suspended"})
+
+	ac := agent.NewClient(h.agentSock)
+	warnings := []string{}
+
+	// Suspend all nginx vhosts (V64)
+	if err := ac.Call("nginx.suspend_all_vhosts", map[string]interface{}{
+		"username": user.Username,
+	}, nil); err != nil {
+		warnings = append(warnings, "nginx: "+err.Error())
+	}
+
+	// Suspend all FTP accounts (V65)
+	if h.ftp != nil {
+		ftpAccounts, _ := h.ftp.ListByUserID(id)
+		for _, a := range ftpAccounts {
+			if err := ac.Call("ftp.suspend_user", map[string]interface{}{
+				"ftp_username": a.FTPUsername,
+			}, nil); err != nil {
+				warnings = append(warnings, "ftp "+a.FTPUsername+": "+err.Error())
+			}
+		}
+	}
+
+	// Revoke all active sessions by bumping token_version (V63)
+	if err := h.users.BumpTokenVersion(id); err != nil {
+		warnings = append(warnings, "token_version: "+err.Error())
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "suspended", "warnings": warnings})
 }
 
 func (h *UserHandler) Unsuspend(c *gin.Context) {
 	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	user, err := h.users.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
 	if err := h.users.Update(id, map[string]interface{}{"status": "active"}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "unsuspended"})
+
+	ac := agent.NewClient(h.agentSock)
+	warnings := []string{}
+
+	// Restore all nginx vhosts (V66)
+	if err := ac.Call("nginx.unsuspend_all_vhosts", map[string]interface{}{
+		"username": user.Username,
+	}, nil); err != nil {
+		warnings = append(warnings, "nginx: "+err.Error())
+	}
+
+	// Restore all FTP accounts (V66)
+	if h.ftp != nil {
+		ftpAccounts, _ := h.ftp.ListByUserID(id)
+		for _, a := range ftpAccounts {
+			if err := ac.Call("ftp.unsuspend_user", map[string]interface{}{
+				"ftp_username": a.FTPUsername,
+			}, nil); err != nil {
+				warnings = append(warnings, "ftp "+a.FTPUsername+": "+err.Error())
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "unsuspended", "warnings": warnings})
 }
 
 func (h *UserHandler) ChangePackage(c *gin.Context) {

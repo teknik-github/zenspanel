@@ -155,7 +155,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := auth.GenerateToken(user.ID, user.Role, h.secret, h.expiry)
+	token, err := auth.GenerateTokenWithVersion(user.ID, user.Role, 0, user.TokenVersion, h.secret, h.expiry)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token generation failed"})
 		return
@@ -427,7 +427,7 @@ func (h *AuthHandler) TOTPVerify(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup user"})
 		return
 	}
-	token, err := auth.GenerateToken(user.ID, user.Role, h.secret, h.expiry)
+	token, err := auth.GenerateTokenWithVersion(user.ID, user.Role, 0, user.TokenVersion, h.secret, h.expiry)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token generation failed"})
 		return
@@ -491,7 +491,7 @@ func (h *AuthHandler) TOTPRecover(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup user"})
 		return
 	}
-	token, err := auth.GenerateToken(user.ID, user.Role, h.secret, h.expiry)
+	token, err := auth.GenerateTokenWithVersion(user.ID, user.Role, 0, user.TokenVersion, h.secret, h.expiry)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token generation failed"})
 		return

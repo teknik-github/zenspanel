@@ -42,6 +42,7 @@ type Router struct {
 	ftp           *handlers.FTPHandler
 	apiKeyStore   *store.APIKeyStore
 	auditLogStore *store.AuditLogStore
+	userStore     *store.UserStore
 	redis         *redis.Client
 	jwtSecret     string
 	frontendDir   string // path to /opt/zenspanel/frontend
@@ -74,6 +75,7 @@ func NewRouter(
 	ftpH *handlers.FTPHandler,
 	apiKeyStore *store.APIKeyStore,
 	auditLogStore *store.AuditLogStore,
+	userStore *store.UserStore,
 	rdb *redis.Client,
 	jwtSecret string,
 	frontendDir string,
@@ -105,6 +107,7 @@ func NewRouter(
 		ftp:           ftpH,
 		apiKeyStore:   apiKeyStore,
 		auditLogStore: auditLogStore,
+		userStore:     userStore,
 		redis:         rdb,
 		jwtSecret:     jwtSecret,
 		frontendDir:   frontendDir,
@@ -156,7 +159,7 @@ func (r *Router) Setup() *gin.Engine {
 	audit := middleware.Audit(r.auditLogStore)
 
 	// protected routes
-	api := e.Group("/api/v1", auth.JWTMiddleware(r.jwtSecret), audit)
+	api := e.Group("/api/v1", auth.JWTMiddleware(r.jwtSecret, r.userStore), audit)
 	{
 		api.GET("/auth/me", r.auth.Me)
 		api.GET("/auth/filebrowser", r.auth.FileBrowserAuth)
@@ -197,6 +200,8 @@ func (r *Router) Setup() *gin.Engine {
 		api.DELETE("/domains/:id/ssl", r.ssl.Remove)
 		api.GET("/domains/:id/logs", r.logs.DomainLogs)
 		api.POST("/domains/:id/backup", r.backups.DomainBackup)
+		api.POST("/domains/:id/suspend", r.domains.SuspendDomain)
+		api.POST("/domains/:id/unsuspend", r.domains.UnsuspendDomain)
 		api.GET("/domains/:id/redirects", r.redirects.List)
 		api.POST("/domains/:id/redirects", r.redirects.Create)
 		api.PUT("/domains/:id/redirects/:rid", r.redirects.Update)

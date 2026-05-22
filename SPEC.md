@@ -243,7 +243,11 @@ V57: antivirus_enabled flag in packages ! default TRUE for existing packages (mi
 V58: domain backup ! include files outside domain docroot. scope = docroot only (! full home). ⊥ cross-domain data leak
 V59: FTP account ! share credentials w/ panel login. separate vsftpd/pure-ftpd user per FTP account. ⊥ privilege escalation
 V60: FTP account ! allow access outside user home jail. chroot to user home. ⊥ escape home dir
-V61: max_ftp_accounts per package. 0 = disabled. ⊥ unlimited FTP on restricted plans
+V62: suspend user ! only set DB status. must also: disable nginx vhosts, disable FTP accounts, revoke all active JWT sessions (blacklist or version bump). ⊥ suspended user still serves traffic / logs in
+V63: session revoke on suspend ! rely on JWT expiry. must invalidate immediately via token_version increment in DB. ⊥ suspended user keeps active session until token expires
+V64: domain suspend ! remove vhost from nginx (or return 503). ⊥ suspended domain still serves content
+V65: FTP suspend ! disable vsftpd virtual user immediately (remove from PAM DB). ⊥ suspended user still uploads via FTP
+V66: unsuspend ! restore all services atomically. nginx vhosts re-enabled, FTP re-enabled, token_version unchanged (new login required). ⊥ partial restore leaves user broken
 
 ## §T TASKS
 
@@ -382,6 +386,18 @@ V61: max_ftp_accounts per package. 0 = disabled. ⊥ unlimited FTP on restricted
 | T131 | x | user panel: FTP Accounts page — list accounts, create (username+password), delete; show server/port info | I.frontend,V59 |
 | T132 | x | `scripts/install.sh`: install vsftpd, configure virtual users via PAM + db file, enable passive mode | — |
 | T133 | x | `make build` + `pnpm -r build` clean | — |
+| T134 | x | migration 000023: add `token_version INT NOT NULL DEFAULT 0` to `users` table | I.db |
+| T135 | x | `internal/store/users.go`: add `TokenVersion int` to User model + `BumpTokenVersion(id)` method | I.db,V63 |
+| T136 | x | `internal/auth/jwt.go`: embed `token_version` claim in JWT on login; middleware validates claim vs DB on every request → 401 if mismatch (V63) | V63,I.api |
+| T137 | x | `internal/api/handlers/users.go` `Suspend`: after DB status=suspended → agent `nginx.suspend_all_vhosts(username)` + `ftp.suspend_user(username)` + `users.BumpTokenVersion(id)` (V62,V63,V64,V65) | V62,V63,V64,V65 |
+| T138 | x | `internal/api/handlers/users.go` `Unsuspend`: after DB status=active → agent `nginx.unsuspend_all_vhosts(username)` + `ftp.unsuspend_user(username)` (V66) | V66 |
+| T139 | x | `agent/nginx/nginx.go`: `SuspendAllVhosts(username, nginxConf)` — rename all `<domain>.conf` owned by user to `<domain>.conf.suspended` + reload; `UnsuspendAllVhosts` reverses | V64 |
+| T140 | x | `agent/ftp/ftp.go`: `SuspendUser(ftpUser)` — remove from virtual_users.txt + recompile DB; `UnsuspendUser(ftpUser, password_hash)` — re-add (V65) | V65 |
+| T141 | x | register `nginx.suspend_all_vhosts`, `nginx.unsuspend_all_vhosts`, `ftp.suspend_user`, `ftp.unsuspend_user` RPCs @ `cmd/agent/main.go` | V64,V65 |
+| T142 | x | admin panel: User Detail page — "Suspend" button triggers full suspend (domains + FTP + session revoke); "Unsuspend" restores; show suspended badge | I.frontend,V62 |
+| T143 | x | admin panel: Domain list (per user) — show suspended badge per domain; "Suspend Domain" / "Unsuspend Domain" buttons → `POST /api/v1/domains/:id/suspend` + `unsuspend` | I.frontend,V64 |
+| T144 | x | `internal/api/handlers/domains.go`: `SuspendDomain` / `UnsuspendDomain` — ownership check + agent `nginx.suspend_vhost` / `nginx.unsuspend_vhost` + DB status update | V64 |
+| T145 | x | `make build` + `pnpm -r build` clean | — |
 
 ## §B BUGS
 
@@ -398,3 +414,4 @@ V61: max_ftp_accounts per package. 0 = disabled. ⊥ unlimited FTP on restricted
 | B9 | 2026-05-20 | `internal/api/handlers/phpextensions.go:AdminUpdate` — dead propagation branch: `if !req.Enabled` block fetches agent client but never calls any RPC ∴ disabling ext globally does NOT reload running FPM pools. Ext stays loaded until next pool reload. Contradicts V20 intent. LOW. | V44 |
 | B10 | 2026-05-20 | `internal/api/handlers/users.go:Update` — if `GetByID` fails after DB write, `user.setup_bin` is silently skipped and response is still 200. Shell PHP symlink stays stale. No warning surfaced to caller. LOW. | — |
 | B11 | 2026-05-20 | "Login as" opens `/user/#impersonate=<token>` but nginx serves user panel at `/` (root). URL 404s ∴ token never read, user lands on login page. FIXED: changed to `/#impersonate=<token>`. | V45 |
+| B12 | 2026-05-22 | suspend user only sets DB status=suspended. nginx vhosts still serve, FTP still works, active JWT still valid until expiry. suspended user can continue using all services. T134-T141 fix. | V62,V63,V64,V65 |

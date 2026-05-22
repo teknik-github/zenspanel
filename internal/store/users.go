@@ -234,3 +234,14 @@ func (s *UserStore) CountDatabases(userID uint64) (int, error) {
 	err := s.db.Get(&n, "SELECT COUNT(*) FROM `databases` WHERE user_id = ?", userID)
 	return n, err
 }
+
+func (s *UserStore) BumpTokenVersion(id uint64) error {
+	_, err := s.db.Exec("UPDATE users SET token_version = token_version + 1 WHERE id = ?", id)
+	return err
+}
+
+func (s *UserStore) GetTokenVersion(id uint64) (int, error) {
+	var v int
+	err := s.db.Get(&v, "SELECT token_version FROM users WHERE id = ?", id)
+	return v, err
+}

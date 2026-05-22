@@ -198,3 +198,77 @@ func writeLines(path string, lines []string) error {
 	}
 	return os.WriteFile(path, []byte(content), 0600)
 }
+
+// SuspendUser temporarily removes an FTP virtual user from the PAM DB
+// without deleting their config. The user entry is moved to a .suspended
+// backup file so UnsuspendUser can restore it without needing the password.
+func SuspendUser(ftpUser string) error {
+	if err := FTPUsername(ftpUser); err != nil {
+		return err
+	}
+	lines, err := readLines(virtualUsersFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read virtual users: %w", err)
+	}
+
+	// Find and extract the user+password pair
+	var suspended []string
+	var filtered []string
+	for i := 0; i < len(lines); i++ {
+		if lines[i] == ftpUser && i+1 < len(lines) {
+			suspended = append(suspended, lines[i], lines[i+1])
+			i++ // skip password line
+			continue
+		}
+		filtered = append(filtered, lines[i])
+	}
+	if len(suspended) == 0 {
+		return nil // user not found, nothing to do
+	}
+
+	// Save suspended entry to backup file
+	suspendedFile := virtualUsersFile + "." + ftpUser + ".suspended"
+	if err := writeLines(suspendedFile, suspended); err != nil {
+		return fmt.Errorf("write suspended backup: %w", err)
+	}
+
+	if err := writeLines(virtualUsersFile, filtered); err != nil {
+		return fmt.Errorf("write virtual users: %w", err)
+	}
+	if err := recompileDB(); err != nil {
+		return err
+	}
+	return reloadVsftpd()
+}
+
+// UnsuspendUser restores an FTP virtual user from the .suspended backup.
+func UnsuspendUser(ftpUser string) error {
+	if err := FTPUsername(ftpUser); err != nil {
+		return err
+	}
+	suspendedFile := virtualUsersFile + "." + ftpUser + ".suspended"
+	suspended, err := readLines(suspendedFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // nothing to restore
+		}
+		return fmt.Errorf("read suspended backup: %w", err)
+	}
+	if len(suspended) < 2 {
+		return fmt.Errorf("invalid suspended backup for %s", ftpUser)
+	}
+
+	// Re-add to virtual_users.txt
+	if err := upsertVirtualUser(suspended[0], suspended[1]); err != nil {
+		return err
+	}
+	_ = os.Remove(suspendedFile)
+
+	if err := recompileDB(); err != nil {
+		return err
+	}
+	return reloadVsftpd()
+}
