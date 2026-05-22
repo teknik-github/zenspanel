@@ -154,9 +154,15 @@ const typeLabels: Record<string, string> = {
           <p class="text-xs text-gray-500 mt-0.5">
             {{ typeLabels[t.type] || t.type }} · {{ t.bucket }}/{{ t.prefix }} · {{ t.region }}
           </p>
-          <div v-if="testResult[t.id]" class="mt-1">
+          <div v-if="testResult[t.id]" class="mt-1 flex items-center gap-1">
+            <svg v-if="testResult[t.id].ok" class="w-3.5 h-3.5 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <svg v-else class="w-3.5 h-3.5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
             <span class="text-xs" :class="testResult[t.id].ok ? 'text-green-600' : 'text-red-500'">
-              {{ testResult[t.id].ok ? '✓ Connection OK' : '✗ ' + testResult[t.id].error }}
+              {{ testResult[t.id].ok ? 'Connection OK' : testResult[t.id].error }}
             </span>
           </div>
         </div>

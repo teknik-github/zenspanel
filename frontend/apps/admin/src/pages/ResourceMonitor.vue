@@ -182,7 +182,12 @@ function svcClass(s?: string) {
               <td class="px-4 py-2.5">
                 <div class="font-medium text-gray-800">{{ u.username }}</div>
                 <div v-if="u.cpu_pct >= 90 || pct(u.ram_used, u.ram_max) >= 90 || pct(u.disk_used, u.disk_max) >= 90"
-                  class="text-[10px] text-red-500 font-medium">⚠ High usage</div>
+                  class="flex items-center gap-1 text-[10px] text-red-500 font-medium mt-0.5">
+                  <svg class="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  High usage
+                </div>
               </td>
               <td class="px-4 py-2.5">
                 <div class="flex items-center gap-2">

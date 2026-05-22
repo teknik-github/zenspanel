@@ -3,12 +3,14 @@ import { onMounted, ref } from 'vue'
 import { phpVersionsApi } from '@/api/phpVersions'
 
 const versions = ref<any[]>([])
+const loaded = ref(false)
 const loading = ref(false)
-const confirmToggle = ref<{ id: number; enabled: boolean } | null>(null)
+const confirmToggle = ref<{ id: number; enabled: boolean; version: string } | null>(null)
 
 onMounted(async () => {
   const res = await phpVersionsApi.list()
   versions.value = res.data.data || []
+  loaded.value = true
 })
 
 async function toggle(id: number, enabled: boolean) {
@@ -29,10 +31,30 @@ async function toggle(id: number, enabled: boolean) {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <h1 class="text-lg font-semibold text-gray-800">PHP Versions</h1>
+  <div class="space-y-4 max-w-2xl">
+    <div>
+      <h1 class="text-lg font-semibold text-gray-800">PHP Versions</h1>
+      <p class="text-xs text-gray-400 mt-0.5">Enable or disable PHP versions available to users</p>
+    </div>
 
-    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    <!-- Skeleton -->
+    <div v-if="!loaded" class="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
+      <div v-for="i in 3" :key="i" class="h-10 bg-gray-50 rounded animate-pulse" />
+    </div>
+
+    <!-- Empty state -->
+    <div v-else-if="!versions.length"
+      class="bg-white border border-gray-200 rounded-lg flex flex-col items-center justify-center py-12 text-center px-4">
+      <div class="w-12 h-12 rounded-full bg-indigo-50 text-indigo-400 flex items-center justify-center mb-3">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+        </svg>
+      </div>
+      <p class="text-sm font-medium text-gray-700">No PHP versions found</p>
+      <p class="text-xs text-gray-400 mt-1">PHP versions are seeded automatically on first startup</p>
+    </div>
+
+    <div v-else class="bg-white border border-gray-200 rounded-lg overflow-hidden">
       <table class="w-full text-xs">
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr class="text-gray-500">
@@ -45,17 +67,19 @@ async function toggle(id: number, enabled: boolean) {
         <tbody>
           <tr v-for="v in versions" :key="v.id" class="border-b border-gray-50 hover:bg-gray-50">
             <td class="px-4 py-3 font-medium text-gray-700">PHP {{ v.version }}</td>
-            <td class="px-4 py-3 text-gray-400 font-mono">{{ v.fpm_socket }}</td>
+            <td class="px-4 py-3 text-gray-400 font-mono text-[10px]">{{ v.fpm_socket }}</td>
             <td class="px-4 py-3">
               <span class="px-2 py-0.5 rounded text-[10px] font-medium"
                 :class="v.enabled ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'">
-                {{ v.enabled ? 'enabled' : 'disabled' }}
+                {{ v.enabled ? 'Enabled' : 'Disabled' }}
               </span>
             </td>
             <td class="px-4 py-3">
-              <button @click="confirmToggle = { id: v.id, enabled: v.enabled }"
+              <button @click="confirmToggle = { id: v.id, enabled: v.enabled, version: v.version }"
                 class="text-xs border px-3 py-1 rounded transition-colors"
-                :class="v.enabled ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-green-200 text-green-600 hover:bg-green-50'">
+                :class="v.enabled
+                  ? 'border-red-200 text-red-600 hover:bg-red-50'
+                  : 'border-green-200 text-green-600 hover:bg-green-50'">
                 {{ v.enabled ? 'Disable' : 'Enable' }}
               </button>
             </td>
@@ -68,7 +92,7 @@ async function toggle(id: number, enabled: boolean) {
     <div v-if="confirmToggle" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
       <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
         <h2 class="font-semibold text-gray-800 mb-2">
-          {{ confirmToggle.enabled ? 'Disable' : 'Enable' }} PHP Version?
+          {{ confirmToggle.enabled ? 'Disable' : 'Enable' }} PHP {{ confirmToggle.version }}?
         </h2>
         <p class="text-sm text-gray-500 mb-4">
           {{ confirmToggle.enabled
@@ -81,7 +105,7 @@ async function toggle(id: number, enabled: boolean) {
           <button @click="toggle(confirmToggle!.id, confirmToggle!.enabled)" :disabled="loading"
             class="flex-1 rounded-md py-2 text-sm text-white disabled:opacity-50"
             :class="confirmToggle.enabled ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'">
-            {{ confirmToggle.enabled ? 'Disable' : 'Enable' }}
+            {{ loading ? 'Saving...' : (confirmToggle.enabled ? 'Disable' : 'Enable') }}
           </button>
         </div>
       </div>

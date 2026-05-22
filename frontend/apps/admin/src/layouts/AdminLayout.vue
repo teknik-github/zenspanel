@@ -77,10 +77,16 @@ const pageTitle = computed(() => {
     '/domains': 'Domains',
     '/databases': 'Databases',
     '/php-versions': 'PHP Versions',
+    '/php-extensions': 'PHP Extensions',
     '/ssl-manager': 'SSL Manager',
+    '/firewall': 'Firewall',
+    '/ip-allowlist': 'IP Allowlist',
     '/backups': 'Backups',
+    '/backup-targets': 'Backup Targets',
     '/api-keys': 'API Keys',
     '/audit-logs': 'Audit Logs',
+    '/terminal': 'Terminal',
+    '/updates': 'Updates',
     '/settings': 'Settings',
   }
   for (const path of Object.keys(titles).sort((a, b) => b.length - a.length)) {

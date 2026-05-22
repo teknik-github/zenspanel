@@ -1,24 +1,27 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { apiKeysApi } from '@/api/apiKeys'
+import { useToast } from '@/notify'
 
+const { success: toastSuccess } = useToast()
 const keys = ref<any[]>([])
+const loaded = ref(false)
 const showModal = ref(false)
 const newKey = ref({ name: '', permissions: [] as string[], expires_at: '' })
 const createdKey = ref<string | null>(null)
 const loading = ref(false)
 const confirmRevoke = ref<number | null>(null)
 
-const allPermissions = [
-  'create_user', 'read_user', 'update_user', 'delete_user',
-  'suspend_user', 'unsuspend_user', 'assign_package',
-  'read_package', 'create_package', 'update_package', 'delete_package',
-  'read_usage',
+const permGroups = [
+  { label: 'Users', perms: ['create_user', 'read_user', 'update_user', 'delete_user', 'suspend_user', 'unsuspend_user'] },
+  { label: 'Packages', perms: ['read_package', 'create_package', 'update_package', 'delete_package', 'assign_package'] },
+  { label: 'Other', perms: ['read_usage'] },
 ]
 
 onMounted(async () => {
   const res = await apiKeysApi.list()
   keys.value = res.data.data || []
+  loaded.value = true
 })
 
 async function createKey() {
@@ -47,15 +50,23 @@ async function revokeKey(id: number) {
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text)
+  toastSuccess('Copied to clipboard')
+}
+
+function permLabel(p: string) {
+  return p.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 </script>
 
 <template>
   <div class="space-y-4">
-    <div class="flex items-center justify-between">
-      <h1 class="text-lg font-semibold text-gray-800">API Keys</h1>
+    <div class="flex items-center justify-between gap-3">
+      <div>
+        <h1 class="text-lg font-semibold text-gray-800">API Keys</h1>
+        <p class="text-xs text-gray-400 mt-0.5 hidden sm:block">Manage external API access for integrations</p>
+      </div>
       <button @click="showModal = true; newKey = { name: '', permissions: [], expires_at: '' }"
-        class="flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-2 rounded-md hover:bg-indigo-700">
+        class="flex items-center gap-1.5 bg-indigo-600 text-white text-xs px-3 py-2 rounded-md hover:bg-indigo-700 flex-shrink-0">
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
@@ -63,33 +74,58 @@ function copyToClipboard(text: string) {
       </button>
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <table class="w-full text-xs">
-        <thead class="bg-gray-50 border-b border-gray-200">
-          <tr class="text-gray-500">
-            <th class="text-left px-4 py-3 font-medium">Name</th>
-            <th class="text-left px-4 py-3 font-medium">Prefix</th>
-            <th class="text-left px-4 py-3 font-medium">Last Used</th>
-            <th class="text-left px-4 py-3 font-medium">Expires</th>
-            <th class="text-left px-4 py-3 font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="k in keys" :key="k.id" class="border-b border-gray-50 hover:bg-gray-50">
-            <td class="px-4 py-3 font-medium text-gray-700">{{ k.name }}</td>
-            <td class="px-4 py-3 font-mono text-gray-500">{{ k.key_prefix }}...</td>
-            <td class="px-4 py-3 text-gray-400">{{ k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : 'Never' }}</td>
-            <td class="px-4 py-3 text-gray-400">{{ k.expires_at ? new Date(k.expires_at).toLocaleDateString() : 'Never' }}</td>
-            <td class="px-4 py-3">
-              <button @click="confirmRevoke = k.id"
-                class="text-xs text-red-600 border border-red-200 px-2 py-1 rounded hover:bg-red-50">Revoke</button>
-            </td>
-          </tr>
-          <tr v-if="!keys.length">
-            <td colspan="5" class="px-4 py-8 text-center text-gray-400">No API keys yet.</td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- Skeleton -->
+    <div v-if="!loaded" class="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
+      <div v-for="i in 3" :key="i" class="h-8 bg-gray-50 rounded animate-pulse" />
+    </div>
+
+    <!-- Empty state -->
+    <div v-else-if="!keys.length"
+      class="bg-white border border-gray-200 rounded-lg flex flex-col items-center justify-center py-12 text-center px-4">
+      <div class="w-12 h-12 rounded-full bg-indigo-50 text-indigo-400 flex items-center justify-center mb-3">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+        </svg>
+      </div>
+      <p class="text-sm font-medium text-gray-700">No API keys yet</p>
+      <p class="text-xs text-gray-400 mt-1">Create a key to allow external integrations (WHMCS, billing, etc.)</p>
+    </div>
+
+    <div v-else class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs min-w-[560px]">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr class="text-gray-500">
+              <th class="text-left px-4 py-3 font-medium">Name</th>
+              <th class="text-left px-4 py-3 font-medium">Prefix</th>
+              <th class="text-left px-4 py-3 font-medium">Permissions</th>
+              <th class="text-left px-4 py-3 font-medium">Last Used</th>
+              <th class="text-left px-4 py-3 font-medium">Expires</th>
+              <th class="text-left px-4 py-3 font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="k in keys" :key="k.id" class="border-b border-gray-50 hover:bg-gray-50">
+              <td class="px-4 py-3 font-medium text-gray-700">{{ k.name }}</td>
+              <td class="px-4 py-3 font-mono text-gray-500">{{ k.key_prefix }}...</td>
+              <td class="px-4 py-3">
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="p in (k.permissions || '').split(',')" :key="p"
+                    class="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">
+                    {{ permLabel(p.trim()) }}
+                  </span>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-gray-400">{{ k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : 'Never' }}</td>
+              <td class="px-4 py-3 text-gray-400">{{ k.expires_at ? new Date(k.expires_at).toLocaleDateString() : 'Never' }}</td>
+              <td class="px-4 py-3">
+                <button @click="confirmRevoke = k.id"
+                  class="text-xs text-red-600 border border-red-200 px-2 py-1 rounded hover:bg-red-50 transition-colors">Revoke</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Create Modal -->
@@ -104,17 +140,22 @@ function copyToClipboard(text: string) {
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-2">Permissions</label>
-            <div class="grid grid-cols-2 gap-1.5">
-              <label v-for="perm in allPermissions" :key="perm"
-                class="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                <input type="checkbox" :value="perm" v-model="newKey.permissions"
-                  class="rounded border-gray-300 text-indigo-600" />
-                {{ perm }}
-              </label>
+            <div class="space-y-3">
+              <div v-for="group in permGroups" :key="group.label">
+                <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{{ group.label }}</p>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <label v-for="perm in group.perms" :key="perm"
+                    class="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                    <input type="checkbox" :value="perm" v-model="newKey.permissions"
+                      class="rounded border-gray-300 text-indigo-600" />
+                    {{ permLabel(perm) }}
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Expires At (optional)</label>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Expires At <span class="text-gray-400">(optional)</span></label>
             <input v-model="newKey.expires_at" type="date"
               class="w-full border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
@@ -139,7 +180,12 @@ function copyToClipboard(text: string) {
           <input :value="createdKey" readonly
             class="flex-1 border border-gray-200 rounded-md px-3 py-2 text-xs font-mono bg-gray-50" />
           <button @click="copyToClipboard(createdKey!)"
-            class="border border-gray-200 px-3 py-2 rounded-md text-xs text-gray-600 hover:bg-gray-50">Copy</button>
+            class="border border-gray-200 px-3 py-2 rounded-md text-xs text-gray-600 hover:bg-gray-50 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            Copy
+          </button>
         </div>
         <button @click="createdKey = null"
           class="w-full mt-4 bg-indigo-600 text-white rounded-md py-2 text-sm hover:bg-indigo-700">Done</button>
