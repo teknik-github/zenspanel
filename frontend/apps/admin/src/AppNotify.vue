@@ -32,29 +32,33 @@ const { confirmVisible, confirmOptions, resolve } = useConfirm()
   </div>
 
   <!-- Confirm dialog -->
-  <div v-if="confirmVisible" class="fixed inset-0 bg-black/40 flex items-center justify-center z-[9998]">
-    <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl mx-4">
-      <h2 class="font-semibold text-gray-800 mb-2">
-        {{ confirmOptions.title || 'Confirm' }}
-      </h2>
-      <p class="text-sm text-gray-500 mb-5">{{ confirmOptions.message }}</p>
-      <div class="flex gap-2">
-        <button @click="resolve(false)"
-          class="flex-1 border border-gray-200 text-gray-600 rounded-md py-2 text-sm hover:bg-gray-50">
-          {{ confirmOptions.cancelLabel || 'Cancel' }}
-        </button>
-        <button @click="resolve(true)"
-          class="flex-1 rounded-md py-2 text-sm text-white"
-          :class="confirmOptions.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'">
-          {{ confirmOptions.confirmLabel || 'Confirm' }}
-        </button>
+  <Transition name="modal">
+    <div v-if="confirmVisible" class="fixed inset-0 bg-black/40 flex items-center justify-center z-[9998]">
+      <div class="modal-panel bg-white rounded-xl p-6 w-full max-w-sm shadow-xl mx-4">
+        <h2 class="font-semibold text-gray-800 mb-2">
+          {{ confirmOptions.title || 'Confirm' }}
+        </h2>
+        <p class="text-sm text-gray-500 mb-5">{{ confirmOptions.message }}</p>
+        <div class="flex gap-2">
+          <button @click="resolve(false)"
+            class="flex-1 border border-gray-200 text-gray-600 rounded-md py-2 text-sm hover:bg-gray-50">
+            {{ confirmOptions.cancelLabel || 'Cancel' }}
+          </button>
+          <button @click="resolve(true)"
+            class="flex-1 rounded-md py-2 text-sm text-white"
+            :class="confirmOptions.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'">
+            {{ confirmOptions.confirmLabel || 'Confirm' }}
+          </button>
+        </div>
       </div>
     </div>
-  </div>
+  </Transition>
 </template>
 
 <style scoped>
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from { opacity: 0; transform: translateX(100%); }
-.toast-leave-to   { opacity: 0; transform: translateX(100%); }
+/* Use global toast animation from style.css */
+.toast-enter-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.toast-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; }
+.toast-enter-from   { opacity: 0; transform: translateX(24px); }
+.toast-leave-to     { opacity: 0; transform: translateX(24px); }
 </style>

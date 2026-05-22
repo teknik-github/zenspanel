@@ -98,11 +98,13 @@ const pageTitle = computed(() => {
 
 <template>
   <div class="flex h-screen bg-gray-50 font-sans text-sm">
-    <div
-      v-if="mobileOpen"
-      @click="mobileOpen = false"
-      class="fixed inset-0 bg-black/30 z-30 md:hidden"
-    />
+    <Transition name="modal">
+      <div
+        v-if="mobileOpen"
+        @click="mobileOpen = false"
+        class="fixed inset-0 bg-black/30 z-30 md:hidden"
+      />
+    </Transition>
 
     <aside
       class="bg-white border-r border-gray-200 flex flex-col flex-shrink-0 z-40 transition-all duration-200
@@ -275,7 +277,11 @@ const pageTitle = computed(() => {
       </header>
 
       <main class="flex-1 overflow-y-auto p-4 md:p-5">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <Transition name="page" mode="out-in">
+            <component :is="Component" />
+          </Transition>
+        </router-view>
       </main>
     </div>
   </div>
