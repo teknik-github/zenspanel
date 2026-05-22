@@ -36,9 +36,11 @@ func JWTMiddleware(secret string, users *store.UserStore) gin.HandlerFunc {
 		// Validate token_version against DB — BumpTokenVersion on suspend
 		// increments the DB value, making all previously issued tokens stale.
 		// Only check for user/admin roles (not api_key which has no version).
+		// Fail-open on DB error so a migration lag or DB hiccup doesn't lock
+		// out every user — the suspend revocation is best-effort in that case.
 		if users != nil && (claims.Role == "user" || claims.Role == "admin") {
 			dbVersion, err := users.GetTokenVersion(claims.UserID)
-			if err != nil || claims.TokenVersion < dbVersion {
+			if err == nil && claims.TokenVersion < dbVersion {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "session revoked"})
 				return
 			}
