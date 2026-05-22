@@ -68,6 +68,49 @@ async function toggleJail(jail: any) {
     jailSaving.value = null
   }
 }
+
+// Human-readable descriptions for known fail2ban jails
+const jailDescriptions: Record<string, string> = {
+  'sshd':              'SSH brute-force',
+  'vsftpd':            'FTP brute-force',
+  'zenspanel-login':   'Panel login brute-force',
+  'nginx-http-auth':   'HTTP auth brute-force',
+  'nginx-botsearch':   'Bot/scanner detection',
+  'recidive':          'Repeat offenders (multi-jail)',
+  'postfix':           'Mail spam/abuse',
+  'dovecot':           'IMAP/POP3 brute-force',
+}
+
+function jailDesc(name: string): string {
+  return jailDescriptions[name] || '—'
+}
+const reasonLabels: Record<string, string> = {
+  'fail2ban: sshd':           'SSH brute-force',
+  'fail2ban: vsftpd':         'FTP brute-force',
+  'fail2ban: zenspanel-login':'Panel login brute-force',
+  'fail2ban: nginx-http-auth':'HTTP auth brute-force',
+  'fail2ban: nginx-botsearch': 'Bot/scanner detected',
+  'fail2ban: recidive':       'Repeat offender (recidive)',
+  'fail2ban: postfix':        'Mail spam/abuse',
+  'fail2ban: dovecot':        'IMAP/POP3 brute-force',
+}
+
+function formatReason(reason: string, source: string): string {
+  if (!reason) return source === 'fail2ban' ? 'Auto-banned by fail2ban' : '—'
+  return reasonLabels[reason] || reason
+}
+
+function reasonIcon(reason: string, source: string): string {
+  if (source === 'fail2ban') {
+    if (reason?.includes('ssh')) return 'terminal'
+    if (reason?.includes('ftp') || reason?.includes('vsftpd')) return 'hard-drive'
+    if (reason?.includes('login') || reason?.includes('zenspanel')) return 'lock'
+    if (reason?.includes('bot') || reason?.includes('scan')) return 'search'
+    if (reason?.includes('recidive')) return 'repeat'
+    return 'shield'
+  }
+  return 'user'
+}
 </script>
 
 <template>
@@ -122,11 +165,35 @@ async function toggleJail(jail: any) {
             <tr v-for="entry in blockedIPs" :key="entry.ip"
               class="border-b border-gray-50 hover:bg-gray-50">
               <td class="px-4 py-3 font-mono text-gray-800">{{ entry.ip }}</td>
-              <td class="px-4 py-3 text-gray-500">{{ entry.reason || '—' }}</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-1.5">
+                  <!-- SSH -->
+                  <svg v-if="reasonIcon(entry.reason, entry.source) === 'terminal'" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+                  </svg>
+                  <!-- FTP -->
+                  <svg v-else-if="reasonIcon(entry.reason, entry.source) === 'hard-drive'" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+                  </svg>
+                  <!-- Login -->
+                  <svg v-else-if="reasonIcon(entry.reason, entry.source) === 'lock'" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  <!-- Repeat offender -->
+                  <svg v-else-if="reasonIcon(entry.reason, entry.source) === 'repeat'" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                  </svg>
+                  <!-- Default shield -->
+                  <svg v-else class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  <span class="text-gray-600">{{ formatReason(entry.reason, entry.source) }}</span>
+                </div>
+              </td>
               <td class="px-4 py-3">
                 <span class="px-2 py-0.5 rounded text-[10px] font-medium"
                   :class="entry.source === 'fail2ban' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'">
-                  {{ entry.source || 'panel' }}
+                  {{ entry.source === 'fail2ban' ? 'fail2ban' : 'manual' }}
                 </span>
               </td>
               <td class="px-4 py-3">
@@ -163,6 +230,7 @@ async function toggleJail(jail: any) {
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr class="text-gray-500">
             <th class="text-left px-4 py-3 font-medium">Jail</th>
+            <th class="text-left px-4 py-3 font-medium">Protects Against</th>
             <th class="text-left px-4 py-3 font-medium">Status</th>
             <th class="text-left px-4 py-3 font-medium">Currently Banned</th>
             <th class="text-left px-4 py-3 font-medium">Total Bans</th>
@@ -173,6 +241,7 @@ async function toggleJail(jail: any) {
           <tr v-for="jail in jails" :key="jail.name"
             class="border-b border-gray-50 hover:bg-gray-50">
             <td class="px-4 py-3 font-mono text-gray-800">{{ jail.name }}</td>
+            <td class="px-4 py-3 text-gray-500">{{ jailDesc(jail.name) }}</td>
             <td class="px-4 py-3">
               <span class="px-2 py-0.5 rounded text-[10px] font-medium"
                 :class="jail.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'">
