@@ -51,6 +51,7 @@ const navGroups = [
       { path: '/php-extensions', label: 'PHP Extensions', icon: 'puzzle' },
       { path: '/ssl-manager', label: 'SSL Manager', icon: 'lock' },
       { path: '/firewall', label: 'Firewall', icon: 'shield' },
+      { path: '/ip-allowlist', label: 'IP Allowlist', icon: 'lock' },
       { path: '/backups', label: 'Backups', icon: 'upload-cloud' },
       { path: '/backup-targets', label: 'Backup Targets', icon: 'cloud' },
       { path: '/api-keys', label: 'API Keys', icon: 'key' },

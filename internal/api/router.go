@@ -40,6 +40,7 @@ type Router struct {
 	system        *handlers.SystemHandler
 	terminal      *handlers.TerminalHandler
 	ftp           *handlers.FTPHandler
+	ipAllowlist   *handlers.IPAllowlistHandler
 	apiKeyStore   *store.APIKeyStore
 	auditLogStore *store.AuditLogStore
 	userStore     *store.UserStore
@@ -73,6 +74,7 @@ func NewRouter(
 	systemH *handlers.SystemHandler,
 	terminalH *handlers.TerminalHandler,
 	ftpH *handlers.FTPHandler,
+	ipAllowlistH *handlers.IPAllowlistHandler,
 	apiKeyStore *store.APIKeyStore,
 	auditLogStore *store.AuditLogStore,
 	userStore *store.UserStore,
@@ -105,6 +107,7 @@ func NewRouter(
 		system:        systemH,
 		terminal:      terminalH,
 		ftp:           ftpH,
+		ipAllowlist:   ipAllowlistH,
 		apiKeyStore:   apiKeyStore,
 		auditLogStore: auditLogStore,
 		userStore:     userStore,
@@ -282,6 +285,11 @@ func (r *Router) Setup() *gin.Engine {
 		api.POST("/admin/firewall/unblock", auth.RequireRole("admin"), r.firewall.Unblock)
 		api.GET("/admin/firewall/fail2ban/jails", auth.RequireRole("admin"), r.firewall.ListJails)
 		api.PUT("/admin/firewall/fail2ban/jails/:name", auth.RequireRole("admin"), r.firewall.SetJail)
+
+		// admin IP allowlist
+		api.GET("/admin/ip-allowlist", auth.RequireRole("admin"), r.ipAllowlist.List)
+		api.POST("/admin/ip-allowlist", auth.RequireRole("admin"), r.ipAllowlist.Create)
+		api.DELETE("/admin/ip-allowlist/:id", auth.RequireRole("admin"), r.ipAllowlist.Delete)
 
 		// api keys
 		api.GET("/api-keys", auth.RequireRole("admin"), r.apiKeys.List)

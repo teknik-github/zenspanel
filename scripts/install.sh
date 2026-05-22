@@ -532,6 +532,12 @@ build_zenspanel() {
     mkdir -p /etc/nginx/zenspanel
     mkdir -p /etc/nginx/ssl/zenspanel
 
+    # Create empty admin allowlist (allow all by default)
+    if [[ ! -f /etc/nginx/zenspanel/admin-allowlist.conf ]]; then
+        echo "# Managed by ZensPanel — admin IP allowlist" > /etc/nginx/zenspanel/admin-allowlist.conf
+        echo "# No restrictions — all IPs allowed" >> /etc/nginx/zenspanel/admin-allowlist.conf
+    fi
+
     getent group zenspanel >/dev/null || groupadd -r zenspanel
 
     if id zenspanel &>/dev/null; then
@@ -1072,6 +1078,9 @@ server {
 
     # Admin Panel SPA — alias with trailing slash fixes MIME type issues
     location ^~ /admin/ {
+        # IP allowlist — managed by ZensPanel admin panel
+        # Empty file = allow all (default). Add IPs via Admin → IP Allowlist.
+        include ${NGINX_CONF}/admin-allowlist.conf;
         alias ${ZENSPANEL_DIR}/frontend/admin/;
         index index.html;
         try_files \$uri \$uri/ /admin/index.html;

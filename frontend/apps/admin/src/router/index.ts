@@ -29,6 +29,7 @@ const router = createRouter({
         { path: 'settings', component: () => import('@/pages/Settings.vue') },
         { path: 'updates', component: () => import('@/pages/Updates.vue') },
         { path: 'terminal', component: () => import('@/pages/Terminal.vue') },
+        { path: 'ip-allowlist', component: () => import('@/pages/IPAllowlist.vue') },
       ],
     },
   ],

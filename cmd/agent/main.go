@@ -1036,6 +1036,16 @@ func main() {
 		return nil, agentnginx.UnsuspendAllVhosts(cfg.Paths.NginxConf, p.Username)
 	})
 
+	srv.Register("nginx.set_admin_allowlist", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			IPs []string `json:"ips"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		return nil, agentnginx.SetAdminAllowlist(cfg.Paths.NginxConf, p.IPs)
+	})
+
 	log.Printf("ZensPanel Agent starting, socket: %s", cfg.Agent.Socket)
 	if err := srv.Listen(); err != nil {
 		log.Fatalf("agent listen: %v", err)

@@ -105,11 +105,12 @@ func main() {
 	systemH := handlers.NewSystemHandler(userStore, domainStore, databaseStore, cfg.Agent.Socket, version)
 	terminalH := handlers.NewTerminalHandler(userStore, cfg.Agent.Socket)
 	ftpH := handlers.NewFTPHandler(store.NewFTPAccountStore(db), userStore, packageStore, cfg.Paths.HomeBase, cfg.Agent.Socket)
+	ipAllowlistH := handlers.NewIPAllowlistHandler(store.NewAdminAllowedIPStore(db), cfg.Agent.Socket)
 
 	// router
 	router := api.NewRouter(
 		authH, usersH, packagesH, domainsH, subdomainsH, databasesH,
-		phpVersionsH, phpExtensionsH, cronJobsH, logsH, installerH, firewallH, antivirusH, backupTargetsH, redirectsH, hotlinkH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH, terminalH, ftpH,
+		phpVersionsH, phpExtensionsH, cronJobsH, logsH, installerH, firewallH, antivirusH, backupTargetsH, redirectsH, hotlinkH, apiKeysH, auditLogsH, sslH, backupsH, filesH, systemH, terminalH, ftpH, ipAllowlistH,
 		apiKeyStore, auditLogStore,
 		userStore,
 		rdb,

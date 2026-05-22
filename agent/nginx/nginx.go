@@ -417,3 +417,26 @@ func UnsuspendAllVhosts(nginxConf, username string) error {
 	}
 	return nil
 }
+
+// SetAdminAllowlist writes an nginx snippet that restricts /admin/ to the
+// given IP/CIDR list. Empty list = allow all (snippet contains only a comment).
+// The snippet is included by the panel nginx config via:
+//   include /etc/nginx/zenspanel/admin-allowlist.conf;
+func SetAdminAllowlist(nginxConf string, ips []string) error {
+	snippetPath := filepath.Join(nginxConf, "admin-allowlist.conf")
+	var buf strings.Builder
+	buf.WriteString("# Managed by ZensPanel — admin IP allowlist\n")
+	if len(ips) == 0 {
+		// Empty list = allow all — write no deny rule
+		buf.WriteString("# No restrictions — all IPs allowed\n")
+	} else {
+		for _, ip := range ips {
+			buf.WriteString("allow " + ip + ";\n")
+		}
+		buf.WriteString("deny all;\n")
+	}
+	if err := os.WriteFile(snippetPath, []byte(buf.String()), 0644); err != nil {
+		return fmt.Errorf("write admin allowlist: %w", err)
+	}
+	return ReloadNginx()
+}
