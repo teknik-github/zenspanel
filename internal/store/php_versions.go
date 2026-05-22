@@ -42,3 +42,23 @@ func (s *PHPVersionStore) SetEnabled(id uint64, enabled bool) error {
 	_, err := s.db.Exec("UPDATE php_versions SET enabled = ? WHERE id = ?", enabled, id)
 	return err
 }
+
+func (s *PHPVersionStore) Create(version, fpmSocket string) (*PHPVersion, error) {
+	_, err := s.db.Exec(
+		"INSERT INTO php_versions (version, fpm_socket, enabled) VALUES (?, ?, TRUE)",
+		version, fpmSocket,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create php version: %w", err)
+	}
+	var v PHPVersion
+	if err := s.db.Get(&v, "SELECT * FROM php_versions WHERE version = ?", version); err != nil {
+		return nil, fmt.Errorf("get php version: %w", err)
+	}
+	return &v, nil
+}
+
+func (s *PHPVersionStore) Delete(id uint64) error {
+	_, err := s.db.Exec("DELETE FROM php_versions WHERE id = ?", id)
+	return err
+}

@@ -242,8 +242,10 @@ func (r *Router) Setup() *gin.Engine {
 		// php versions
 		api.GET("/php-versions", r.phpVersions.List)
 		api.GET("/php-versions/enabled", r.phpVersions.ListEnabled)
+		api.POST("/php-versions", auth.RequireRole("admin"), r.phpVersions.Create)
 		api.PUT("/php-versions/:id/enable", auth.RequireRole("admin"), r.phpVersions.Enable)
 		api.PUT("/php-versions/:id/disable", auth.RequireRole("admin"), r.phpVersions.Disable)
+		api.DELETE("/php-versions/:id", auth.RequireRole("admin"), r.phpVersions.Delete)
 
 		// php extensions — admin manages global catalog, users toggle per-user overrides
 		api.GET("/admin/php-extensions", auth.RequireRole("admin"), r.phpExtensions.AdminList)
