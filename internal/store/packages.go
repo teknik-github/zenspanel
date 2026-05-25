@@ -15,8 +15,14 @@ func NewPackageStore(db *sqlx.DB) *PackageStore {
 }
 
 func (s *PackageStore) Create(p *Package) error {
-	q := `INSERT INTO packages (name, cpu_quota, memory_limit, disk_quota, max_domains, max_databases, php_versions_allowed, terminal_enabled, backup_enabled)
-		  VALUES (:name, :cpu_quota, :memory_limit, :disk_quota, :max_domains, :max_databases, :php_versions_allowed, :terminal_enabled, :backup_enabled)`
+	q := `INSERT INTO packages (name, cpu_quota, memory_limit, disk_quota, max_domains, max_databases,
+		  max_cron_jobs, max_procs, io_read_bps, io_write_bps,
+		  antivirus_enabled, max_ftp_accounts,
+		  php_versions_allowed, terminal_enabled, backup_enabled)
+		  VALUES (:name, :cpu_quota, :memory_limit, :disk_quota, :max_domains, :max_databases,
+		  :max_cron_jobs, :max_procs, :io_read_bps, :io_write_bps,
+		  :antivirus_enabled, :max_ftp_accounts,
+		  :php_versions_allowed, :terminal_enabled, :backup_enabled)`
 	res, err := s.db.NamedExec(q, p)
 	if err != nil {
 		return fmt.Errorf("insert package: %w", err)

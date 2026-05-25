@@ -54,3 +54,8 @@ func (s *FTPAccountStore) Delete(id uint64) error {
 	_, err := s.db.Exec("DELETE FROM ftp_accounts WHERE id = ?", id)
 	return err
 }
+
+func (s *FTPAccountStore) SetEnabled(id uint64, enabled bool) error {
+	_, err := s.db.Exec("UPDATE ftp_accounts SET enabled = ? WHERE id = ?", enabled, id)
+	return err
+}
