@@ -11,6 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-05-25
+
+### New Features
+- Add/delete PHP versions from admin panel (Admin → PHP Versions)
+- Add/delete PHP extensions from admin catalog (Admin → PHP Extensions)
+- Permanent ban for repeat offenders via fail2ban recidive jail (3 bans in 12h → permanent)
+- Firewall: human-readable ban reasons + jail descriptions (SSH brute-force, FTP, login, etc.)
+- Smooth animations across entire admin panel (page transitions, modals, toasts, button press)
+
+### Fixed
+- Terminal WebSocket: `su` binary not found — now probes `/usr/bin/su` and `/bin/su`
+- Terminal: auto-create home directory if missing (fixes zenspanel system user + new users)
+- Install: stop services before replacing binaries (fixes "Text file busy" on reinstall)
+- FTP: fail2ban vsftpd jail crash — create log file + `allowmissing=true`
+- FTP: disabled passive mode ports (40000-40100) from UFW and vsftpd config
+- PHP Versions page: full width layout, overflow-x-auto, Action column right-aligned
+
+---
+
 ## [1.9.0] - 2026-05-22
 
 ### Added
