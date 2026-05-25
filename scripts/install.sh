@@ -562,6 +562,11 @@ build_zenspanel() {
         chmod 750 "$ZENSPANEL_DATA/backups"
     fi
 
+    # Create home dir for the zenspanel system user so the admin terminal works.
+    mkdir -p "$ZENSPANEL_DATA/home/zenspanel"
+    chown zenspanel:zenspanel "$ZENSPANEL_DATA/home/zenspanel" 2>/dev/null || true
+    chmod 0711 "$ZENSPANEL_DATA/home/zenspanel"
+
     # Try to download the latest pre-built release from GitHub.
     # Falls back to build-from-source only if no release is available
     # (e.g. running from a dev branch with no tag yet).
