@@ -20,12 +20,21 @@ type Session struct {
 	Cmd *exec.Cmd
 }
 
+func suPath() string {
+	for _, p := range []string{"/usr/bin/su", "/bin/su"} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "su" // fallback to PATH
+}
+
 func SpawnSession(username, homeBase string) (*Session, error) {
 	if err := safe.Username(username); err != nil {
 		return nil, err
 	}
 	homeDir := homeBase + "/" + username
-	cmd := exec.Command("su", "-s", "/bin/bash", "-", username)
+	cmd := exec.Command(suPath(), "-s", "/bin/bash", "-", username)
 	cmd.Env = []string{
 		"HOME=" + homeDir,
 		"USER=" + username,
