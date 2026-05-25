@@ -45,6 +45,9 @@ func (s *PackageStore) List() ([]Package, error) {
 func (s *PackageStore) Update(id uint64, p *Package) error {
 	q := `UPDATE packages SET name=:name, cpu_quota=:cpu_quota, memory_limit=:memory_limit,
 		  disk_quota=:disk_quota, max_domains=:max_domains, max_databases=:max_databases,
+		  max_cron_jobs=:max_cron_jobs, max_procs=:max_procs,
+		  io_read_bps=:io_read_bps, io_write_bps=:io_write_bps,
+		  antivirus_enabled=:antivirus_enabled, max_ftp_accounts=:max_ftp_accounts,
 		  php_versions_allowed=:php_versions_allowed, terminal_enabled=:terminal_enabled,
 		  backup_enabled=:backup_enabled WHERE id=:id`
 	p.ID = id
