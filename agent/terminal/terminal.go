@@ -34,6 +34,13 @@ func SpawnSession(username, homeBase string) (*Session, error) {
 		return nil, err
 	}
 	homeDir := homeBase + "/" + username
+	// Ensure home dir exists — the zenspanel system user and freshly
+	// created panel users may not have their home dir yet.
+	if _, err := os.Stat(homeDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(homeDir, 0711); err != nil {
+			return nil, fmt.Errorf("mkdir home: %w", err)
+		}
+	}
 	cmd := exec.Command(suPath(), "-s", "/bin/bash", "-", username)
 	cmd.Env = []string{
 		"HOME=" + homeDir,
