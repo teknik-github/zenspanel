@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Seed script for frontend and manual API testing: new `cmd/seed` command populates the panel DB with realistic dummy data (packages, PHP versions/extensions, admin + users, domains/subdomains, databases, FTP accounts, cron jobs, backups, redirects, backup targets, IP allowlist, API keys, audit logs) without calling the agent. Includes `--wipe` mode to reset and reseed a dev database.
 - `docs/seed.md` usage guide for the seed script, including sample credentials, seeded entities, limitations of DB-only dummy data, and recommended frontend development workflow.
+- `docs/architecture.md` — complete architecture reference: three-binary design, request flow, directory structure, auth/session model, database schema, agent JSON-RPC protocol, security design (role-scoped DTOs, IDOR prevention), frontend architecture, known improvement areas, conventions, and development workflow.
+
+### Changed
+- Refactored `internal/api/handlers/users.go` — extracted `PackageHandler` + response DTOs into `internal/api/handlers/packages.go`. One entity per file matches the store-layer convention.
 
 ---
 
