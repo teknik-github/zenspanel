@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Split `GET /users/:id` response by caller role: admin gets full object (`linux_uid`, `role`, `status`); regular users get a safe subset (`id`, `username`, `email`, `package_id`, `terminal_enabled`, `backup_enabled`, `php_version`, `totp_enabled`) — internal OS/account fields no longer leak to panel users.
+- Split `GET /packages` and `GET /packages/:id` response by caller role: admin gets full internal limits (`cpu_quota`, `max_procs`, `io_read_bps`, `io_write_bps`, raw byte values); regular users get customer-visible quota fields only (`disk_quota_mb`, `memory_limit_mb`, `max_domains`, `max_databases`, `max_cron_jobs`, `max_ftp_accounts`, feature flags).
+
+### Added
+- Seed script for frontend and manual API testing: new `cmd/seed` command populates the panel DB with realistic dummy data (packages, PHP versions/extensions, admin + users, domains/subdomains, databases, FTP accounts, cron jobs, backups, redirects, backup targets, IP allowlist, API keys, audit logs) without calling the agent. Includes `--wipe` mode to reset and reseed a dev database.
+- `docs/seed.md` usage guide for the seed script, including sample credentials, seeded entities, limitations of DB-only dummy data, and recommended frontend development workflow.
+
 ---
 
 ## [2.0.0] - 2026-05-25

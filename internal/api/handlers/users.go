@@ -57,7 +57,8 @@ func (r packageRequest) toPackage() store.Package {
 	}
 }
 
-func packageResponse(p store.Package) map[string]interface{} {
+// packageAdminResponse includes all fields for admin use.
+func packageAdminResponse(p store.Package) map[string]interface{} {
 	return map[string]interface{}{
 		"id":                   p.ID,
 		"name":                 p.Name,
@@ -75,6 +76,7 @@ func packageResponse(p store.Package) map[string]interface{} {
 		"io_write_bps":         p.IOWriteBps,
 		"io_write_mbps":        p.IOWriteBps / (1024 * 1024),
 		"antivirus_enabled":    p.AntivirusEnabled,
+		"max_ftp_accounts":     p.MaxFTPAccounts,
 		"php_versions_allowed": p.PHPVersionsAllowed,
 		"terminal_enabled":     p.TerminalEnabled,
 		"backup_enabled":       p.BackupEnabled,
@@ -83,15 +85,44 @@ func packageResponse(p store.Package) map[string]interface{} {
 	}
 }
 
+// packageUserResponse returns only customer-visible quota fields.
+// Internal system limits (max_procs, io_*_bps, cpu_quota) are omitted.
+func packageUserResponse(p store.Package) map[string]interface{} {
+	return map[string]interface{}{
+		"id":                   p.ID,
+		"name":                 p.Name,
+		"disk_quota_mb":        p.DiskQuota / (1024 * 1024),
+		"memory_limit_mb":      p.MemoryLimit / (1024 * 1024),
+		"max_domains":          p.MaxDomains,
+		"max_databases":        p.MaxDatabases,
+		"max_cron_jobs":        p.MaxCronJobs,
+		"max_ftp_accounts":     p.MaxFTPAccounts,
+		"antivirus_enabled":    p.AntivirusEnabled,
+		"php_versions_allowed": p.PHPVersionsAllowed,
+		"terminal_enabled":     p.TerminalEnabled,
+		"backup_enabled":       p.BackupEnabled,
+	}
+}
+
+// packageResponse is kept as an alias for admin use (backward compat).
+func packageResponse(p store.Package) map[string]interface{} {
+	return packageAdminResponse(p)
+}
+
 func (h *PackageHandler) List(c *gin.Context) {
 	pkgs, err := h.packages.List()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	isAdmin := auth.GetRole(c) == "admin"
 	resp := make([]map[string]interface{}, len(pkgs))
 	for i, p := range pkgs {
-		resp[i] = packageResponse(p)
+		if isAdmin {
+			resp[i] = packageAdminResponse(p)
+		} else {
+			resp[i] = packageUserResponse(p)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"data": resp})
 }
@@ -103,7 +134,11 @@ func (h *PackageHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "package not found"})
 		return
 	}
-	c.JSON(http.StatusOK, packageResponse(*pkg))
+	if auth.GetRole(c) == "admin" {
+		c.JSON(http.StatusOK, packageAdminResponse(*pkg))
+	} else {
+		c.JSON(http.StatusOK, packageUserResponse(*pkg))
+	}
 }
 
 func (h *PackageHandler) Create(c *gin.Context) {
@@ -213,7 +248,48 @@ func (h *UserHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	if auth.GetRole(c) == "admin" {
+		c.JSON(http.StatusOK, userAdminResponse(user))
+	} else {
+		c.JSON(http.StatusOK, userSelfResponse(user))
+	}
+}
+
+// userAdminResponse returns the full user object for admin callers.
+func userAdminResponse(u *store.User) map[string]interface{} {
+	return map[string]interface{}{
+		"id":               u.ID,
+		"username":         u.Username,
+		"email":            u.Email,
+		"role":             u.Role,
+		"linux_uid":        u.LinuxUID,
+		"package_id":       u.PackageID,
+		"status":           u.Status,
+		"terminal_enabled": u.TerminalEnabled,
+		"backup_enabled":   u.BackupEnabled,
+		"php_version":      u.PHPVersion,
+		"totp_enabled":     u.TOTPEnabled,
+		"created_at":       u.CreatedAt,
+		"updated_at":       u.UpdatedAt,
+	}
+}
+
+// userSelfResponse returns only the fields a user needs to see about
+// their own account. Internal fields (linux_uid, role, status) are omitted
+// — they are implementation details or admin-only state.
+func userSelfResponse(u *store.User) map[string]interface{} {
+	return map[string]interface{}{
+		"id":               u.ID,
+		"username":         u.Username,
+		"email":            u.Email,
+		"package_id":       u.PackageID,
+		"terminal_enabled": u.TerminalEnabled,
+		"backup_enabled":   u.BackupEnabled,
+		"php_version":      u.PHPVersion,
+		"totp_enabled":     u.TOTPEnabled,
+		"created_at":       u.CreatedAt,
+		"updated_at":       u.UpdatedAt,
+	}
 }
 
 func (h *UserHandler) Create(c *gin.Context) {
