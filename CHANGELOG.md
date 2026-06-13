@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- Tighten `safe.PHPVersion` allowlist: replace loose pattern `^[0-9]\.[0-9]$` with explicit `^(7\.4|8\.[1-4])$` — values like `9.9` or `0.0` are now rejected at the agent boundary.
+- Harden web terminal: `SpawnSession` now launches `/bin/rbash` instead of `/bin/bash` and restricts `PATH` to `~/bin` only, preventing panel users from accessing system binaries (`curl`, `wget`, `python3`, etc.) through the terminal.
+- Lock shell dotfiles on user creation: `Create` now calls `lockShellProfile` which writes root-owned, `444`-permission `.bash_profile` and `.bashrc` exporting `PATH=$HOME/bin` — prevents the user from overriding PATH to escape rbash restrictions.
 - Split `GET /users/:id` response by caller role: admin gets full object (`linux_uid`, `role`, `status`); regular users get a safe subset (`id`, `username`, `email`, `package_id`, `terminal_enabled`, `backup_enabled`, `php_version`, `totp_enabled`) — internal OS/account fields no longer leak to panel users.
 - Split `GET /packages` and `GET /packages/:id` response by caller role: admin gets full internal limits (`cpu_quota`, `max_procs`, `io_read_bps`, `io_write_bps`, raw byte values); regular users get customer-visible quota fields only (`disk_quota_mb`, `memory_limit_mb`, `max_domains`, `max_databases`, `max_cron_jobs`, `max_ftp_accounts`, feature flags).
 

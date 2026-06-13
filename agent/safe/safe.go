@@ -23,9 +23,9 @@ var dbPasswordRe = regexp.MustCompile(`^[A-Za-z0-9._\-!@#$%^&*()+=]{8,128}$`)
 // domainRe is the agent-side mirror of the API domain allowlist.
 var domainRe = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$`)
 
-// phpVersionRe matches the few values we ever pass to systemctl reload
-// php<ver>-fpm or interpolate into pool paths.
-var phpVersionRe = regexp.MustCompile(`^[0-9]\.[0-9]$`)
+// phpVersionRe is an explicit allowlist of the PHP versions the panel supports.
+// Prior pattern ^[0-9]\.[0-9]$ accepted 9.9, 0.0, etc. — this does not.
+var phpVersionRe = regexp.MustCompile(`^(7\.4|8\.[1-4])$`)
 
 // extNameRe matches PHP extension names we accept. Restricted to
 // lowercase alphanumeric + underscore — no dots, slashes, or spaces

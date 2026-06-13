@@ -41,16 +41,16 @@ func SpawnSession(username, homeBase string) (*Session, error) {
 			return nil, fmt.Errorf("mkdir home: %w", err)
 		}
 	}
-	cmd := exec.Command(suPath(), "-s", "/bin/bash", "-", username)
+	cmd := exec.Command(suPath(), "-s", "/bin/rbash", "-", username)
 	cmd.Env = []string{
 		"HOME=" + homeDir,
 		"USER=" + username,
 		"LOGNAME=" + username,
-		// ~/bin first so per-user php/composer symlinks take precedence,
-		// then standard system paths so basic commands (ls, cat, etc.) work.
-		"PATH=" + homeDir + "/bin:/usr/local/bin:/usr/bin:/bin",
+		// Restricted to ~/bin only — rbash enforces this, and .bash_profile
+		// sets it readonly so the user cannot override it via export.
+		"PATH=" + homeDir + "/bin",
 		"TERM=xterm-256color",
-		"SHELL=/bin/bash",
+		"SHELL=/bin/rbash",
 	}
 	cmd.Dir = homeDir
 

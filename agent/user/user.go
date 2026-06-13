@@ -92,6 +92,11 @@ func Create(username string, uid int, homeBase, phpVersion string) (int, error) 
 	if err := os.Chmod(homeDir, 0711); err != nil {
 		return 0, fmt.Errorf("chmod home: %w", err)
 	}
+	// Lock .bash_profile and .bashrc so the user cannot override PATH
+	// and escape the rbash restriction.
+	if err := lockShellProfile(homeDir); err != nil {
+		return 0, fmt.Errorf("lock shell profile: %w", err)
+	}
 	if phpVersion != "" {
 		if err := SetupBin(username, homeBase, phpVersion); err != nil {
 			return 0, fmt.Errorf("setup bin: %w", err)
@@ -152,6 +157,34 @@ func SetupBin(username, homeBase, phpVersion string) error {
 	}
 	if uid >= 0 {
 		_ = os.Chown(composerPath, uid, gid)
+	}
+	return nil
+}
+
+// lockShellProfile writes root-owned, read-only .bash_profile and .bashrc
+// that export a locked PATH pointing only at ~/bin. Without this, a panel
+// user can edit their own dotfiles and set PATH=/usr/bin to bypass rbash.
+func lockShellProfile(homeDir string) error {
+	profileContent := "export PATH=$HOME/bin\nexport HOME=" + homeDir + "\n"
+	bashrcContent := "export PATH=$HOME/bin\n"
+
+	files := map[string]string{
+		filepath.Join(homeDir, ".bash_profile"): profileContent,
+		filepath.Join(homeDir, ".bashrc"):        bashrcContent,
+	}
+	for path, content := range files {
+		// Write as root (agent runs as root), then lock permissions.
+		if err := os.WriteFile(path, []byte(content), 0444); err != nil {
+			return fmt.Errorf("write %s: %w", path, err)
+		}
+		// Ensure root owns the file regardless of any prior state.
+		if err := os.Chown(path, 0, 0); err != nil {
+			return fmt.Errorf("chown %s: %w", path, err)
+		}
+		// 0444 — world-readable, nobody-writable (not even root without chmod).
+		if err := os.Chmod(path, 0444); err != nil {
+			return fmt.Errorf("chmod %s: %w", path, err)
+		}
 	}
 	return nil
 }
