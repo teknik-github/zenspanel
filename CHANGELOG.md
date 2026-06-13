@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- Separate migration DSN from app DSN: `store.New` now parses the DSN and explicitly sets `multiStatements=false`, regardless of what the operator put in `config.yaml`. `RunMigrations` opens its own short-lived connection with `multiStatements=true` — SQL injection via multi-statement chaining is no longer possible through the app connection.
 - Tighten `safe.PHPVersion` allowlist: replace loose pattern `^[0-9]\.[0-9]$` with explicit `^(7\.4|8\.[1-4])$` — values like `9.9` or `0.0` are now rejected at the agent boundary.
 - Harden web terminal: `SpawnSession` now launches `/bin/rbash` instead of `/bin/bash` and restricts `PATH` to `~/bin` only, preventing panel users from accessing system binaries (`curl`, `wget`, `python3`, etc.) through the terminal.
 - Lock shell dotfiles on user creation: `Create` now calls `lockShellProfile` which writes root-owned, `444`-permission `.bash_profile` and `.bashrc` exporting `PATH=$HOME/bin` — prevents the user from overriding PATH to escape rbash restrictions.

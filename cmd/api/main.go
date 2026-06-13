@@ -30,7 +30,7 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := store.RunMigrations(db, "migrations"); err != nil {
+	if err := store.RunMigrations(cfg.Database.DSN, "migrations"); err != nil {
 		log.Fatalf("failed to run migrations: %v", err)
 	}
 

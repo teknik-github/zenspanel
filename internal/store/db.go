@@ -3,12 +3,19 @@ package store
 import (
 	"fmt"
 
+	mysqldrv "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	_ "github.com/go-sql-driver/mysql"
 )
 
 func New(dsn string) (*sqlx.DB, error) {
-	db, err := sqlx.Open("mysql", dsn)
+	// Parse and enforce multiStatements=false regardless of what the operator
+	// put in config.yaml. That flag exists only on the migration connection.
+	cfg, err := mysqldrv.ParseDSN(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("parse dsn: %w", err)
+	}
+	cfg.MultiStatements = false
+	db, err := sqlx.Open("mysql", cfg.FormatDSN())
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
