@@ -30,24 +30,22 @@ make dev   # requires: go install github.com/air-verse/air@latest
 make lint  # requires: golangci-lint
 ```
 
-### Frontend (Vue 3 + pnpm workspace)
+### Frontend (Nuxt 4 SSR — Dashboard/)
 
 ```bash
-cd frontend
+cd Dashboard
 
 # Install dependencies
 pnpm install
 
-# Dev servers
-pnpm --filter @zenspanel/admin dev   # Admin Panel → http://localhost:3000
-pnpm --filter @zenspanel/user dev    # User Panel  → http://localhost:3001
+# Dev server (Admin + User Panel → http://localhost:3000)
+pnpm dev
 
-# Production build
-pnpm --filter @zenspanel/admin build
-pnpm --filter @zenspanel/user build
+# Production build (output: Dashboard/.output/)
+pnpm build
 
-# Build both
-pnpm -r build
+# Preview production build locally
+pnpm preview
 ```
 
 ### Database
@@ -103,12 +101,14 @@ Vue → GET/POST /api/v1/... → internal/api/router.go
 
 ### Frontend structure
 
-Two independent Vue 3 apps in a pnpm workspace:
-- `frontend/apps/admin/` — Admin Panel (port 3000 in dev)
-- `frontend/apps/user/` — User Panel (port 3001 in dev)
-- `frontend/packages/ui/` — Shared components (not yet populated)
+Single Nuxt 4 SSR app in `Dashboard/`:
+- `Dashboard/app/pages/` — File-based routing. `/admin/*` = admin panel, all other routes = user panel.
+- `Dashboard/app/layouts/` — Shared layout with sidebar navigation.
+- `Dashboard/app/composables/useAuth.ts` — `useAuth()` shared composable managing JWT state via `useState`.
+- `Dashboard/app/middleware/auth.global.ts` — Global route guard: enforces role-based access, redirects unauthenticated users.
+- `Dashboard/server/api/v1/[...path].ts` — Nitro server-side proxy: forwards all `/api/v1/**` to Go API at `backendUrl` (runtime config), forwarding cookies and auth headers.
 
-Both apps proxy `/api` and `/ws` to `http://127.0.0.1:8080` in dev (see `vite.config.ts`). Each app has its own `src/api/` (axios modules), `src/stores/` (Pinia), `src/router/`, `src/layouts/`, and `src/pages/`.
+In dev, `pnpm dev` runs Nuxt on port 3000. All `/api/v1/**` calls are handled server-side by the Nitro proxy — no Vite proxy config needed.
 
 ### Database
 
@@ -127,10 +127,10 @@ Each panel user maps to a Linux system user. cgroups v2 slice at `/sys/fs/cgroup
 - Every struct in `internal/store/models.go` carries both `db:"snake_case"` and `json:"snake_case"` tags. Sensitive columns (`password_hash`, `api_keys.key_hash`) use `json:"-"`. Without `json` tags Go produces PascalCase keys that the frontend cannot bind.
 - Dynamic SQL identifiers (UPDATE columns, ORDER BY) sourced from request input must pass through allowlists in `internal/store/safefields.go` (`filterAllowed`, `safeSort`). Identifiers cannot be parameterized; this is the only safe option.
 - The `databases` table must always be quoted as `` `databases` `` in raw SQL.
-- Frontend components use `<script setup lang="ts">` (Composition API). TailwindCSS only — no custom CSS files. SVG icons are inline Lucide-style (`stroke="currentColor"`, `fill="none"`).
-- Both frontend apps require `postcss.config.js` next to `vite.config.ts`. Without it Tailwind directives are not processed and every page renders unstyled.
-- Admin app deploys at `/admin/`: `vite.config.ts` declares `base: '/admin/'` AND `router/index.ts` calls `createWebHistory('/admin/')` — both must agree or the entry script fails to load with a MIME error.
-- Both Vue apps await `auth.fetchMe()` in `main.ts` before mounting the router so reload-after-login restores `auth.user.*` flags.
-- Terminal and Backups sidebar items in the User Panel are conditionally rendered based on `auth.user.terminal_enabled` / `auth.user.backup_enabled`.
+- Dashboard components use `<script setup lang="ts">` (Composition API). `@nuxt/ui` for UI primitives; Lucide icons via `@iconify-json/lucide`. TailwindCSS 4 — no custom CSS beyond `Dashboard/app/assets/css/main.css`.
+- Admin routes are prefixed `/admin/`. The global middleware (`auth.global.ts`) enforces this — do not use Nuxt `definePageMeta` role checks; add routes to `ADMIN_ROUTES` or `USER_ROUTES` in the middleware instead.
+- All API calls use `$fetch('/api/v1/...')` with relative paths. The Nitro proxy (`server/api/v1/[...path].ts`) handles forwarding to Go API on both server-side (SSR) and client-side renders — never call Go API directly from components.
+- `useAuth()` composable manages session state. Call `auth.fetchMe()` to restore session after page reload; `auth.user.value` is `null` when unauthenticated.
+- `terminal_enabled` and `backup_enabled` on `auth.user` control sidebar item visibility.
 
 See `CONTRIBUTING.md` for the full rationale and end-to-end recipe for adding a new entity.
