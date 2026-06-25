@@ -7,9 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Backend (Go)
 
 ```bash
-# Build both binaries
+# Build all binaries
 make build
-# Output: bin/zenspanel-api, bin/zenspanel-agent
+# Output: bin/zenspanel-api, bin/zenspanel-agent, bin/zenspanel-cli
 
 # Run API server (reads config.yaml from current dir)
 make run-api
@@ -65,12 +65,15 @@ migrate -path migrations -database "mysql://user:pass@tcp(host)/db" down 1
 
 ## Architecture
 
-### Two-binary design
+### Three-binary design
 
-The project compiles to two Go binaries that communicate via **JSON-RPC 2.0 over a Unix socket** (`/run/zenspanel/agent.sock`):
+The project compiles to three Go binaries:
 
 - **`zenspanel-api`** (`cmd/api/`) — Gin HTTP server, runs as `www-data` (non-root). Handles all business logic, auth, and API routing. Calls the agent for any privileged operation.
-- **`zenspanel-agent`** (`cmd/agent/`) — Runs as `root`. Listens on the Unix socket and executes system operations: writing nginx configs, managing PHP-FPM pools, cgroups v2, certbot, PTY terminal sessions, MySQL user/DB creation, Linux user management.
+- **`zenspanel-agent`** (`cmd/agent/`) — Runs as `root`. Listens on a Unix socket and executes system operations: writing nginx configs, managing PHP-FPM pools, cgroups v2, certbot, PTY terminal sessions, MySQL user/DB creation, Linux user management.
+- **`zenspanel-cli`** (`cmd/cli/`) — Bubble Tea TUI for managing panel screens and server configuration interactively.
+
+The API and agent communicate via **JSON-RPC 2.0 over a Unix socket** (`/run/zenspanel/agent.sock`).
 
 The agent RPC server is in `agent/server.go`. All handlers are registered in `cmd/agent/main.go`. Each subsystem is a separate package under `agent/` (nginx, phpfpm, cgroups, ssl, terminal, mysql, user).
 
@@ -85,6 +88,8 @@ Vue → GET/POST /api/v1/... → internal/api/router.go
   → store (internal/store/*.go) for DB reads/writes
   → agent client (internal/agent/client.go) for system ops
     → agent/server.go dispatches to agent/<subsystem>/<subsystem>.go
+  → audit middleware (internal/api/middleware/audit.go) logs every API call to audit_logs
+  → rate limiter (internal/api/middleware/ratelimit.go) on login endpoint
 ```
 
 ### Internal packages
@@ -92,7 +97,9 @@ Vue → GET/POST /api/v1/... → internal/api/router.go
 - `internal/config/` — Viper-based config loading. Config file: `/etc/zenspanel/config.yaml` or `./config.yaml`.
 - `internal/store/` — sqlx data access layer. One file per entity (`users.go`, `domains.go`, etc.) plus `models.go` for all structs, `db.go` for connection, `migrate.go` for migrations.
 - `internal/auth/` — JWT generation/validation (`jwt.go`) and Gin middleware (`middleware.go`). Three roles: `admin`, `user`, `api_key`.
+- `internal/api/middleware/` — Audit logging (`audit.go`) writes every API call to `audit_logs`. Rate limiting (`ratelimit.go`) on login endpoint (in-memory, single-server only — swap to Redis for multi-server).
 - `internal/api/router.go` — All routes wired here with middleware. Groups: public (`/api/v1/auth/login`), JWT-protected (`/api/v1/`), WebSocket (`/ws/`).
+- Redis (`go-redis/v9`) — used for session/cache, configured from config.yaml.
 
 ### Frontend structure
 
@@ -105,7 +112,7 @@ Both apps proxy `/api` and `/ws` to `http://127.0.0.1:8080` in dev (see `vite.co
 
 ### Database
 
-MySQL/MariaDB. Panel DB name: `zenspanel`. Migrations in `migrations/` numbered `000001`–`000010`. The `databases` table uses backtick quoting in SQL because `databases` is a MySQL reserved word — keep this in mind when writing raw queries against that table.
+MySQL/MariaDB. Panel DB name: `zenspanel`. Migrations in `migrations/` numbered `000001`–`000024` (48 .sql files). The `databases` table uses backtick quoting in SQL because `databases` is a MySQL reserved word — keep this in mind when writing raw queries against that table.
 
 ### Resource isolation
 
@@ -113,6 +120,7 @@ Each panel user maps to a Linux system user. cgroups v2 slice at `/sys/fs/cgroup
 
 ### Key conventions
 
+- **Every code change must update `CHANGELOG.md`** — add an entry under `[Unreleased]` (`### Added`, `### Fixed`, `### Changed`, or `### Removed`). Commit together with the change. Do NOT add `Co-Authored-By` lines to commit messages (per project policy).
 - Agent commands always use `exec.Command` with argument arrays — never shell string interpolation.
 - Every exported function in `agent/<subsystem>/` validates its caller-provided strings via `agent/safe` (`safe.Username`, `safe.Domain`, `safe.DBIdent`, `safe.DBPassword`, `safe.PHPVersion`) before any side effect — defense in depth, the API may not be the only caller.
 - Store methods use named sqlx queries (`:field` syntax) for inserts/updates.

@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: Dashboard/pnpm-lock.yaml
 
       - name: Build Go binaries
         env:
@@ -49,18 +49,17 @@ jobs:
           go build -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o bundle/zenspanel/bin/zenspanel-cli ./cmd/cli
 
       - name: Install frontend deps
-        working-directory: frontend
+        working-directory: Dashboard
         run: pnpm install --ignore-scripts
 
       - name: Build frontend
-        working-directory: frontend
-        run: pnpm -r build
+        working-directory: Dashboard
+        run: pnpm build
 
       - name: Stage bundle
         run: |
           mkdir -p bundle/zenspanel/frontend
-          cp -r frontend/apps/admin/dist bundle/zenspanel/frontend/admin
-          cp -r frontend/apps/user/dist  bundle/zenspanel/frontend/user
+          cp -r Dashboard/.output bundle/zenspanel/frontend/dashboard
           cp -r migrations bundle/zenspanel/migrations
           cp CHANGELOG.md bundle/zenspanel/CHANGELOG.md
           cp -r scripts bundle/zenspanel/scripts || true

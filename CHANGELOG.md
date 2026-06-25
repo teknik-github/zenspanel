@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Release workflow: point frontend build steps to `Dashboard/` (Nuxt 4 SSR) replacing the old `frontend/` pnpm monorepo; bundle now copies `Dashboard/.output` instead of per-app `dist/` folders.
+- Install script: upgrade Node.js 20 → 22; build Dashboard with `pnpm build` (nuxt build); add `zenspanel-dashboard` systemd service (Nuxt SSR on `127.0.0.1:3000`); replace static Nginx admin/user serving with proxy blocks to port 3000; remove Nginx `/api/` direct proxy (Nuxt has its own server-side proxy at `server/api/v1/[...path].ts`); stop `zenspanel-dashboard` before reinstall; `rm -rf` old dashboard dir before copy to prevent nested-directory bug on reinstall.
+
 ### Security
 - Separate migration DSN from app DSN: `store.New` now parses the DSN and explicitly sets `multiStatements=false`, regardless of what the operator put in `config.yaml`. `RunMigrations` opens its own short-lived connection with `multiStatements=true` — SQL injection via multi-statement chaining is no longer possible through the app connection.
 - Tighten `safe.PHPVersion` allowlist: replace loose pattern `^[0-9]\.[0-9]$` with explicit `^(7\.4|8\.[1-4])$` — values like `9.9` or `0.0` are now rejected at the agent boundary.

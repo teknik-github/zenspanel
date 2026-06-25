@@ -524,8 +524,8 @@ install_node() {
     log_section "Installing Node.js"
 
     if ! command -v node &>/dev/null; then
-        log_info "Installing Node.js 20 LTS..."
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > /dev/null 2>&1
+        log_info "Installing Node.js 22 LTS..."
+        curl -fsSL https://deb.nodesource.com/setup_22.x | bash - > /dev/null 2>&1
         apt-get install -y -qq nodejs
     fi
 
@@ -588,7 +588,7 @@ build_zenspanel() {
 
         # Stop services before replacing binaries — Linux refuses to
         # overwrite a running executable ("Text file busy").
-        systemctl stop zenspanel-api zenspanel-agent 2>/dev/null || true
+        systemctl stop zenspanel-api zenspanel-agent zenspanel-dashboard 2>/dev/null || true
 
         # Bundle layout: zenspanel/bin/, zenspanel/frontend/, zenspanel/migrations/
         local bundle="$tmpdir/zenspanel"
@@ -599,8 +599,8 @@ build_zenspanel() {
         install -m 0755 "$bundle/bin/zenspanel-cli"   "$ZENSPANEL_DIR/bin/zenspanel-cli"   2>/dev/null || \
             cp "$bundle/bin/zenspanel-cli"   "$ZENSPANEL_DIR/bin/zenspanel-cli" 2>/dev/null || true
         chmod +x "$ZENSPANEL_DIR/bin/"*
-        cp -r "$bundle/frontend/admin" "$ZENSPANEL_DIR/frontend/admin"
-        cp -r "$bundle/frontend/user"  "$ZENSPANEL_DIR/frontend/user"
+        rm -rf "$ZENSPANEL_DIR/frontend/dashboard"
+        cp -r "$bundle/frontend/dashboard" "$ZENSPANEL_DIR/frontend/dashboard"
 
         # Keep source for migrations + self-updater.
         local src="$ZENSPANEL_DIR/src"
@@ -667,13 +667,13 @@ _build_from_source() {
 
     ln -sf "$ZENSPANEL_DIR/bin/zenspanel-cli" /usr/local/bin/zenspanel-cli
 
-    log_info "Building frontend (this may take a few minutes)..."
-    (cd "$src/frontend" && \
+    log_info "Building Dashboard (this may take a few minutes)..."
+    (cd "$src/Dashboard" && \
         pnpm install --ignore-scripts 2>&1 | grep -v "^Progress" && \
-        pnpm -r build 2>&1) || die "Failed to build frontend"
+        pnpm build 2>&1) || die "Failed to build Dashboard"
 
-    cp -r "$src/frontend/apps/admin/dist" "$ZENSPANEL_DIR/frontend/admin"
-    cp -r "$src/frontend/apps/user/dist"  "$ZENSPANEL_DIR/frontend/user"
+    rm -rf "$ZENSPANEL_DIR/frontend/dashboard"
+    cp -r "$src/Dashboard/.output" "$ZENSPANEL_DIR/frontend/dashboard"
 
     log_info "ZensPanel built from source ✓"
 }
@@ -935,6 +935,31 @@ StandardError=append:${ZENSPANEL_LOG}/api-error.log
 WantedBy=multi-user.target
 EOF
 
+    # zenspanel-dashboard (Nuxt SSR — panel UI)
+    cat > /etc/systemd/system/zenspanel-dashboard.service <<EOF
+[Unit]
+Description=ZensPanel Dashboard (Nuxt SSR)
+After=network.target zenspanel-api.service
+Wants=zenspanel-api.service
+
+[Service]
+Type=simple
+User=zenspanel
+Group=zenspanel
+Environment=PORT=3000
+Environment=HOST=127.0.0.1
+Environment=NUXT_BACKEND_URL=http://127.0.0.1:8080
+ExecStart=/usr/bin/node ${ZENSPANEL_DIR}/frontend/dashboard/server/index.mjs
+WorkingDirectory=${ZENSPANEL_DIR}/frontend/dashboard
+Restart=always
+RestartSec=5
+StandardOutput=append:${ZENSPANEL_LOG}/dashboard.log
+StandardError=append:${ZENSPANEL_LOG}/dashboard-error.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
     # FileBrowser — third-party Go binary that gives panel users a
     # full-featured file manager via iframe. Installed once, runs as
     # root so it can chown uploads to the right Linux user via the
@@ -1006,7 +1031,7 @@ EOF
     chown root:zenspanel "$ZENSPANEL_CONF/config.yaml"
 
     systemctl daemon-reload
-    systemctl enable zenspanel-agent zenspanel-api zenspanel-filebrowser --quiet
+    systemctl enable zenspanel-agent zenspanel-api zenspanel-dashboard zenspanel-filebrowser --quiet
 
     log_info "Starting zenspanel-agent..."
     systemctl start zenspanel-agent
@@ -1016,11 +1041,15 @@ EOF
     systemctl start zenspanel-api
     sleep 3
 
+    log_info "Starting zenspanel-dashboard..."
+    systemctl start zenspanel-dashboard
+    sleep 3
+
     log_info "Starting zenspanel-filebrowser..."
     systemctl start zenspanel-filebrowser
     sleep 1
 
-    # Verify both services are running
+    # Verify services are running
     if systemctl is-active --quiet zenspanel-agent; then
         log_info "zenspanel-agent: running ✓"
     else
@@ -1031,6 +1060,12 @@ EOF
         log_info "zenspanel-api: running ✓"
     else
         log_warn "zenspanel-api failed to start. Check: journalctl -u zenspanel-api"
+    fi
+
+    if systemctl is-active --quiet zenspanel-dashboard; then
+        log_info "zenspanel-dashboard: running ✓"
+    else
+        log_warn "zenspanel-dashboard failed to start. Check: journalctl -u zenspanel-dashboard"
     fi
 }
 
@@ -1101,26 +1136,10 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
-    # Redirect /admin to /admin/
-    location = /admin {
-        return 301 /admin/;
-    }
-
-    # Admin Panel SPA — alias with trailing slash fixes MIME type issues
-    location ^~ /admin/ {
-        # IP allowlist — managed by ZensPanel admin panel
-        # Empty file = allow all (default). Add IPs via Admin → IP Allowlist.
+    # Admin routes — IP allowlist enforced before proxying to Nuxt dashboard
+    location ^~ /admin {
         include /etc/nginx/zenspanel/admin-allowlist.conf;
-        alias ${ZENSPANEL_DIR}/frontend/admin/;
-        index index.html;
-        try_files \$uri \$uri/ /admin/index.html;
-        # Ensure correct MIME types for JS modules
-        include /etc/nginx/mime.types;
-    }
-
-    # API proxy — before / to take priority
-    location /api/ {
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -1129,7 +1148,7 @@ server {
         proxy_connect_timeout 10;
     }
 
-    # WebSocket terminal
+    # WebSocket terminal — must stay direct (Nuxt cannot proxy WS upgrades)
     location /ws/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
@@ -1187,12 +1206,15 @@ server {
         }
     }
 
-    # User Panel SPA — must be last
+    # Dashboard (Nuxt SSR) — all other traffic
     location / {
-        root ${ZENSPANEL_DIR}/frontend/user;
-        index index.html;
-        try_files \$uri \$uri/ /index.html;
-        include /etc/nginx/mime.types;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_read_timeout 300;
+        proxy_connect_timeout 10;
     }
 
     access_log ${ZENSPANEL_LOG}/nginx-access.log;
@@ -1434,14 +1456,19 @@ print_summary() {
     echo -e "  Root password: ${YELLOW}${MYSQL_ROOT_PASS}${NC}"
     echo ""
     echo -e "${BOLD}Service Status:${NC}"
-    echo -e "  zenspanel-api:   ${api_status}"
-    echo -e "  zenspanel-agent: ${agent_status}"
+    echo -e "  zenspanel-agent:     ${agent_status}"
+    echo -e "  zenspanel-api:       ${api_status}"
+    local dashboard_status
+    dashboard_status=$(systemctl is-active zenspanel-dashboard 2>/dev/null || echo "unknown")
+    echo -e "  zenspanel-dashboard: ${dashboard_status}"
     echo ""
     echo -e "${BOLD}Useful Commands:${NC}"
     echo -e "  systemctl status zenspanel-api"
     echo -e "  systemctl status zenspanel-agent"
+    echo -e "  systemctl status zenspanel-dashboard"
     echo -e "  tail -f ${ZENSPANEL_LOG}/api.log"
     echo -e "  tail -f ${ZENSPANEL_LOG}/agent.log"
+    echo -e "  tail -f ${ZENSPANEL_LOG}/dashboard.log"
     echo ""
     echo -e "${YELLOW}All credentials saved to: ${ZENSPANEL_CONF}/install.info${NC}"
     echo ""
