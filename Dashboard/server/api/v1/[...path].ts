@@ -35,11 +35,30 @@ function isBackupDownloadPath(path: string) {
   return /^backups\/\d+\/download$/.test(path)
 }
 
+function isLogoutPath(path: string) {
+  return path === 'auth/logout'
+}
+
 function hasAuthCredential(event: Parameters<typeof getMethod>[0]) {
   const cookie = getRequestHeader(event, 'cookie') || ''
   const authorization = getRequestHeader(event, 'authorization') || ''
 
   return cookie.includes('zenspanel_token=') || authorization.startsWith('Bearer ')
+}
+
+function isSecureRequest(event: Parameters<typeof getMethod>[0]) {
+  return getRequestHeader(event, 'x-forwarded-proto')?.toLowerCase() === 'https'
+    || event.node.req.socket.encrypted === true
+}
+
+function expireAuthCookie(event: Parameters<typeof getMethod>[0]) {
+  const secure = isSecureRequest(event) ? '; Secure' : ''
+
+  setResponseHeader(
+    event,
+    'set-cookie',
+    `zenspanel_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict${secure}`
+  )
 }
 
 function guardBackupDownload(event: Parameters<typeof getMethod>[0], method: string) {
@@ -73,6 +92,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const isBackupDownload = isBackupDownloadPath(path)
+  const isLogout = isLogoutPath(path)
 
   const method = getMethod(event)
   const guardError = isBackupDownload ? guardBackupDownload(event, method) : null
@@ -136,7 +156,9 @@ export default defineEventHandler(async (event) => {
 
     // Forward Set-Cookie from backend to browser
     const setCookie = response.headers.get('set-cookie')
-    if (setCookie) {
+    if (isLogout) {
+      expireAuthCookie(event)
+    } else if (setCookie) {
       setResponseHeader(event, 'set-cookie', setCookie)
     }
 
@@ -162,6 +184,12 @@ export default defineEventHandler(async (event) => {
     setResponseStatus(event, response.status)
     return response._data
   } catch (err: unknown) {
+    if (isLogout) {
+      expireAuthCookie(event)
+      setResponseStatus(event, 200)
+      return { message: 'logged out' }
+    }
+
     // Network errors, connection refused, etc.
     const proxyError = err as ProxyError
     console.error(`[proxy] Error proxying to ${backendUrl}/api/v1/${path}:`, proxyError.message)

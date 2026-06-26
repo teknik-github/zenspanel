@@ -1,10 +1,13 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
 )
+
+var ErrActiveBackup = errors.New("active backup already exists")
 
 type BackupStore struct {
 	db *sqlx.DB
@@ -23,6 +26,54 @@ func (s *BackupStore) Create(b *Backup) error {
 	id, _ := res.LastInsertId()
 	b.ID = uint64(id)
 	return nil
+}
+
+func (s *BackupStore) CreateIfNoActive(b *Backup) error {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("begin backup tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	var lockedUserID uint64
+	if err := tx.Get(&lockedUserID, "SELECT id FROM users WHERE id = ? FOR UPDATE", b.UserID); err != nil {
+		return fmt.Errorf("lock backup owner: %w", err)
+	}
+
+	var active int
+	if err := tx.Get(
+		&active,
+		"SELECT COUNT(*) FROM backups WHERE user_id = ? AND status IN ('pending', 'running', 'restoring')",
+		b.UserID,
+	); err != nil {
+		return fmt.Errorf("count active backups: %w", err)
+	}
+	if active > 0 {
+		return ErrActiveBackup
+	}
+
+	q := `INSERT INTO backups (user_id, type, status) VALUES (:user_id, :type, :status)`
+	res, err := tx.NamedExec(q, b)
+	if err != nil {
+		return fmt.Errorf("insert backup: %w", err)
+	}
+	id, _ := res.LastInsertId()
+	b.ID = uint64(id)
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit backup tx: %w", err)
+	}
+	return nil
+}
+
+func (s *BackupStore) CountActiveByUserID(userID uint64) (int, error) {
+	var active int
+	err := s.db.Get(
+		&active,
+		"SELECT COUNT(*) FROM backups WHERE user_id = ? AND status IN ('pending', 'running', 'restoring')",
+		userID,
+	)
+	return active, err
 }
 
 func (s *BackupStore) GetByID(id uint64) (*Backup, error) {

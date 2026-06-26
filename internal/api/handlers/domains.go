@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zenspanel/zenspanel/internal/agent"
@@ -15,6 +18,7 @@ type DomainHandler struct {
 	domains    *store.DomainStore
 	subdomains *store.SubdomainStore
 	users      *store.UserStore
+	packages   *store.PackageStore
 	agentSock  string
 	homeBase   string
 }
@@ -23,15 +27,37 @@ func NewDomainHandler(
 	domains *store.DomainStore,
 	subdomains *store.SubdomainStore,
 	users *store.UserStore,
+	packages *store.PackageStore,
 	agentSock, homeBase string,
 ) *DomainHandler {
 	return &DomainHandler{
 		domains:    domains,
 		subdomains: subdomains,
 		users:      users,
+		packages:   packages,
 		agentSock:  agentSock,
 		homeBase:   homeBase,
 	}
+}
+
+func normalizeDomainDocumentRoot(homeBase, username, requested string) (string, error) {
+	userHome := filepath.Clean(filepath.Join(homeBase, username))
+	cleaned := filepath.Clean(strings.TrimSpace(requested))
+	if cleaned == "." || cleaned == "" {
+		return "", fmt.Errorf("document_root is required")
+	}
+	if !filepath.IsAbs(cleaned) {
+		cleaned = filepath.Clean(filepath.Join(userHome, cleaned))
+	}
+
+	rel, err := filepath.Rel(userHome, cleaned)
+	if err != nil {
+		return "", fmt.Errorf("document_root must be under user home")
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("document_root must be under user home")
+	}
+	return cleaned, nil
 }
 
 func (h *DomainHandler) List(c *gin.Context) {
@@ -97,6 +123,22 @@ func (h *DomainHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
+	if user.PackageID.Valid && h.packages != nil {
+		pkg, err := h.packages.GetByID(uint64(user.PackageID.Int64))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "package lookup: " + err.Error()})
+			return
+		}
+		current, err := h.domains.CountByUserID(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "domain count: " + err.Error()})
+			return
+		}
+		if err := enforceLimit(current, pkg.MaxDomains, "domain"); err != nil {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+			return
+		}
+	}
 
 	domain := &store.Domain{
 		UserID:       userID,
@@ -151,6 +193,21 @@ func (h *DomainHandler) Update(c *gin.Context) {
 	}
 	delete(fields, "id")
 	delete(fields, "user_id")
+
+	if newDocRoot, ok := fields["document_root"].(string); ok {
+		owner, err := h.users.GetByID(domain.UserID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup user"})
+			return
+		}
+		cleaned, err := normalizeDomainDocumentRoot(h.homeBase, owner.Username, newDocRoot)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		fields["document_root"] = cleaned
+	}
+
 	if err := h.domains.Update(id, fields); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

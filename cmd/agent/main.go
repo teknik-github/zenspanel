@@ -35,6 +35,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("invalid config: %v", err)
+	}
 
 	// Derive AES-256-GCM encryption key for secrets (TOTP, S3 credentials).
 	// Falls back to deriving from JWT secret if enc_key not set in config.

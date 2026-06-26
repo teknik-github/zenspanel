@@ -1,8 +1,13 @@
 package config
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/spf13/viper"
 )
+
+const devJWTSecret = "dev-secret-change-in-production"
 
 type Config struct {
 	Server      ServerConfig
@@ -98,4 +103,15 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+func (c *Config) Validate() error {
+	secret := strings.TrimSpace(c.JWT.Secret)
+	if len(secret) < 32 || secret == devJWTSecret {
+		return fmt.Errorf("jwt.secret must be a unique random value with at least 32 bytes")
+	}
+	if strings.TrimSpace(c.Database.DSN) == "" {
+		return fmt.Errorf("database.dsn is required")
+	}
+	return nil
 }

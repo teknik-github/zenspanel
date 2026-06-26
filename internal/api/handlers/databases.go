@@ -24,12 +24,14 @@ import (
 
 type DatabaseHandler struct {
 	databases *store.DatabaseStore
+	users     *store.UserStore
+	packages  *store.PackageStore
 	agentSock string
 	redis     *redis.Client // nil = phpMyAdmin SSO disabled
 }
 
-func NewDatabaseHandler(databases *store.DatabaseStore, agentSock string, rdb *redis.Client) *DatabaseHandler {
-	return &DatabaseHandler{databases: databases, agentSock: agentSock, redis: rdb}
+func NewDatabaseHandler(databases *store.DatabaseStore, users *store.UserStore, packages *store.PackageStore, agentSock string, rdb *redis.Client) *DatabaseHandler {
+	return &DatabaseHandler{databases: databases, users: users, packages: packages, agentSock: agentSock, redis: rdb}
 }
 
 func (h *DatabaseHandler) List(c *gin.Context) {
@@ -70,6 +72,27 @@ func (h *DatabaseHandler) Create(c *gin.Context) {
 	userID := auth.GetUserID(c)
 	if auth.GetRole(c) == "admin" && req.UserID > 0 {
 		userID = req.UserID
+	}
+	user, err := h.users.GetByID(userID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+	if user.PackageID.Valid && h.packages != nil {
+		pkg, err := h.packages.GetByID(uint64(user.PackageID.Int64))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "package lookup: " + err.Error()})
+			return
+		}
+		current, err := h.databases.CountByUserID(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database count: " + err.Error()})
+			return
+		}
+		if err := enforceLimit(current, pkg.MaxDatabases, "database"); err != nil {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	db := &store.Database{
@@ -180,6 +203,7 @@ func (h *DatabaseHandler) ResetPassword(c *gin.Context) {
 		"new_password": pwd,
 	})
 }
+
 // frontend that still calls /databases/:id/phpmyadmin. It now hands back
 // a launch URL that the user can open to bounce through the SSO flow.
 func (h *DatabaseHandler) GetPHPMyAdminToken(c *gin.Context) {

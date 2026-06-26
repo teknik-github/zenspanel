@@ -23,6 +23,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("invalid config: %v", err)
+	}
 
 	db, err := store.New(cfg.Database.DSN)
 	if err != nil {
@@ -72,9 +75,9 @@ func main() {
 	authH := handlers.NewAuthHandler(userStore, cfg.JWT.Secret, cfg.JWT.Expiry, cfg.JWT.TOTPKey)
 	usersH := handlers.NewUserHandler(userStore, packageStore, domainStore, subdomainStore, databaseStore, store.NewFTPAccountStore(db), cfg.Agent.Socket)
 	packagesH := handlers.NewPackageHandler(packageStore)
-	domainsH := handlers.NewDomainHandler(domainStore, subdomainStore, userStore, cfg.Agent.Socket, cfg.Paths.HomeBase)
+	domainsH := handlers.NewDomainHandler(domainStore, subdomainStore, userStore, packageStore, cfg.Agent.Socket, cfg.Paths.HomeBase)
 	subdomainsH := handlers.NewSubdomainHandler(subdomainStore, domainStore, userStore, phpVersionStore, cfg.Agent.Socket, cfg.Paths.HomeBase)
-	databasesH := handlers.NewDatabaseHandler(databaseStore, cfg.Agent.Socket, rdb)
+	databasesH := handlers.NewDatabaseHandler(databaseStore, userStore, packageStore, cfg.Agent.Socket, rdb)
 	phpVersionsH := handlers.NewPHPVersionHandler(phpVersionStore)
 	phpExtensionsH := handlers.NewPHPExtensionHandler(phpExtensionStore, userStore, cfg.Agent.Socket)
 	cronJobsH := handlers.NewCronJobHandler(cronJobStore, userStore, packageStore, cfg.Agent.Socket)

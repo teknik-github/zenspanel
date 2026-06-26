@@ -253,6 +253,11 @@ V68: `packages.php_versions_allowed` ! stored as JSON array. API may accept CSV|
 V69: 2FA setup `qr_url` ! browser-renderable image data URL. `otpauth_url` carries authenticator URI. ⊥ `<img src="otpauth://...">`
 V70: Logs domain selector ! use stable domain id value + explicit label mapping. ⊥ object `v-model` + stale `option-attribute`
 V71: user RAM metrics ! realtime from cgroup `memory.current` ∨ per-UID process RSS fallback. ⊥ 0/stale RAM when PHP-FPM/cron/terminal process ∉ panel cgroup
+V72: logout ! expire `zenspanel_token` cookie server-side before redirect. ⊥ frontend-only state clear leaves valid session cookie
+V73: API/agent startup ! fail closed when `jwt.secret` is empty, short, or default dev value. ⊥ forged admin JWT
+V74: domain `document_root` updates ! normalize under owner home via filepath jail check before DB write. ⊥ later root agent ops on host paths
+V75: Go dependency baseline ! use fixed Go patch + `golang.org/x/net` version with no reachable govulncheck findings. ⊥ stdlib/x-net DoS/XSS/tar CVEs
+V76: package resource create paths ! enforce package max domains/databases and allow at most one active backup job per user. ⊥ tenant resource exhaustion
 
 ## §T TASKS
 
@@ -425,3 +430,8 @@ V71: user RAM metrics ! realtime from cgroup `memory.current` ∨ per-UID proces
 | B15 | 2026-06-26 | 2FA setup returned `qr_url=otpauth://...`; Dashboard used it as `<img src>`, browser could not render QR. Backend now returns PNG data URL + `otpauth_url`. | V69 |
 | B16 | 2026-06-26 | Error Logs domain select bound whole domain object with stale `option-attribute`; Nuxt UI select did not reliably display/select added domains. Use `{label,value}` items + domain id model. | V70 |
 | B17 | 2026-06-26 | user RAM metrics only read cgroup `memory.current`; PHP-FPM/cron/terminal processes not moved into panel cgroup ∴ RAM stayed 0/stale despite frontend polling. | V71 |
+| B18 | 2026-06-26 | Dashboard logout only cleared Vue auth state; HttpOnly `zenspanel_token` cookie stayed valid ∴ visiting `/admin` after logout reauthenticated via `/auth/me`. | V72 |
+| B19 | 2026-06-26 | API/agent accepted empty/default `jwt.secret`; default repo secret allowed forged admin JWT and empty secret could break agent secret-key derivation. | V73 |
+| B20 | 2026-06-26 | Domain update allowed `document_root` without owner-home jail validation ∴ tenant could point root-run backup/installer flows at host paths. | V74 |
+| B21 | 2026-06-26 | govulncheck found reachable Go stdlib + `x/net` CVEs in build baseline, including HTTP/2 DoS, tar allocation, TLS retention, and template XSS classes. | V75 |
+| B22 | 2026-06-26 | Domain/database create ignored package limits and backup create spawned unbounded goroutines ∴ tenant could exhaust host disk/CPU/IO. | V76 |

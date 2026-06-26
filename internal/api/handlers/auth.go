@@ -63,6 +63,21 @@ func qrImageDataURL(img image.Image) (string, error) {
 	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }
 
+func isSecureRequest(c *gin.Context) bool {
+	return c.Request.TLS != nil ||
+		strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+}
+
+func setAuthCookie(c *gin.Context, token string) {
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("zenspanel_token", token, 24*60*60, "/", "", isSecureRequest(c), true)
+}
+
+func clearAuthCookie(c *gin.Context) {
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("zenspanel_token", "", -1, "/", "", isSecureRequest(c), true)
+}
+
 // tempTokenStore holds short-lived tokens issued after password auth when
 // 2FA is required. The token is redeemed by /auth/2fa/verify (V28).
 var tempTokenStore sync.Map // map[string]tempTokenEntry
@@ -173,10 +188,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	secure := c.Request.TLS != nil ||
-		strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("zenspanel_token", token, 24*60*60, "/", "", secure, true)
+	setAuthCookie(c, token)
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
@@ -192,6 +204,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			"totp_enabled":     user.TOTPEnabled,
 		},
 	})
+}
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+	clearAuthCookie(c)
+	c.JSON(http.StatusOK, gin.H{"message": "logged out"})
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {
@@ -457,10 +474,7 @@ func (h *AuthHandler) TOTPVerify(c *gin.Context) {
 		return
 	}
 
-	secure := c.Request.TLS != nil ||
-		strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("zenspanel_token", token, 24*60*60, "/", "", secure, true)
+	setAuthCookie(c, token)
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
@@ -521,10 +535,7 @@ func (h *AuthHandler) TOTPRecover(c *gin.Context) {
 		return
 	}
 
-	secure := c.Request.TLS != nil ||
-		strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("zenspanel_token", token, 24*60*60, "/", "", secure, true)
+	setAuthCookie(c, token)
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -91,7 +92,11 @@ func (h *BackupHandler) Create(c *gin.Context) {
 		Type:   req.Type,
 		Status: "pending",
 	}
-	if err := h.backups.Create(row); err != nil {
+	if err := h.backups.CreateIfNoActive(row); err != nil {
+		if errors.Is(err, store.ErrActiveBackup) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "backup already running"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

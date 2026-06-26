@@ -15,6 +15,7 @@ import (
 	"github.com/zenspanel/zenspanel/internal/auth"
 	"github.com/zenspanel/zenspanel/internal/store"
 )
+
 type Router struct {
 	auth          *handlers.AuthHandler
 	users         *handlers.UserHandler
@@ -64,8 +65,8 @@ func NewRouter(
 	firewallH *handlers.FirewallHandler,
 	antivirusH *handlers.AntivirusHandler,
 	backupTargetsH *handlers.BackupTargetHandler,
-	redirectsH     *handlers.RedirectHandler,
-	hotlinkH       *handlers.HotlinkHandler,
+	redirectsH *handlers.RedirectHandler,
+	hotlinkH *handlers.HotlinkHandler,
 	apiKeysH *handlers.APIKeyHandler,
 	auditLogsH *handlers.AuditLogHandler,
 	sslH *handlers.SSLHandler,
@@ -139,6 +140,7 @@ func (r *Router) Setup() *gin.Engine {
 		loginLimiter = middleware.RateLimit(10, time.Minute)
 	}
 	e.POST("/api/v1/auth/login", loginLimiter, r.auth.Login)
+	e.POST("/api/v1/auth/logout", r.auth.Logout)
 	// 2FA verification endpoints are public — the browser can't attach a
 	// JWT before completing the 2FA step. The temp_token is the credential.
 	e.POST("/api/v1/auth/2fa/verify", r.auth.TOTPVerify)

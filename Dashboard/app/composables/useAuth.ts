@@ -131,6 +131,14 @@ const _useAuth = () => {
     tempToken.value = null
   }
 
+  async function clearRemoteSession() {
+    try {
+      await $fetch('/api/v1/auth/logout', { method: 'POST' })
+    } catch {
+      // Local state is still cleared below; logout must not strand the user.
+    }
+  }
+
   function loginPath(role?: AuthUser['role']) {
     if (role === 'admin') {
       return '/admin/login'
@@ -153,6 +161,7 @@ const _useAuth = () => {
     const role = user.value?.role
 
     sessionExpired.value = false
+    await clearRemoteSession()
     clearSession()
     await redirectToLogin(role)
   }
@@ -165,6 +174,7 @@ const _useAuth = () => {
     const role = user.value?.role
 
     sessionExpired.value = true
+    await clearRemoteSession()
     clearSession()
     error.value = 'Session expired. Please sign in again.'
     await redirectToLogin(role)
