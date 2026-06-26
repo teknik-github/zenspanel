@@ -9,14 +9,15 @@ import (
 	"os"
 
 	"github.com/zenspanel/zenspanel/agent"
+	agentantivirus "github.com/zenspanel/zenspanel/agent/antivirus"
 	agentbackup "github.com/zenspanel/zenspanel/agent/backup"
 	agentcgroups "github.com/zenspanel/zenspanel/agent/cgroups"
 	agentcron "github.com/zenspanel/zenspanel/agent/cron"
 	agentfilebrowser "github.com/zenspanel/zenspanel/agent/filebrowser"
 	agentfilemanager "github.com/zenspanel/zenspanel/agent/filemanager"
 	agentfirewall "github.com/zenspanel/zenspanel/agent/firewall"
+	agentftp "github.com/zenspanel/zenspanel/agent/ftp"
 	agentinstaller "github.com/zenspanel/zenspanel/agent/installer"
-	agentantivirus "github.com/zenspanel/zenspanel/agent/antivirus"
 	agentlogs "github.com/zenspanel/zenspanel/agent/logs"
 	agentmysql "github.com/zenspanel/zenspanel/agent/mysql"
 	agentnginx "github.com/zenspanel/zenspanel/agent/nginx"
@@ -26,7 +27,6 @@ import (
 	agentterminal "github.com/zenspanel/zenspanel/agent/terminal"
 	agentupdater "github.com/zenspanel/zenspanel/agent/updater"
 	agentuser "github.com/zenspanel/zenspanel/agent/user"
-	agentftp "github.com/zenspanel/zenspanel/agent/ftp"
 	"github.com/zenspanel/zenspanel/internal/config"
 )
 
@@ -79,7 +79,7 @@ func main() {
 
 	srv.Register("nginx.sync_redirects", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
-			Domain    string              `json:"domain"`
+			Domain    string                `json:"domain"`
 			Redirects []agentnginx.Redirect `json:"redirects"`
 		}
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -705,7 +705,8 @@ func main() {
 	// from package.disk_quota; kernel blocks writes past it with EDQUOT.
 	// homeBase is passed as the filesystem identifier — setquota/repquota
 	// resolve it to the mounted device automatically.
-	srv.Register("quota.set", func(params json.RawMessage) (interface{}, error) {		var p struct {
+	srv.Register("quota.set", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
 			Username  string `json:"username"`
 			HardBytes int64  `json:"hard_bytes"`
 		}
@@ -774,9 +775,10 @@ func main() {
 	srv.Register("update.run", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
 			DownloadURL string `json:"download_url"`
+			Checksum    string `json:"checksum"`
 		}
 		_ = json.Unmarshal(params, &p)
-		err := agentupdater.Run(cfg.Paths.SrcDir, cfg.Paths.BinDir, cfg.Paths.FrontendDir, p.DownloadURL)
+		err := agentupdater.Run(cfg.Paths.SrcDir, cfg.Paths.BinDir, cfg.Paths.FrontendDir, p.DownloadURL, p.Checksum)
 		return map[string]interface{}{"started": err == nil, "error": errMsg(err)}, nil
 	})
 	srv.Register("update.status", func(params json.RawMessage) (interface{}, error) {

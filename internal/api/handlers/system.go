@@ -54,11 +54,13 @@ func (h *SystemHandler) CheckUpdate(c *gin.Context) {
 func (h *SystemHandler) RunUpdate(c *gin.Context) {
 	var req struct {
 		DownloadURL string `json:"download_url"`
+		Checksum    string `json:"checksum"`
 	}
 	_ = c.ShouldBindJSON(&req)
 	var resp interface{}
 	if err := agent.NewClient(h.agentSock).Call("update.run", map[string]interface{}{
 		"download_url": req.DownloadURL,
+		"checksum":     req.Checksum,
 	}, &resp); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
