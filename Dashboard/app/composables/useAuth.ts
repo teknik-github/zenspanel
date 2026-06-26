@@ -116,7 +116,9 @@ const _useAuth = () => {
 
   async function fetchMe() {
     try {
-      user.value = await $fetch<AuthUser>('/api/v1/auth/me')
+      const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
+
+      user.value = await $fetch<AuthUser>('/api/v1/auth/me', { headers })
       sessionExpired.value = false
     } catch {
       user.value = null

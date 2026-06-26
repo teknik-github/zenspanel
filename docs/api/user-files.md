@@ -1,4 +1,4 @@
-# ZensPanel API — File Manager & Backups & Cron Jobs
+# ZensPanel API — File Manager, FileBrowser, Backups & Cron Jobs
 
 All endpoints require `Authorization: Bearer <token>` with role `user`.
 
@@ -153,6 +153,71 @@ Extract an archive into a directory.
 ```
 
 **Response 200:** `{ "message": "extracted" }`
+
+---
+
+## FileBrowser
+
+FileBrowser is a full-featured web-based file manager (third-party open-source binary, [filebrowser.xyz](https://filebrowser.xyz)) embedded in the user panel. It runs as a separate service (`zenspanel-filebrowser`) on port `8081` and is proxied by Nginx at `/filebrowser/`.
+
+> **Note:** FileBrowser is a browser UI, not a REST API that frontend code calls directly. The ZensPanel API's only role here is the auth bridge used by Nginx.
+
+### Access URL
+
+```
+https://<panel-domain>/filebrowser/
+```
+
+The user opens this URL in a browser (or in an iframe within the panel). No API call is needed from the frontend to launch FileBrowser.
+
+### Authentication flow
+
+Access is gated by Nginx `auth_request`. The request never reaches the FileBrowser process unless the panel session is valid:
+
+```
+Browser → GET /filebrowser/*
+  → Nginx auth_request → GET /api/v1/auth/filebrowser  (internal — not client-callable)
+      Validates ZensPanel JWT cookie
+      Returns 200 + X-Auth-User: <username>   (valid session)
+              401                               (no/invalid session)
+  → On 200: Nginx forwards request to FileBrowser at 127.0.0.1:8081
+            with header X-Auth-User: <username>
+  → FileBrowser uses proxy-auth mode — no separate login required
+  → On 401: Nginx returns 401 to browser; panel redirects to login
+```
+
+### GET /api/v1/auth/filebrowser
+
+This endpoint is `internal` in Nginx — it can only be reached via `auth_request`, not from the internet or from frontend `$fetch` calls.
+
+**Auth:** JWT cookie (`zenspanel_token`) set at panel login — standard user session.
+
+**Response 200:** empty body; sets `X-Auth-User: <username>` response header for Nginx to forward.
+
+**Response 401:** no valid session.
+
+### User provisioning
+
+FileBrowser users are managed automatically by the ZensPanel agent (`agent/filebrowser/`). When a panel user is created or their password changes, the agent calls the FileBrowser HTTP API to create/update the corresponding FileBrowser account. Each user's root directory inside FileBrowser is jailed to their panel home (`/home/zenspanel/<username>`), so they cannot browse outside their own files.
+
+| FileBrowser config | Value |
+|--------------------|-------|
+| Base URL | `/filebrowser` |
+| Listen address | `127.0.0.1:8081` |
+| Auth mode | Proxy (`X-Auth-User` header) |
+| DB | `$ZENSPANEL_DATA/filebrowser.db` (SQLite) |
+| Max upload size | 1024 MiB (set in Nginx `client_max_body_size`) |
+| Systemd service | `zenspanel-filebrowser.service` |
+
+### Difference from the File Manager API
+
+| | File Manager API | FileBrowser |
+|-|-----------------|-------------|
+| Interface | JSON REST API (Monaco editor integration) | Full web UI |
+| Max file read | 4 MiB | No limit |
+| Max upload | 64 MiB | 1024 MiB |
+| Use case | Inline code editing, small file ops | Large uploads, drag-and-drop, bulk operations |
+| URL | `/api/v1/files/*` | `/filebrowser/` |
 
 ---
 

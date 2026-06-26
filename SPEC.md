@@ -117,7 +117,7 @@ CREATE TABLE user_php_extensions (
 
 ### 2fa
 
-- `POST /api/v1/auth/2fa/setup` JWT → 200 `{secret, qr_url, recovery_codes[8]}`
+- `POST /api/v1/auth/2fa/setup` JWT → 200 `{secret, qr_url:data-image, otpauth_url, recovery_codes[8]}`
 - `POST /api/v1/auth/2fa/confirm` JWT body `{code}` → 200 (activates 2FA) | 400 bad code
 - `DELETE /api/v1/auth/2fa` JWT body `{code}` → 200 (disables 2FA)
 - `POST /api/v1/auth/login` — if user has 2FA: return `{requires_2fa: true, temp_token}` instead of full JWT; client must POST `{temp_token, code}` to `/auth/2fa/verify` → full JWT
@@ -248,6 +248,11 @@ V63: session revoke on suspend ! rely on JWT expiry. must invalidate immediately
 V64: domain suspend ! remove vhost from nginx (or return 503). ⊥ suspended domain still serves content
 V65: FTP suspend ! disable vsftpd virtual user immediately (remove from PAM DB). ⊥ suspended user still uploads via FTP
 V66: unsuspend ! restore all services atomically. nginx vhosts re-enabled, FTP re-enabled, token_version unchanged (new login required). ⊥ partial restore leaves user broken
+V67: SSR auth refresh ! forward `cookie` header to `/api/v1/auth/me`. ⊥ page reload drops valid session
+V68: `packages.php_versions_allowed` ! stored as JSON array. API may accept CSV|string array; handler normalizes before DB. ⊥ raw CSV insert into JSON col
+V69: 2FA setup `qr_url` ! browser-renderable image data URL. `otpauth_url` carries authenticator URI. ⊥ `<img src="otpauth://...">`
+V70: Logs domain selector ! use stable domain id value + explicit label mapping. ⊥ object `v-model` + stale `option-attribute`
+V71: user RAM metrics ! realtime from cgroup `memory.current` ∨ per-UID process RSS fallback. ⊥ 0/stale RAM when PHP-FPM/cron/terminal process ∉ panel cgroup
 
 ## §T TASKS
 
@@ -415,3 +420,8 @@ V66: unsuspend ! restore all services atomically. nginx vhosts re-enabled, FTP r
 | B10 | 2026-05-20 | `internal/api/handlers/users.go:Update` — if `GetByID` fails after DB write, `user.setup_bin` is silently skipped and response is still 200. Shell PHP symlink stays stale. No warning surfaced to caller. LOW. | — |
 | B11 | 2026-05-20 | "Login as" opens `/user/#impersonate=<token>` but nginx serves user panel at `/` (root). URL 404s ∴ token never read, user lands on login page. FIXED: changed to `/#impersonate=<token>`. | V45 |
 | B12 | 2026-05-22 | suspend user only sets DB status=suspended. nginx vhosts still serve, FTP still works, active JWT still valid until expiry. suspended user can continue using all services. T134-T141 fix. | V62,V63,V64,V65 |
+| B13 | 2026-06-26 | Dashboard reload → Nuxt route mw ran SSR `fetchMe()` w/o request cookie ∴ `/auth/me` saw no `zenspanel_token`, redirected login despite valid session. | V67 |
+| B14 | 2026-06-26 | Package create/update accepted `php_versions_allowed` as raw CSV (`8.3,8.2`) and inserted it into MySQL JSON column. MySQL rejected with Error 3140 "document root must not be followed by other values". | V68 |
+| B15 | 2026-06-26 | 2FA setup returned `qr_url=otpauth://...`; Dashboard used it as `<img src>`, browser could not render QR. Backend now returns PNG data URL + `otpauth_url`. | V69 |
+| B16 | 2026-06-26 | Error Logs domain select bound whole domain object with stale `option-attribute`; Nuxt UI select did not reliably display/select added domains. Use `{label,value}` items + domain id model. | V70 |
+| B17 | 2026-06-26 | user RAM metrics only read cgroup `memory.current`; PHP-FPM/cron/terminal processes not moved into panel cgroup ∴ RAM stayed 0/stale despite frontend polling. | V71 |

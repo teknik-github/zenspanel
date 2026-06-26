@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/zenspanel/zenspanel/internal/auth"
@@ -17,24 +19,86 @@ func NewPackageHandler(packages *store.PackageStore) *PackageHandler {
 	return &PackageHandler{packages: packages}
 }
 
+type phpVersionsAllowed []string
+
+func (p *phpVersionsAllowed) UnmarshalJSON(data []byte) error {
+	var values []string
+	if err := json.Unmarshal(data, &values); err == nil {
+		*p = cleanPHPVersions(values)
+		return nil
+	}
+
+	var text string
+	if err := json.Unmarshal(data, &text); err != nil {
+		return err
+	}
+
+	if strings.HasPrefix(strings.TrimSpace(text), "[") {
+		if err := json.Unmarshal([]byte(text), &values); err == nil {
+			*p = cleanPHPVersions(values)
+			return nil
+		}
+	}
+
+	*p = cleanPHPVersions(strings.Split(text, ","))
+	return nil
+}
+
+func cleanPHPVersions(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+
+	for _, value := range values {
+		version := strings.TrimSpace(value)
+		if version == "" {
+			continue
+		}
+		if _, exists := seen[version]; exists {
+			continue
+		}
+		seen[version] = struct{}{}
+		out = append(out, version)
+	}
+
+	return out
+}
+
+func (p phpVersionsAllowed) jsonString() string {
+	data, err := json.Marshal([]string(p))
+	if err != nil {
+		return "[]"
+	}
+
+	return string(data)
+}
+
+func displayPHPVersionsAllowed(raw string) string {
+	var values []string
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return raw
+	}
+
+	return strings.Join(cleanPHPVersions(values), ",")
+}
+
 // packageRequest accepts disk_quota and memory_limit in MB (V49).
 // The UI sends MB; we convert to bytes before storing.
 type packageRequest struct {
-	Name               string `json:"name"`
-	CPUQuota           int    `json:"cpu_quota"`
-	DiskQuotaMB        int64  `json:"disk_quota_mb"`
-	MemoryLimitMB      int64  `json:"memory_limit_mb"`
-	MaxDomains         int    `json:"max_domains"`
-	MaxDatabases       int    `json:"max_databases"`
-	MaxCronJobs        int    `json:"max_cron_jobs"`
-	MaxProcs           int    `json:"max_procs"`
-	IOReadMbps         int64  `json:"io_read_mbps"`
-	IOWriteMbps        int64  `json:"io_write_mbps"`
-	AntivirusEnabled   bool   `json:"antivirus_enabled"`
-	MaxFTPAccounts     int    `json:"max_ftp_accounts"`
-	PHPVersionsAllowed string `json:"php_versions_allowed"`
-	TerminalEnabled    bool   `json:"terminal_enabled"`
-	BackupEnabled      bool   `json:"backup_enabled"`
+	Name               string             `json:"name"`
+	CPUQuota           int                `json:"cpu_quota"`
+	DiskQuotaMB        int64              `json:"disk_quota_mb"`
+	MemoryLimitMB      int64              `json:"memory_limit_mb"`
+	MaxDomains         int                `json:"max_domains"`
+	MaxDatabases       int                `json:"max_databases"`
+	MaxCronJobs        int                `json:"max_cron_jobs"`
+	MaxProcs           int                `json:"max_procs"`
+	IOReadMbps         int64              `json:"io_read_mbps"`
+	IOWriteMbps        int64              `json:"io_write_mbps"`
+	AntivirusEnabled   bool               `json:"antivirus_enabled"`
+	MaxFTPAccounts     int                `json:"max_ftp_accounts"`
+	PHPVersionsAllowed phpVersionsAllowed `json:"php_versions_allowed"`
+	TerminalEnabled    bool               `json:"terminal_enabled"`
+	BackupEnabled      bool               `json:"backup_enabled"`
 }
 
 func (r packageRequest) toPackage() store.Package {
@@ -51,7 +115,7 @@ func (r packageRequest) toPackage() store.Package {
 		IOWriteBps:         r.IOWriteMbps * 1024 * 1024,
 		AntivirusEnabled:   r.AntivirusEnabled,
 		MaxFTPAccounts:     r.MaxFTPAccounts,
-		PHPVersionsAllowed: r.PHPVersionsAllowed,
+		PHPVersionsAllowed: r.PHPVersionsAllowed.jsonString(),
 		TerminalEnabled:    r.TerminalEnabled,
 		BackupEnabled:      r.BackupEnabled,
 	}
@@ -77,7 +141,7 @@ func packageAdminResponse(p store.Package) map[string]interface{} {
 		"io_write_mbps":        p.IOWriteBps / (1024 * 1024),
 		"antivirus_enabled":    p.AntivirusEnabled,
 		"max_ftp_accounts":     p.MaxFTPAccounts,
-		"php_versions_allowed": p.PHPVersionsAllowed,
+		"php_versions_allowed": displayPHPVersionsAllowed(p.PHPVersionsAllowed),
 		"terminal_enabled":     p.TerminalEnabled,
 		"backup_enabled":       p.BackupEnabled,
 		"created_at":           p.CreatedAt,
@@ -98,7 +162,7 @@ func packageUserResponse(p store.Package) map[string]interface{} {
 		"max_cron_jobs":        p.MaxCronJobs,
 		"max_ftp_accounts":     p.MaxFTPAccounts,
 		"antivirus_enabled":    p.AntivirusEnabled,
-		"php_versions_allowed": p.PHPVersionsAllowed,
+		"php_versions_allowed": displayPHPVersionsAllowed(p.PHPVersionsAllowed),
 		"terminal_enabled":     p.TerminalEnabled,
 		"backup_enabled":       p.BackupEnabled,
 	}

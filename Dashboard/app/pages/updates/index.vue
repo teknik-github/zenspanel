@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ alias: '/admin/updates' })
+
 const toast = useToast()
 
 const { data: version } = await useFetch('/api/v1/system/version', { lazy: true })

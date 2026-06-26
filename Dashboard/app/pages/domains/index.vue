@@ -3,6 +3,8 @@ import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
 
+definePageMeta({ alias: '/admin/domains' })
+
 const UButton = resolveComponent('UButton')
 const UBadge = resolveComponent('UBadge')
 const UDropdownMenu = resolveComponent('UDropdownMenu')
@@ -53,14 +55,14 @@ async function handleDelete() {
 // Edit/Create
 const editOpen = ref(false), editLoading = ref(false), editMode = ref<'create'|'edit'>('create')
 const editTarget = ref<any>(null)
-const editState = reactive({ domain: '', php_version: '8.3', user_id: undefined as number | undefined })
+const editState = reactive({ domain: '', php_version: '8.3' })
 
 function showEdit(d?: any) {
   editMode.value = d ? 'edit' : 'create'; editTarget.value = d
   if (d) {
-    Object.assign(editState, { domain: d.domain, php_version: d.php_version || '8.3', user_id: d.user_id })
+    Object.assign(editState, { domain: d.domain, php_version: d.php_version || '8.3' })
   } else {
-    Object.assign(editState, { domain: '', php_version: '8.3', user_id: undefined })
+    Object.assign(editState, { domain: '', php_version: '8.3' })
   }
   editOpen.value = true
 }
@@ -81,7 +83,6 @@ async function onSubmit() {
 const columns: TableColumn<any>[] = [
   { accessorKey: 'id', header: 'ID' },
   { accessorKey: 'domain', header: 'Domain', cell: ({ row }: any) => h('span', { class: 'font-medium text-highlighted' }, row.original.domain) },
-  { accessorKey: 'user_id', header: 'User ID' },
   { accessorKey: 'php_version', header: 'PHP' },
   { accessorKey: 'ssl_type', header: 'SSL',
     cell: ({ row }: any) => {
@@ -134,9 +135,6 @@ const pagination = ref({ pageIndex: 0, pageSize: 20 })
         <div class="space-y-4">
           <UFormField label="Domain" required>
             <UInput v-model="editState.domain" :disabled="editMode==='edit'||editLoading" placeholder="example.com" />
-          </UFormField>
-          <UFormField v-if="editMode==='create'" label="User ID">
-            <UInput v-model.number="editState.user_id" type="number" :disabled="editLoading" placeholder="5" />
           </UFormField>
           <UFormField label="PHP Version">
             <USelect v-model="editState.php_version" :items="['8.3','8.2','8.1','7.4']" :disabled="editLoading" />

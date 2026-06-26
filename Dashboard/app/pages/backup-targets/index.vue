@@ -3,6 +3,8 @@ import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
 
+definePageMeta({ alias: '/admin/backup-targets' })
+
 type BackupTarget = {
   id: number
   name: string

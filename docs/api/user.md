@@ -13,7 +13,7 @@ See [overview.md](./overview.md) for base URL, authentication format, null-field
 | [user-auth.md](./user-auth.md) | Login, 2FA setup/confirm/disable/recover, GET /auth/me, user profile, resource usage |
 | [user-domains.md](./user-domains.md) | Domains CRUD + suspend/unsuspend/backup, Subdomains CRUD, SSL (Let's Encrypt + custom), Redirects, Hotlink protection, Domain logs |
 | [user-databases.md](./user-databases.md) | Databases CRUD + password reset + phpMyAdmin SSO, FTP accounts CRUD |
-| [user-files.md](./user-files.md) | File manager (list/read/write/mkdir/rename/delete/upload/chmod/copy/compress/extract), Backups (async + download + restore), Cron jobs |
+| [user-files.md](./user-files.md) | File manager API (list/read/write/mkdir/rename/delete/upload/chmod/copy/compress/extract), FileBrowser web UI (auth bridge + provisioning), Backups (async + download + restore), Cron jobs |
 | [user-misc.md](./user-misc.md) | PHP extensions toggle, Packages (read-only), PHP versions (read-only), Terminal WebSocket token, Website installer, Antivirus |
 
 ---

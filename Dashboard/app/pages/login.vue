@@ -6,6 +6,10 @@ definePageMeta({
 const auth = useAuth()
 const router = useRouter()
 
+function dashboardPath() {
+  return auth.user.value?.role === 'admin' ? '/admin/dashboard' : '/dashboard'
+}
+
 const username = ref('')
 const password = ref('')
 const mounted = ref(false)
@@ -18,14 +22,14 @@ onMounted(() => {
 })
 
 if (auth.isAuthenticated.value) {
-  await navigateTo('/dashboard')
+  await navigateTo(dashboardPath())
 }
 
 async function handleLogin() {
   try {
     await auth.login(username.value, password.value)
     if (!auth.requires2FA.value) {
-      await navigateTo('/dashboard')
+      await navigateTo(dashboardPath())
     }
   } catch {
     // Error is set in auth.error
@@ -40,7 +44,7 @@ const showRecovery = ref(false)
 async function handleVerify2FA() {
   try {
     await auth.verify2FA(totpCode.value)
-    await navigateTo('/dashboard')
+    await navigateTo(dashboardPath())
   } catch {
     // Error is set in auth.error
   }
@@ -48,7 +52,7 @@ async function handleVerify2FA() {
 async function handleRecover2FA() {
   try {
     await auth.recover2FA(recoveryCode.value)
-    await navigateTo('/dashboard')
+    await navigateTo(dashboardPath())
   } catch {
     // Error is set in auth.error
   }
@@ -60,7 +64,7 @@ function toggleRecovery() {
 
 watchEffect(() => {
   if (auth.isAuthenticated.value) {
-    router.push('/dashboard')
+    router.push(dashboardPath())
   }
 })
 </script>

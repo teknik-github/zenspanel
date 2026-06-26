@@ -5,7 +5,7 @@ import { getPaginationRowModel } from '@tanstack/table-core'
 const UButton = resolveComponent('UButton')
 const UBadge = resolveComponent('UBadge')
 
-definePageMeta({ title: 'Audit Logs' })
+definePageMeta({ title: 'Audit Logs', alias: '/admin/audit-logs' })
 
 const toast = useToast()
 const table = useTemplateRef('table')

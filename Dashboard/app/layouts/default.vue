@@ -9,7 +9,7 @@ const isAdmin = computed(() => auth.user.value?.role === 'admin')
 const adminLinks = [[{
   label: 'Dashboard',
   icon: 'i-lucide-activity',
-  to: '/dashboard',
+  to: '/admin/dashboard',
   onSelect: () => { open.value = false }
 }, {
   label: 'Account Management',
@@ -19,12 +19,12 @@ const adminLinks = [[{
   children: [{
     label: 'Users',
     icon: 'i-lucide-users',
-    to: '/users',
+    to: '/admin/users',
     onSelect: () => { open.value = false }
   }, {
     label: 'Packages',
     icon: 'i-lucide-package',
-    to: '/packages',
+    to: '/admin/packages',
     onSelect: () => { open.value = false }
   }]
 }, {
@@ -34,12 +34,12 @@ const adminLinks = [[{
   children: [{
     label: 'Domains',
     icon: 'i-lucide-globe',
-    to: '/domains',
+    to: '/admin/domains',
     onSelect: () => { open.value = false }
   }, {
     label: 'Databases',
     icon: 'i-lucide-database',
-    to: '/databases',
+    to: '/admin/databases',
     onSelect: () => { open.value = false }
   }]
 }, {
@@ -49,12 +49,12 @@ const adminLinks = [[{
   children: [{
     label: 'PHP Versions',
     icon: 'i-lucide-tags',
-    to: '/php-versions',
+    to: '/admin/php-versions',
     onSelect: () => { open.value = false }
   }, {
     label: 'PHP Extensions',
     icon: 'i-lucide-puzzle',
-    to: '/php-extensions',
+    to: '/admin/php-extensions',
     onSelect: () => { open.value = false }
   }]
 }, {
@@ -64,17 +64,17 @@ const adminLinks = [[{
   children: [{
     label: 'SSL Manager',
     icon: 'i-lucide-lock',
-    to: '/ssl',
+    to: '/admin/ssl',
     onSelect: () => { open.value = false }
   }, {
     label: 'Firewall',
     icon: 'i-lucide-flame',
-    to: '/firewall',
+    to: '/admin/firewall',
     onSelect: () => { open.value = false }
   }, {
     label: 'IP Allowlist',
     icon: 'i-lucide-shield-check',
-    to: '/ip-allowlist',
+    to: '/admin/ip-allowlist',
     onSelect: () => { open.value = false }
   }]
 }, {
@@ -84,12 +84,12 @@ const adminLinks = [[{
   children: [{
     label: 'Backups',
     icon: 'i-lucide-archive',
-    to: '/backups',
+    to: '/admin/backups',
     onSelect: () => { open.value = false }
   }, {
     label: 'Backup Targets',
     icon: 'i-lucide-cloud',
-    to: '/backup-targets',
+    to: '/admin/backup-targets',
     onSelect: () => { open.value = false }
   }]
 }, {
@@ -99,28 +99,28 @@ const adminLinks = [[{
   children: [{
     label: 'Audit Logs',
     icon: 'i-lucide-scroll',
-    to: '/audit-logs',
+    to: '/admin/audit-logs',
     onSelect: () => { open.value = false }
   }, {
     label: 'Terminal',
     icon: 'i-lucide-terminal',
-    to: '/terminal',
+    to: '/admin/terminal',
     onSelect: () => { open.value = false }
   }, {
     label: 'API Keys',
     icon: 'i-lucide-key',
-    to: '/api-keys',
+    to: '/admin/api-keys',
     onSelect: () => { open.value = false }
   }, {
     label: 'Updates',
     icon: 'i-lucide-refresh-cw',
-    to: '/updates',
+    to: '/admin/updates',
     onSelect: () => { open.value = false }
   }]
 }, {
   label: 'Settings',
   icon: 'i-lucide-settings',
-  to: '/settings',
+  to: '/admin/settings',
   onSelect: () => { open.value = false }
 }]] satisfies NavigationMenuItem[][]
 

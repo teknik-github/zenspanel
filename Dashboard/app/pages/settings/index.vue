@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ alias: '/admin/settings' })
+
 const auth = useAuth()
 const toast = useToast()
 

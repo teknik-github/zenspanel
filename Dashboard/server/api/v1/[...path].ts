@@ -3,11 +3,32 @@ type ProxyError = {
 }
 
 function normalizePath(path: unknown) {
-  if (Array.isArray(path)) {
-    return path.join('/')
+  const rawSegments = Array.isArray(path)
+    ? path.flatMap(segment => String(segment).split('/'))
+    : typeof path === 'string' ? path.split('/') : []
+
+  const segments: string[] = []
+
+  for (const rawSegment of rawSegments) {
+    if (!rawSegment) {
+      continue
+    }
+
+    let segment: string
+    try {
+      segment = decodeURIComponent(rawSegment)
+    } catch {
+      return null
+    }
+
+    if (segment === '.' || segment === '..') {
+      return null
+    }
+
+    segments.push(encodeURIComponent(segment))
   }
 
-  return typeof path === 'string' ? path : ''
+  return segments.join('/')
 }
 
 function isBackupDownloadPath(path: string) {
@@ -36,12 +57,21 @@ function guardBackupDownload(event: Parameters<typeof getMethod>[0], method: str
   return null
 }
 
+function getPeerIP(event: Parameters<typeof getMethod>[0]) {
+  return event.node.req.socket.remoteAddress?.replace(/^::ffff:/, '') || ''
+}
+
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
   const backendUrl = config.backendUrl
 
   // Extract the path after /api/v1/
   const path = normalizePath(event.context.params?.path)
+  if (path === null) {
+    setResponseStatus(event, 400)
+    return { error: 'invalid path' }
+  }
+
   const isBackupDownload = isBackupDownloadPath(path)
 
   const method = getMethod(event)
@@ -79,10 +109,10 @@ export default defineEventHandler(async (event) => {
     }
 
     // Forward real client IP
-    const xForwardedFor = getRequestHeader(event, 'x-forwarded-for')
-    const clientIP = xForwardedFor || getRequestHost(event).split(':')[0]
+    const clientIP = getPeerIP(event)
     if (clientIP) {
       forwardHeaders['x-forwarded-for'] = clientIP
+      forwardHeaders['x-real-ip'] = clientIP
     }
 
     // Forward user-agent for audit logs

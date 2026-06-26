@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
-
 type PhpExtension = {
   name: string
   php_version: string
@@ -18,11 +16,19 @@ type ApiError = {
   }
 }
 
+type ExtensionGroup = {
+  letter: string
+  extensions: PhpExtension[]
+}
+
+const COLUMN_COUNT = 4
+
 const UBadge = resolveComponent('UBadge')
-const UButton = resolveComponent('UButton')
 const toast = useToast()
 
 const selectedPhpVersion = ref<string | undefined>()
+const selectedExtensionKeys = ref<string[]>([])
+const applyLoading = ref(false)
 
 const { data, status, refresh } = await useFetch<PhpExtension[] | PhpExtensionsResponse>('/api/v1/php-extensions', { lazy: true })
 
@@ -59,7 +65,54 @@ const selectedExtensions = computed(() => {
   return extensions.value.filter(ext => ext.php_version === selectedPhpVersion.value)
 })
 
-const enabledCount = computed(() => selectedExtensions.value.filter(ext => ext.user_enabled).length)
+const selectedCount = computed(() => selectedExtensionKeys.value.length)
+
+const changedExtensions = computed(() => {
+  return selectedExtensions.value.filter((extension) => {
+    if (!extension.admin_enabled) {
+      return false
+    }
+
+    return selectedExtensionKeys.value.includes(getExtensionKey(extension)) !== extension.user_enabled
+  })
+})
+
+const groupedExtensions = computed<ExtensionGroup[]>(() => {
+  const groups = new Map<string, PhpExtension[]>()
+
+  for (const extension of selectedExtensions.value) {
+    const letter = extension.name.charAt(0).toUpperCase().match(/[A-Z]/) ? extension.name.charAt(0).toUpperCase() : '#'
+    const items = groups.get(letter) || []
+    items.push(extension)
+    groups.set(letter, items)
+  }
+
+  return Array.from(groups.entries())
+    .sort(([letterA], [letterB]) => letterA.localeCompare(letterB))
+    .map(([letter, items]) => ({
+      letter,
+      extensions: items.sort((a, b) => a.name.localeCompare(b.name))
+    }))
+})
+
+const groupedExtensionColumns = computed<ExtensionGroup[][]>(() => {
+  const columns = Array.from({ length: COLUMN_COUNT }, () => [] as ExtensionGroup[])
+  const columnWeights = Array.from({ length: COLUMN_COUNT }, () => 0)
+
+  for (const group of groupedExtensions.value) {
+    const targetIndex = columnWeights.indexOf(Math.min(...columnWeights))
+    const targetColumn = columns[targetIndex]
+
+    if (!targetColumn) {
+      continue
+    }
+
+    targetColumn.push(group)
+    columnWeights[targetIndex] = (columnWeights[targetIndex] || 0) + group.extensions.length + 1
+  }
+
+  return columns
+})
 
 watch(availablePhpVersions, (versions) => {
   if (!versions.length) {
@@ -72,89 +125,85 @@ watch(availablePhpVersions, (versions) => {
   }
 }, { immediate: true })
 
+watch(selectedExtensions, (items) => {
+  selectedExtensionKeys.value = items
+    .filter(extension => extension.user_enabled)
+    .map(extension => getExtensionKey(extension))
+}, { immediate: true })
+
+function getExtensionKey(extension: PhpExtension) {
+  return `${extension.php_version}:${extension.name}`
+}
+
 function getErrorMessage(error: unknown) {
   const apiError = error as ApiError
   return apiError.data?.error || 'Failed to update extension.'
 }
 
-async function toggleExtension(extension: PhpExtension) {
+function setExtensionSelected(extension: PhpExtension, enabled: boolean) {
+  if (!extension.admin_enabled) {
+    return
+  }
+
+  const key = getExtensionKey(extension)
+  const current = new Set(selectedExtensionKeys.value)
+
+  if (enabled) {
+    current.add(key)
+  } else {
+    current.delete(key)
+  }
+
+  selectedExtensionKeys.value = Array.from(current)
+}
+
+function selectAllAvailable() {
+  selectedExtensionKeys.value = selectedExtensions.value
+    .filter(extension => extension.admin_enabled)
+    .map(extension => getExtensionKey(extension))
+}
+
+function clearAvailable() {
+  selectedExtensionKeys.value = []
+}
+
+async function applyChanges() {
+  if (!changedExtensions.value.length) {
+    return
+  }
+
+  applyLoading.value = true
   try {
-    await $fetch('/api/v1/php-extensions', {
-      method: 'PUT',
-      body: {
-        name: extension.name,
-        php_version: extension.php_version,
-        enabled: !extension.user_enabled
-      }
-    })
+    const changes = [...changedExtensions.value]
+
+    for (const extension of changes) {
+      await $fetch('/api/v1/php-extensions', {
+        method: 'PUT',
+        body: {
+          name: extension.name,
+          php_version: extension.php_version,
+          enabled: selectedExtensionKeys.value.includes(getExtensionKey(extension))
+        }
+      })
+    }
 
     toast.add({
-      title: extension.user_enabled ? 'Extension disabled' : 'Extension enabled',
-      description: `${extension.name} on PHP ${extension.php_version}`,
+      title: 'PHP extensions updated',
+      description: `${changes.length} change(s) applied for PHP ${selectedPhpVersion.value}.`,
       color: 'success'
     })
-    refresh()
+
+    await refresh()
   } catch (error: unknown) {
     toast.add({
       title: 'Error',
       description: getErrorMessage(error),
       color: 'error'
     })
+  } finally {
+    applyLoading.value = false
   }
 }
-
-const columns: TableColumn<PhpExtension>[] = [
-  {
-    accessorKey: 'name',
-    header: 'Extension',
-    cell: ({ row }) => h('span', { class: 'font-medium text-highlighted' }, row.original.name)
-  },
-  {
-    accessorKey: 'php_version',
-    header: 'PHP',
-    cell: ({ row }) => h('span', { class: 'text-xs font-mono text-dimmed' }, row.original.php_version)
-  },
-  {
-    accessorKey: 'admin_enabled',
-    header: 'Admin Allowed',
-    cell: ({ row }) => h(
-      UBadge,
-      {
-        variant: 'subtle',
-        color: row.original.admin_enabled ? 'success' : 'error'
-      },
-      () => row.original.admin_enabled ? 'Yes' : 'No'
-    )
-  },
-  {
-    accessorKey: 'user_enabled',
-    header: 'Your Setting',
-    cell: ({ row }) => h(
-      UBadge,
-      {
-        variant: 'subtle',
-        color: row.original.user_enabled ? 'success' : 'neutral'
-      },
-      () => row.original.user_enabled ? 'On' : 'Off'
-    )
-  },
-  {
-    id: 'actions',
-    cell: ({ row }) => h(
-      'div',
-      { class: 'text-right' },
-      h(UButton, {
-        label: row.original.user_enabled ? 'Disable' : 'Enable',
-        icon: row.original.user_enabled ? 'i-lucide-toggle-left' : 'i-lucide-toggle-right',
-        size: 'xs',
-        color: row.original.user_enabled ? 'neutral' : 'primary',
-        variant: row.original.user_enabled ? 'outline' : 'solid',
-        disabled: !row.original.admin_enabled,
-        onClick: () => toggleExtension(row.original)
-      })
-    )
-  }
-]
 </script>
 
 <template>
@@ -183,29 +232,104 @@ const columns: TableColumn<PhpExtension>[] = [
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p class="text-sm text-dimmed">
-              Toggle PHP extensions for the selected PHP version. Only extensions enabled by the admin can be activated.
+              Select available PHP extensions for the selected PHP version, then apply the changes.
             </p>
             <p v-if="selectedPhpVersion" class="text-xs text-muted mt-1">
               Showing {{ selectedExtensions.length }} extension(s) for PHP {{ selectedPhpVersion }}.
-              {{ enabledCount }} currently enabled.
+              {{ selectedCount }} selected.
             </p>
           </div>
 
-          <UBadge v-if="selectedPhpVersion" color="neutral" variant="subtle">
-            PHP {{ selectedPhpVersion }}
-          </UBadge>
+          <div class="flex flex-wrap items-center gap-2">
+            <UBadge v-if="selectedPhpVersion" color="neutral" variant="subtle">
+              PHP {{ selectedPhpVersion }}
+            </UBadge>
+            <UBadge v-if="changedExtensions.length" color="warning" variant="subtle">
+              {{ changedExtensions.length }} pending
+            </UBadge>
+          </div>
         </div>
 
-        <UTable
-          :data="selectedExtensions"
-          :columns="columns"
-          :loading="status === 'pending'"
-          :ui="{
-            base: 'table-fixed border-separate border-spacing-0',
-            thead: '[&>tr]:bg-elevated/50',
-            td: 'border-b border-default'
-          }"
-        />
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-default bg-muted/20 px-4 py-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <UButton
+              label="Select all"
+              icon="i-lucide-check-check"
+              size="sm"
+              variant="outline"
+              color="neutral"
+              :disabled="status === 'pending' || applyLoading || !selectedExtensions.length"
+              @click="selectAllAvailable"
+            />
+            <UButton
+              label="Clear"
+              icon="i-lucide-eraser"
+              size="sm"
+              variant="outline"
+              color="neutral"
+              :disabled="status === 'pending' || applyLoading || !selectedExtensionKeys.length"
+              @click="clearAvailable"
+            />
+          </div>
+
+          <UButton
+            label="Apply"
+            icon="i-lucide-save"
+            color="primary"
+            :loading="applyLoading"
+            :disabled="status === 'pending' || !changedExtensions.length"
+            @click="applyChanges"
+          />
+        </div>
+
+        <UCard :ui="{ body: 'p-0 sm:p-0' }">
+          <div v-if="status === 'pending'" class="flex items-center justify-center py-16 text-sm text-dimmed">
+            Loading PHP extensions...
+          </div>
+
+          <div v-else-if="!selectedExtensions.length" class="flex items-center justify-center py-16 text-sm text-dimmed">
+            No extensions found for this PHP version.
+          </div>
+
+          <div v-else class="grid gap-0 md:grid-cols-2 xl:grid-cols-4">
+            <div
+              v-for="(column, columnIndex) in groupedExtensionColumns"
+              :key="columnIndex"
+              class="min-w-0 border-default p-4"
+              :class="columnIndex < groupedExtensionColumns.length - 1 ? 'xl:border-r' : ''"
+            >
+              <div class="space-y-5">
+                <section
+                  v-for="group in column"
+                  :key="group.letter"
+                  class="space-y-2"
+                >
+                  <h3 class="border-b border-default pb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+                    {{ group.letter }}
+                  </h3>
+
+                  <div class="space-y-1">
+                    <label
+                      v-for="extension in group.extensions"
+                      :key="getExtensionKey(extension)"
+                      class="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors"
+                      :class="extension.admin_enabled ? 'cursor-pointer hover:bg-elevated/60' : 'cursor-not-allowed opacity-45'"
+                    >
+                      <UCheckbox
+                        :model-value="selectedExtensionKeys.includes(getExtensionKey(extension))"
+                        :disabled="applyLoading || !extension.admin_enabled"
+                        @update:model-value="setExtensionSelected(extension, Boolean($event))"
+                      />
+                      <span class="min-w-0 truncate font-mono text-highlighted">
+                        {{ extension.name }}
+                      </span>
+                    </label>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </UCard>
       </div>
     </template>
   </UDashboardPanel>

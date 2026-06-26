@@ -5,6 +5,8 @@ import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
 import * as z from 'zod'
 
+definePageMeta({ alias: '/admin/packages' })
+
 const UButton = resolveComponent('UButton')
 const UBadge = resolveComponent('UBadge')
 const UDropdownMenu = resolveComponent('UDropdownMenu')
@@ -128,11 +130,19 @@ function showEditModal(pkg?: any) {
 async function onPackageSubmit() {
   editLoading.value = true
   try {
+    const payload = {
+      ...editState,
+      php_versions_allowed: editState.php_versions_allowed
+        .split(',')
+        .map(version => version.trim())
+        .filter(Boolean)
+    }
+
     if (editMode.value === 'create') {
-      await $fetch('/api/v1/packages', { method: 'POST', body: editState })
+      await $fetch('/api/v1/packages', { method: 'POST', body: payload })
       toast.add({ title: 'Created', description: `${editState.name} added.`, color: 'success' })
     } else {
-      await $fetch(`/api/v1/packages/${editTarget.value.id}`, { method: 'PUT', body: editState })
+      await $fetch(`/api/v1/packages/${editTarget.value.id}`, { method: 'PUT', body: payload })
       toast.add({ title: 'Updated', description: `${editState.name} saved.`, color: 'success' })
     }
     editOpen.value = false

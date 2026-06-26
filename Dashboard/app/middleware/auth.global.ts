@@ -1,5 +1,28 @@
-// Admin-only routes — users are redirected to /dashboard
-const ADMIN_ROUTES = [
+// Admin page aliases use /admin/<page>. These root paths are kept only for
+// legacy redirects when an authenticated admin opens an old URL.
+const ADMIN_ALIAS_ROOTS = [
+  '/dashboard',
+  '/users',
+  '/packages',
+  '/domains',
+  '/databases',
+  '/ssl',
+  '/backups',
+  '/terminal',
+  '/settings',
+  '/audit-logs',
+  '/updates',
+  '/ip-allowlist',
+  '/firewall',
+  '/php-versions',
+  '/php-extensions',
+  '/backup-targets',
+  '/monitor',
+  '/api-keys'
+]
+
+// Admin-only root routes — users are redirected to /dashboard
+const ADMIN_ONLY_ROOTS = [
   '/users',
   '/packages',
   '/audit-logs',
@@ -10,7 +33,7 @@ const ADMIN_ROUTES = [
   '/php-extensions',
   '/backup-targets',
   '/monitor',
-  '/api-keys',
+  '/api-keys'
 ]
 
 // User-only routes — admins are redirected to /dashboard
@@ -22,41 +45,59 @@ const USER_ROUTES = [
   '/two-factor',
   '/redirects',
   '/cron-jobs',
-  '/logs',
+  '/logs'
 ]
+
+function matchesPath(path: string, roots: string[]) {
+  return roots.some(root => path === root || path.startsWith(root + '/'))
+}
+
+function legacyAdminTarget(path: string) {
+  return matchesPath(path, ADMIN_ALIAS_ROOTS) ? `/admin${path}` : null
+}
 
 export default defineNuxtRouteMiddleware(async (to) => {
   if (to.path === '/admin/login' || to.path === '/login') return
 
   const auth = useAuth()
+  const path = to.path
 
   if (!auth.user.value) {
     await auth.fetchMe()
   }
 
   if (!auth.isAuthenticated.value) {
-    if (to.path.startsWith('/admin')) {
+    if (path.startsWith('/admin') || matchesPath(path, ADMIN_ONLY_ROOTS)) {
       return navigateTo('/admin/login')
     }
     return navigateTo('/login')
   }
 
   const role = auth.user.value?.role
-  const path = to.path
+
+  if (role === 'admin' && path === '/admin') {
+    return navigateTo('/admin/dashboard')
+  }
+
+  if (role === 'admin') {
+    const target = legacyAdminTarget(path)
+
+    if (target) {
+      return navigateTo(target)
+    }
+  }
 
   // Block client from accessing admin-only routes
   if (role !== 'admin') {
-    const isAdminRoute = ADMIN_ROUTES.some(r => path === r || path.startsWith(r + '/'))
-    if (isAdminRoute) {
+    if (path.startsWith('/admin') || matchesPath(path, ADMIN_ONLY_ROOTS)) {
       return navigateTo('/dashboard')
     }
   }
 
   // Block admin from accessing user-only routes
   if (role === 'admin') {
-    const isUserRoute = USER_ROUTES.some(r => path === r || path.startsWith(r + '/'))
-    if (isUserRoute) {
-      return navigateTo('/dashboard')
+    if (matchesPath(path, USER_ROUTES)) {
+      return navigateTo('/admin/dashboard')
     }
   }
 })

@@ -5,3 +5,12 @@ allowBuilds:
   maplibre-gl: false
   unrs-resolver: false
   vue-demi: false
+overrides:
+  '@babel/core': 7.29.6
+  '@tiptap/y-tiptap': 3.0.4
+  esbuild: 0.28.1
+  js-yaml: 4.2.0
+  launch-editor: 2.14.1
+  shell-quote: 1.8.4
+  tar: 7.5.16
+  vite: 7.3.5

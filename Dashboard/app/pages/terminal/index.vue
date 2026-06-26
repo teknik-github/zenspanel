@@ -2,6 +2,8 @@
 import type { FitAddon as XTermFitAddon } from '@xterm/addon-fit'
 import type { IDisposable, ITerminalOptions, Terminal as XTermTerminal } from '@xterm/xterm'
 
+definePageMeta({ alias: '/admin/terminal' })
+
 type TerminalTokenResponse = {
   token?: string
 }

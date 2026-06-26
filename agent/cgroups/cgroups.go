@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -23,6 +24,29 @@ const (
 // contains the user home directories. Detected once at startup and used
 // for io.max throttling. Empty string = io throttling disabled.
 var homeBaseDev string
+
+var (
+	procRoot       = "/proc"
+	processRSSPage = int64(os.Getpagesize())
+	lookupUserUID  = func(username string) (uint32, error) {
+		u, err := user.Lookup(username)
+		if err != nil {
+			return 0, err
+		}
+		uid, err := strconv.ParseUint(u.Uid, 10, 32)
+		if err != nil {
+			return 0, err
+		}
+		return uint32(uid), nil
+	}
+	processRSSMu    sync.Mutex
+	processRSSCache = processRSSSnapshot{}
+)
+
+type processRSSSnapshot struct {
+	at     time.Time
+	values map[uint32]int64
+}
 
 // InitHomeBaseDev detects the block device for homeBase and caches it.
 // Called by the agent at startup with cfg.Paths.HomeBase.
@@ -180,10 +204,11 @@ func AddPID(username string, pid int) error {
 }
 
 // ReadMetrics returns the current RAM, disk, and CPU usage for a user.
-// RAM comes from the cgroup v2 memory.current pseudo-file (bytes). Disk
-// is `du -sb` over the user's home directory (bytes) — there's no
-// per-user cgroup disk metric, only quota tooling, and quotas may not be
-// enabled. We cap du to 5s to avoid pinning the API on a giant home tree.
+// RAM comes from cgroup v2 memory.current, with a per-UID RSS fallback for
+// user processes that have not been moved into the panel cgroup yet. Disk
+// is `du -sb` over the user's home directory (bytes) — there's no per-user
+// cgroup disk metric, only quota tooling, and quotas may not be enabled.
+// We cap du to 5s to avoid pinning the API on a giant home tree.
 // CPU is a percentage (0-100+) computed from the delta of cpu.stat's
 // usage_usec between this call and the previous one cached per user.
 //
@@ -201,6 +226,9 @@ func ReadMetrics(username, homeBase string) (ramUsed, diskUsed int64, cpuPct flo
 	if data, readErr := os.ReadFile(filepath.Join(slicePath(username), "memory.current")); readErr == nil {
 		ramUsed, _ = strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
 	}
+	if rssUsed, rssErr := readProcessRSS(username); rssErr == nil && rssUsed > ramUsed {
+		ramUsed = rssUsed
+	}
 
 	homeDir := filepath.Join(homeBase, username)
 	if _, statErr := os.Stat(homeDir); statErr == nil {
@@ -217,6 +245,121 @@ func ReadMetrics(username, homeBase string) (ramUsed, diskUsed int64, cpuPct flo
 
 	cpuPct = cpuPercent(username)
 	return ramUsed, diskUsed, cpuPct, nil
+}
+
+func readProcessRSS(username string) (int64, error) {
+	uid, err := lookupUserUID(username)
+	if err != nil {
+		return 0, err
+	}
+
+	values, err := processRSSByUID()
+	if err != nil {
+		return 0, err
+	}
+
+	return values[uid], nil
+}
+
+func processRSSByUID() (map[uint32]int64, error) {
+	processRSSMu.Lock()
+	defer processRSSMu.Unlock()
+
+	if time.Since(processRSSCache.at) < time.Second && processRSSCache.values != nil {
+		return processRSSCache.values, nil
+	}
+
+	entries, err := os.ReadDir(procRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	values := map[uint32]int64{}
+	for _, entry := range entries {
+		if !entry.IsDir() || !isPID(entry.Name()) {
+			continue
+		}
+		dir := filepath.Join(procRoot, entry.Name())
+		uids, err := procStatusUIDs(filepath.Join(dir, "status"))
+		if err != nil || len(uids) == 0 {
+			continue
+		}
+		rss, err := procStatmRSS(filepath.Join(dir, "statm"))
+		if err != nil {
+			continue
+		}
+		for _, uid := range uids {
+			values[uid] += rss
+		}
+	}
+
+	processRSSCache = processRSSSnapshot{
+		at:     time.Now(),
+		values: values,
+	}
+
+	return values, nil
+}
+
+func isPID(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func procStatusUIDs(path string) ([]uint32, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, "Uid:") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return nil, nil
+		}
+		seen := map[uint32]bool{}
+		uids := []uint32{}
+		for _, field := range fields[1:] {
+			uid, err := strconv.ParseUint(field, 10, 32)
+			if err != nil {
+				continue
+			}
+			uid32 := uint32(uid)
+			if !seen[uid32] {
+				seen[uid32] = true
+				uids = append(uids, uid32)
+			}
+		}
+		return uids, nil
+	}
+
+	return nil, nil
+}
+
+func procStatmRSS(path string) (int64, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 2 {
+		return 0, nil
+	}
+	pages, err := strconv.ParseInt(fields[1], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return pages * processRSSPage, nil
 }
 
 // cpuSample caches the previous cpu.stat reading per user so we can turn

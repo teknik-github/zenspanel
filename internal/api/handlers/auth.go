@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -8,6 +9,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"net/http"
 	"strconv"
@@ -49,6 +52,15 @@ func NewAuthHandler(users *store.UserStore, secret, expiry, totpKeyHex string) *
 		key = h[:32]
 	}
 	return &AuthHandler{users: users, secret: secret, expiry: expiry, totpKey: key}
+}
+
+func qrImageDataURL(img image.Image) (string, error) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return "", err
+	}
+
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }
 
 // tempTokenStore holds short-lived tokens issued after password auth when
@@ -283,6 +295,17 @@ func (h *AuthHandler) TOTPSetup(c *gin.Context) {
 		return
 	}
 
+	qrImage, err := key.Image(220, 220)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "generate qr: " + err.Error()})
+		return
+	}
+	qrURL, err := qrImageDataURL(qrImage)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "encode qr: " + err.Error()})
+		return
+	}
+
 	// Generate 8 single-use recovery codes (V29).
 	recoveryCodes := make([]string, 8)
 	recoveryHashes := make([]string, 8)
@@ -309,7 +332,8 @@ func (h *AuthHandler) TOTPSetup(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"secret":         key.Secret(),
-		"qr_url":         key.URL(),
+		"qr_url":         qrURL,
+		"otpauth_url":    key.URL(),
 		"recovery_codes": recoveryCodes,
 	})
 }

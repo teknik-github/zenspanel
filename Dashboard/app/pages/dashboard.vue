@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 
+definePageMeta({ alias: '/admin/dashboard' })
+
 const auth = useAuth()
 const isAdmin = computed(() => auth.user.value?.role === 'admin')
 const userId = computed(() => auth.user.value?.id)
@@ -8,11 +10,6 @@ const userId = computed(() => auth.user.value?.id)
 // ── Admin data ──
 const { data: stats, refresh: rfStats } = await useFetch('/api/v1/system/stats', { lazy: true })
 const { data: metrics, refresh: rfMetrics } = await useFetch('/api/v1/users/metrics', { lazy: true })
-
-// Poll every 5 seconds
-useIntervalFn(() => {
-  if (isAdmin.value) { rfStats(); rfMetrics() } else { rfUsage() }
-}, 5000)
 
 const system = computed(() => stats.value as any)
 const users = computed(() => {
@@ -22,11 +19,35 @@ const users = computed(() => {
 })
 
 // ── User data ──
-const { data: usageData, refresh: rfUsage } = await useFetch(`/api/v1/users/${userId.value}/usage`, { lazy: true, immediate: false })
+const usageUrl = computed(() => `/api/v1/users/${userId.value || 0}/usage`)
+const { data: usageData, refresh: rfUsage } = await useFetch(usageUrl, { lazy: true, immediate: false, watch: false })
 const usage = computed(() => {
   const raw = usageData.value as any
   return raw?.usage || null
 })
+
+function refreshUsage() {
+  if (userId.value) {
+    rfUsage()
+  }
+}
+
+// Poll every 5 seconds
+useIntervalFn(() => {
+  if (isAdmin.value) {
+    rfStats()
+    rfMetrics()
+    return
+  }
+
+  refreshUsage()
+}, 5000)
+
+watch(userId, () => {
+  if (!isAdmin.value) {
+    refreshUsage()
+  }
+}, { immediate: true })
 
 // ── Helpers ──
 function fmtBytes(b: number) {

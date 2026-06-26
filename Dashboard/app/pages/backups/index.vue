@@ -3,6 +3,8 @@ import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
 
+definePageMeta({ alias: '/admin/backups' })
+
 type NullableString = string | {
   String?: string
   Valid?: boolean
@@ -156,14 +158,26 @@ function getErrorMessage(error: unknown) {
   return apiError.data?.error || 'Request failed.'
 }
 
+function sanitizeDownloadFilename(filename: string) {
+  return filename
+    .replace(/[\0\r\n/\\]/g, '_')
+    .trim()
+}
+
 function getDownloadFilename(contentDisposition: string | null, backup: Backup) {
   const encodedFilename = contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
   if (encodedFilename) {
-    return decodeURIComponent(encodedFilename)
+    try {
+      return sanitizeDownloadFilename(decodeURIComponent(encodedFilename)) || `backup-${backup.id}-${backup.type}.tar.gz`
+    } catch {
+      return `backup-${backup.id}-${backup.type}.tar.gz`
+    }
   }
 
   const filename = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1]
-  return filename || `backup-${backup.id}-${backup.type}.tar.gz`
+  return filename
+    ? sanitizeDownloadFilename(filename) || `backup-${backup.id}-${backup.type}.tar.gz`
+    : `backup-${backup.id}-${backup.type}.tar.gz`
 }
 
 async function downloadBackup(backup: Backup) {
@@ -290,7 +304,6 @@ async function handleDelete() {
 
 const columns: TableColumn<Backup>[] = [
   { accessorKey: 'id', header: 'ID' },
-  { accessorKey: 'user_id', header: 'User ID' },
   {
     accessorKey: 'type',
     header: 'Type',
