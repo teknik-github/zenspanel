@@ -20,10 +20,27 @@ const databases = computed(() => {
   return Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw) ? raw : [])
 })
 
+async function openPhpMyAdmin(db: any) {
+  try {
+    const res: any = await $fetch(`/api/v1/databases/${db.id}/phpmyadmin/launch`)
+    if (res?.url) window.open(res.url, '_blank')
+  } catch (e: any) {
+    toast.add({ title: 'phpMyAdmin error', description: e.data?.error || 'Failed to launch', color: 'error' })
+  }
+}
+
+async function openPhpMyAdminFirst() {
+  const first = databases.value?.[0]
+  if (!first) { toast.add({ title: 'No databases', description: 'Create a database first.', color: 'warning' }); return }
+  await openPhpMyAdmin(first)
+}
+
 function getRowItems(row: Row<any>) {
   const d = row.original
   return [
     { type: 'label', label: `DB: ${d.db_name}` },
+    { label: 'Open phpMyAdmin', icon: 'i-lucide-database-zap', onSelect: () => openPhpMyAdmin(d) },
+    { type: 'separator' },
     { label: 'Delete', icon: 'i-lucide-trash', color: 'error', onSelect: () => showDelete(d) }
   ]
 }
@@ -75,7 +92,10 @@ const pagination = ref({ pageIndex: 0, pageSize: 20 })
   <template #header>
     <UDashboardNavbar title="Databases">
       <template #leading><UDashboardSidebarCollapse /></template>
-      <template #right><UButton label="New Database" icon="i-lucide-plus" @click="createOpen=true" /></template>
+      <template #right>
+        <UButton label="phpMyAdmin" icon="i-lucide-database-zap" color="neutral" variant="subtle" class="mr-2" @click="openPhpMyAdminFirst" />
+        <UButton label="New Database" icon="i-lucide-plus" @click="createOpen=true" />
+      </template>
     </UDashboardNavbar>
   </template>
   <template #body>

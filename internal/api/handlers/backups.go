@@ -2,14 +2,11 @@ package handlers
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -244,66 +241,31 @@ func (h *BackupHandler) Delete(c *gin.Context) {
 func (h *BackupHandler) runBackup(id, userID uint64, username, kind string) {
 	_ = h.backups.UpdateStatus(id, "running", "", 0, "")
 
-	dir := filepath.Join(h.backupBase, username)
-	if err := os.MkdirAll(dir, 0750); err != nil {
-		_ = h.backups.UpdateStatus(id, "failed", "", 0, "mkdir: "+err.Error())
-		return
-	}
-	stamp := time.Now().Format("20060102-150405")
-	archivePath := filepath.Join(dir, fmt.Sprintf("%s-%s.tar.gz", stamp, kind))
-
-	tmpDir, err := os.MkdirTemp("", "zp-backup-*")
-	if err != nil {
-		_ = h.backups.UpdateStatus(id, "failed", "", 0, "mktemp: "+err.Error())
-		return
-	}
-	defer os.RemoveAll(tmpDir)
-
-	tarArgs := []string{"-czf", archivePath}
-
+	var dbNames []string
 	if kind == "db" || kind == "full" {
 		dbs, err := h.databases.ListByUserID(userID)
 		if err != nil {
 			_ = h.backups.UpdateStatus(id, "failed", "", 0, "list dbs: "+err.Error())
 			return
 		}
-		dumpPath := filepath.Join(tmpDir, "databases.sql")
-		f, err := os.Create(dumpPath)
-		if err != nil {
-			_ = h.backups.UpdateStatus(id, "failed", "", 0, "create dump: "+err.Error())
-			return
-		}
 		for _, db := range dbs {
-			cmd := exec.Command("mysqldump", "--single-transaction", db.DBName)
-			cmd.Stdout = f
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				f.Close()
-				_ = h.backups.UpdateStatus(id, "failed", "", 0, "mysqldump "+db.DBName+": "+err.Error())
-				return
-			}
+			dbNames = append(dbNames, db.DBName)
 		}
-		f.Close()
-		tarArgs = append(tarArgs, "-C", tmpDir, "databases.sql")
 	}
 
-	if kind == "files" || kind == "full" {
-		tarArgs = append(tarArgs, "-C", h.homeBase, username)
+	var result struct {
+		ArchivePath string `json:"archive_path"`
+		Size        int64  `json:"size"`
 	}
-
-	cmd := exec.Command("tar", tarArgs...)
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		_ = h.backups.UpdateStatus(id, "failed", "", 0, "tar: "+err.Error())
+	if err := agent.NewClient(h.agentSock).Call("backup.run", map[string]interface{}{
+		"username": username,
+		"kind":     kind,
+		"db_names": dbNames,
+	}, &result); err != nil {
+		_ = h.backups.UpdateStatus(id, "failed", "", 0, err.Error())
 		return
 	}
-
-	info, err := os.Stat(archivePath)
-	if err != nil {
-		_ = h.backups.UpdateStatus(id, "failed", "", 0, "stat: "+err.Error())
-		return
-	}
-	_ = h.backups.UpdateStatus(id, "done", archivePath, info.Size(), "")
+	_ = h.backups.UpdateStatus(id, "done", result.ArchivePath, result.Size, "")
 
 	// Upload to all enabled remote targets (best-effort — local backup
 	// is already marked done; remote failures are logged only).
@@ -312,7 +274,7 @@ func (h *BackupHandler) runBackup(id, userID uint64, username, kind string) {
 		ac := agent.NewClient(h.agentSock)
 		for _, t := range targets {
 			if err := ac.Call("backup.upload_s3", map[string]interface{}{
-				"file_path":      archivePath,
+				"file_path":      result.ArchivePath,
 				"target_id":      t.ID,
 				"name":           t.Name,
 				"type":           t.Type,

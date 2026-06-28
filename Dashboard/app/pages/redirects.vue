@@ -4,7 +4,7 @@ const UButton = resolveComponent('UButton'); const UBadge = resolveComponent('UB
 const toast = useToast()
 
 // We need the user's domains to manage redirects
-const { data: domains } = await useFetch('/api/v1/domains', { lazy: true })
+const { data: domains } = await useFetch('/api/v1/domains')
 const domainList = computed(() => { const r = domains.value as any; return Array.isArray(r?.data) ? r.data : [] })
 
 const selectedDomain = ref<any>(null)

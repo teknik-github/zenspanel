@@ -93,6 +93,17 @@ func (h *DatabaseHandler) Create(c *gin.Context) {
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
 			return
 		}
+		if pkg.DiskQuota > 0 {
+			var quotaRes struct {
+				UsedBytes int64 `json:"used_bytes"`
+			}
+			if err := agent.NewClient(h.agentSock).Call("quota.read", map[string]interface{}{
+				"username": user.Username,
+			}, &quotaRes); err == nil && quotaRes.UsedBytes >= pkg.DiskQuota {
+				c.JSON(http.StatusForbidden, gin.H{"error": "disk quota exceeded"})
+				return
+			}
+		}
 	}
 
 	db := &store.Database{

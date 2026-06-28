@@ -65,8 +65,12 @@ func RestoreFiles(username, homeBase, backupBase, archivePath string) error {
 	if err := safe.Username(username); err != nil {
 		return err
 	}
-	if err := pathInside(backupBase, archivePath); err != nil {
-		return err
+	// Accept archives from the legacy backupBase location or from the
+	// per-user backups dir under homeBase (introduced when runBackup was
+	// moved to the agent so archives land in user storage).
+	userBackupDir := filepath.Join(homeBase, username, "backups")
+	if pathInside(backupBase, archivePath) != nil && pathInside(userBackupDir, archivePath) != nil {
+		return fmt.Errorf("archive path %q is not within a permitted backup location", archivePath)
 	}
 	if _, err := os.Stat(archivePath); err != nil {
 		return fmt.Errorf("archive: %w", err)

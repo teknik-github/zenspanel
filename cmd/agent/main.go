@@ -832,6 +832,26 @@ func main() {
 		return map[string]interface{}{"archive_path": archivePath, "size": size}, nil
 	})
 
+	srv.Register("backup.run", func(params json.RawMessage) (interface{}, error) {
+		var p struct {
+			Username string   `json:"username"`
+			Kind     string   `json:"kind"`
+			DBNames  []string `json:"db_names"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		dsn := cfg.Agent.MySQLAdminDSN
+		if dsn == "" {
+			dsn = cfg.Database.DSN
+		}
+		archivePath, size, err := agentbackup.Run(p.Username, cfg.Paths.HomeBase, p.Kind, p.DBNames, dsn)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"archive_path": archivePath, "size": size}, nil
+	})
+
 	// filemanager
 	srv.Register("filemanager.list", func(params json.RawMessage) (interface{}, error) {
 		var p struct {

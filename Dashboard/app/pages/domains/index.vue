@@ -13,6 +13,11 @@ const toast = useToast()
 const table = useTemplateRef('table')
 
 const { data, status, refresh } = await useFetch('/api/v1/domains', { lazy: true, query: { limit: 100 } })
+const { data: phpVersionsData } = await useFetch('/api/v1/php-versions/enabled')
+const phpVersions = computed(() => {
+  const raw = phpVersionsData.value as any
+  return Array.isArray(raw?.data) ? raw.data.map((v: any) => v.version) : ['8.3']
+})
 
 const domains = computed(() => {
   const raw = data.value as any
@@ -137,7 +142,7 @@ const pagination = ref({ pageIndex: 0, pageSize: 20 })
             <UInput v-model="editState.domain" :disabled="editMode==='edit'||editLoading" placeholder="example.com" />
           </UFormField>
           <UFormField label="PHP Version">
-            <USelect v-model="editState.php_version" :items="['8.3','8.2','8.1','7.4']" :disabled="editLoading" />
+            <USelect v-model="editState.php_version" :items="phpVersions" :disabled="editLoading" />
           </UFormField>
           <div class="flex justify-end gap-2 pt-2">
             <UButton label="Cancel" color="neutral" variant="subtle" @click="editOpen=false" :disabled="editLoading" />
