@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Split `GET /packages` and `GET /packages/:id` response by caller role: admin gets full internal limits (`cpu_quota`, `max_procs`, `io_read_bps`, `io_write_bps`, raw byte values); regular users get customer-visible quota fields only (`disk_quota_mb`, `memory_limit_mb`, `max_domains`, `max_databases`, `max_cron_jobs`, `max_ftp_accounts`, feature flags).
 
 ### Added
+- **FileBrowser storage usage hidden for panel users**: `config set --branding.disableUsedPercentage=true` is now applied for non-admin instances; admin instances keep the storage widget visible.
+- **FileBrowser config always synced**: `CreateUser` now runs `config set` and `users update` on every call (not just on new DBs) so existing users' settings are updated without needing to delete and recreate the DB. Service is restarted (`systemctl restart`) instead of started so config changes take effect immediately.
 - **Admin server terminal**: `AdminGetToken` now mints tokens with `isAdmin=true`; the agent spawns `/bin/bash --login` as root (no `su` wrapper needed since agent is root) — full unrestricted server access like cPanel WHM Terminal. Regular user tokens continue to use sandboxed `/bin/rbash`.
 - **Per-role FileBrowser permissions**: `filebrowser.user_create` RPC now accepts `is_admin bool`. Admin instances run as `root` with browse root `/` (full VM filesystem) and `perm.admin=true` (Settings + Storage Usage visible). Regular user instances run as the panel user with `perm.admin=false` — Settings page and Storage Usage widget are hidden.
 

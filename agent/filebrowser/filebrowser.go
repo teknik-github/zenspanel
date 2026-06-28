@@ -60,11 +60,14 @@ var mu sync.Mutex
 // service starts. CLI and service both hold an exclusive write lock on
 // the DB; initialising beforehand avoids the deadlock documented in the
 // previous single-instance design.
-// CreateUser provisions a dedicated FileBrowser instance for a panel user.
-// isAdmin=true: runs as root, browse root="/", full FileBrowser admin perms
-// (settings + storage visible) — mirrors cPanel WHM File Manager.
-// isAdmin=false: runs as the panel user, scoped to their home dir, with
-// perm.admin stripped (no settings page, no storage usage widget).
+// CreateUser provisions (or re-syncs) a dedicated FileBrowser instance for a
+// panel user. Safe to call on existing users — config set and users update run
+// every time so settings are always kept in sync with the current policy.
+//
+// isAdmin=true: runs as root, browse root="/", perm.admin=true (Settings page
+// and Storage Usage widget visible) — mirrors cPanel WHM File Manager.
+// isAdmin=false: runs as the panel user, scoped to their home dir,
+// perm.admin=false (Settings and Storage Usage hidden).
 func CreateUser(username, homeBase string, isAdmin bool) error {
 	if err := safe.Username(username); err != nil {
 		return err
@@ -87,8 +90,6 @@ func CreateUser(username, homeBase string, isAdmin bool) error {
 
 	var homeDir, dbPath string
 	if isAdmin {
-		// Admin DB lives in /root — never inside a panel user home that
-		// could be deleted, and accessible only by root.
 		homeDir = "/"
 		dbPath = "/root/.zenspanel-fb-" + username + ".db"
 	} else {
@@ -96,14 +97,78 @@ func CreateUser(username, homeBase string, isAdmin bool) error {
 		dbPath = filepath.Join(homeDir, ".zenspanel-fb.db")
 	}
 
-	// Idempotent: only initialise the DB when it doesn't already exist.
+	// Step 1: initialise a brand-new DB (config init + users add).
+	// Skipped when DB already exists so we don't wipe existing sessions.
+	dbIsNew := false
 	if _, statErr := os.Stat(dbPath); os.IsNotExist(statErr) {
-		if err := initDB(dbPath, homeDir, port, username, isAdmin); err != nil {
-			return err
+		dbIsNew = true
+		if out, err := exec.Command(fbBin, "--database="+dbPath, "config", "init").CombinedOutput(); err != nil {
+			return fmt.Errorf("filebrowser config init: %w: %s", err, out)
+		}
+	}
+
+	// Step 2: always sync config — idempotent, updates existing DBs.
+	// --branding.disableUsedPercentage hides the "X of Y used" storage
+	// widget for panel users; omitted for admin so they see disk usage.
+	configArgs := []string{
+		fbBin, "--database=" + dbPath, "config", "set",
+		"--address", "127.0.0.1",
+		"--port", strconv.Itoa(port),
+		"--root", homeDir,
+		"--baseurl", "/filebrowser",
+		"--auth.method=proxy",
+		"--auth.header=X-Auth-User",
+	}
+	if !isAdmin {
+		configArgs = append(configArgs, "--branding.disableUsedPercentage=true")
+	}
+	if out, err := exec.Command(configArgs[0], configArgs[1:]...).CombinedOutput(); err != nil {
+		return fmt.Errorf("filebrowser config set: %w: %s", err, out)
+	}
+
+	// Step 3: ensure the user record has up-to-date permissions.
+	// New DB → users add; existing DB → users update (fallback to add).
+	permAdmin := "false"
+	if isAdmin {
+		permAdmin = "true"
+	}
+	userPerms := []string{
+		"--perm.admin=" + permAdmin,
+		"--perm.create=true",
+		"--perm.rename=true",
+		"--perm.modify=true",
+		"--perm.delete=true",
+		"--perm.share=false",
+		"--perm.download=true",
+		"--scope", "/",
+	}
+	if dbIsNew {
+		pw := make([]byte, 16)
+		if _, err := rand.Read(pw); err != nil {
+			return fmt.Errorf("rand: %w", err)
+		}
+		addArgs := append([]string{fbBin, "--database=" + dbPath, "users", "add",
+			username, hex.EncodeToString(pw)}, userPerms...)
+		if out, err := exec.Command(addArgs[0], addArgs[1:]...).CombinedOutput(); err != nil {
+			return fmt.Errorf("filebrowser users add: %w: %s", err, out)
 		}
 		if !isAdmin {
 			if err := os.Chown(dbPath, uid, gid); err != nil {
 				return fmt.Errorf("chown db: %w", err)
+			}
+		}
+	} else {
+		// users update keeps the existing password intact.
+		updateArgs := append([]string{fbBin, "--database=" + dbPath, "users", "update", username}, userPerms...)
+		if out, err := exec.Command(updateArgs[0], updateArgs[1:]...).CombinedOutput(); err != nil {
+			// User record may be missing (e.g. DB existed but was corrupt).
+			// Fall back to add with a fresh password.
+			pw := make([]byte, 16)
+			rand.Read(pw) //nolint:errcheck
+			addArgs := append([]string{fbBin, "--database=" + dbPath, "users", "add",
+				username, hex.EncodeToString(pw)}, userPerms...)
+			if out2, err2 := exec.Command(addArgs[0], addArgs[1:]...).CombinedOutput(); err2 != nil {
+				return fmt.Errorf("filebrowser users update: %w: %s (add: %v: %s)", err, out, err2, out2)
 			}
 		}
 	}
@@ -135,7 +200,8 @@ func CreateUser(username, homeBase string, isAdmin bool) error {
 	for _, args := range [][]string{
 		{"systemctl", "daemon-reload"},
 		{"systemctl", "enable", "--quiet", svc},
-		{"systemctl", "start", svc},
+		// restart (not start) so config changes take effect on existing instances.
+		{"systemctl", "restart", svc},
 	} {
 		if out, cmdErr := exec.Command(args[0], args[1:]...).CombinedOutput(); cmdErr != nil {
 			return fmt.Errorf("%v: %w: %s", args, cmdErr, out)
@@ -149,15 +215,12 @@ func CreateUser(username, homeBase string, isAdmin bool) error {
 }
 
 // DeleteUser stops and removes the per-user FileBrowser service and
-// removes its entry from the Nginx port map. The DB file lives inside
-// the user's home directory (~/.zenspanel-fb.db) and is removed as
-// part of the home directory deletion — no explicit DB cleanup here.
+// removes its entry from the Nginx port map.
 func DeleteUser(username string) error {
 	if err := safe.Username(username); err != nil {
 		return err
 	}
 	svc := "zenspanel-fb-" + username + ".service"
-	// Best-effort: non-fatal if the unit never existed.
 	exec.Command("systemctl", "stop", svc).Run()    //nolint:errcheck
 	exec.Command("systemctl", "disable", svc).Run() //nolint:errcheck
 	os.Remove(unitPath(username))
@@ -167,52 +230,6 @@ func DeleteUser(username string) error {
 		return fmt.Errorf("update port map: %w", err)
 	}
 	return reloadNginx()
-}
-
-// initDB runs the FileBrowser CLI to create a fresh per-user DB with
-// proxy auth, the correct home root, and the user's listen port baked in.
-func initDB(dbPath, homeDir string, port int, username string, isAdmin bool) error {
-	pw := make([]byte, 16)
-	if _, err := rand.Read(pw); err != nil {
-		return fmt.Errorf("rand: %w", err)
-	}
-	password := hex.EncodeToString(pw)
-
-	// Admin gets perm.admin=true so Settings and Storage Usage are visible.
-	// Regular users get perm.admin=false — those UI sections are hidden.
-	permAdmin := "false"
-	if isAdmin {
-		permAdmin = "true"
-	}
-
-	cmds := [][]string{
-		{fbBin, "--database=" + dbPath, "config", "init"},
-		{fbBin, "--database=" + dbPath, "config", "set",
-			"--address", "127.0.0.1",
-			"--port", strconv.Itoa(port),
-			"--root", homeDir,
-			"--baseurl", "/filebrowser",
-			"--auth.method=proxy",
-			"--auth.header=X-Auth-User",
-		},
-		{fbBin, "--database=" + dbPath, "users", "add",
-			username, password,
-			"--perm.admin=" + permAdmin,
-			"--perm.create=true",
-			"--perm.rename=true",
-			"--perm.modify=true",
-			"--perm.delete=true",
-			"--perm.share=false",
-			"--perm.download=true",
-			"--scope", "/",
-		},
-	}
-	for _, args := range cmds {
-		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
-			return fmt.Errorf("filebrowser %s: %w: %s", args[2], err, out)
-		}
-	}
-	return nil
 }
 
 // ── Nginx port map ────────────────────────────────────────────────────
