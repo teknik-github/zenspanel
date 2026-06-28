@@ -164,7 +164,8 @@ install_dependencies() {
         ca-certificates \
         gnupg lsb-release \
         ufw quota acl openssl jq bc \
-        iproute2 inotify-tools rclone
+        iproute2 inotify-tools rclone \
+        bubblewrap
 
     log_info "Installing Nginx..."
     apt-get install -y -qq nginx

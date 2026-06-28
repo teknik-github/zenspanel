@@ -184,43 +184,31 @@ func SetupBin(username, homeBase, phpVersion string) error {
 	return nil
 }
 
-// lockShellProfile writes root-owned, read-only .bash_profile and .bashrc.
-// PATH is locked to ~/bin so only explicitly symlinked commands are available.
-// A cd() wrapper prevents navigating outside $HOME — without this, a plain
-// bash session would allow arbitrary directory traversal.
+// lockShellProfile writes root-owned, read-only .bash_profile and .bashrc
+// that restrict PATH to ~/bin. The terminal session runs inside a bubblewrap
+// chroot jail, so filesystem isolation is enforced at the kernel level —
+// these dotfiles handle the command-palette restriction (only commands
+// symlinked into ~/bin are accessible by name).
 func lockShellProfile(homeDir string) error {
-	cdFunc := `
-cd() {
-    local target="${1:-$HOME}"
-    case "$target" in
-        -*) printf 'cd: invalid option\n' >&2; return 1 ;;
-    esac
-    builtin cd -- "$target" 2>/dev/null || { printf 'cd: %s: No such file or directory\n' "$target" >&2; return 1; }
-    case "$PWD" in
-        "$HOME"|"$HOME/"*) return 0 ;;
-        *)
-            builtin cd "$OLDPWD"
-            printf 'cd: restricted to home directory\n' >&2
-            return 1 ;;
-    esac
-}
-`
-	profileContent := "export PATH=$HOME/bin\nexport HOME=" + homeDir + "\n" + cdFunc + "export PS1='\\u@panel:\\w\\$ '\n"
-	bashrcContent := "export PATH=$HOME/bin\n" + cdFunc + "export PS1='\\u@panel:\\w\\$ '\n"
+	profileContent := "export PATH=$HOME/bin\nexport HOME=" + homeDir + "\nexport PS1='\\u@panel:\\w\\$ '\n"
+	bashrcContent := "export PATH=$HOME/bin\nexport PS1='\\u@panel:\\w\\$ '\n"
 
-	files := map[string]string{
-		filepath.Join(homeDir, ".bash_profile"): profileContent,
-		filepath.Join(homeDir, ".bashrc"):        bashrcContent,
+	files := []struct {
+		path    string
+		content string
+	}{
+		{filepath.Join(homeDir, ".bash_profile"), profileContent},
+		{filepath.Join(homeDir, ".bashrc"), bashrcContent},
 	}
-	for path, content := range files {
-		if err := os.WriteFile(path, []byte(content), 0444); err != nil {
-			return fmt.Errorf("write %s: %w", path, err)
+	for _, f := range files {
+		if err := os.WriteFile(f.path, []byte(f.content), 0444); err != nil {
+			return fmt.Errorf("write %s: %w", f.path, err)
 		}
-		if err := os.Chown(path, 0, 0); err != nil {
-			return fmt.Errorf("chown %s: %w", path, err)
+		if err := os.Chown(f.path, 0, 0); err != nil {
+			return fmt.Errorf("chown %s: %w", f.path, err)
 		}
-		if err := os.Chmod(path, 0444); err != nil {
-			return fmt.Errorf("chmod %s: %w", path, err)
+		if err := os.Chmod(f.path, 0444); err != nil {
+			return fmt.Errorf("chmod %s: %w", f.path, err)
 		}
 	}
 	return nil
