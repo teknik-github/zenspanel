@@ -271,10 +271,14 @@ func (r *Router) Setup() *gin.Engine {
 		api.PUT("/cron-jobs/:id", r.cronJobs.Update)
 		api.DELETE("/cron-jobs/:id", r.cronJobs.Delete)
 
-		// website installer
+		// website installer — user routes
 		api.GET("/installer/apps", r.installer.ListApps)
 		api.POST("/installer/install", r.installer.Install)
 		api.GET("/installer/status/:job_id", r.installer.Status)
+
+		// website installer — admin management
+		api.GET("/admin/installer/apps", auth.RequireRole("admin"), r.installer.AdminListApps)
+		api.PUT("/admin/installer/apps/:slug/enabled", auth.RequireRole("admin"), r.installer.AdminSetEnabled)
 
 		// antivirus — user scans their own home directory (V40)
 		api.GET("/antivirus/status", r.antivirus.DaemonStatus)

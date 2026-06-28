@@ -45,7 +45,8 @@ const USER_ROUTES = [
   '/two-factor',
   '/redirects',
   '/cron-jobs',
-  '/logs'
+  '/logs',
+  '/installer'
 ]
 
 function matchesPath(path: string, roots: string[]) {

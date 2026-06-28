@@ -41,6 +41,11 @@ const adminLinks = [[{
     icon: 'i-lucide-database',
     to: '/admin/databases',
     onSelect: () => { open.value = false }
+  }, {
+    label: 'Web Installer',
+    icon: 'i-lucide-package-plus',
+    to: '/admin/installers',
+    onSelect: () => { open.value = false }
   }]
 }, {
   label: 'PHP Settings',
@@ -138,6 +143,11 @@ const userLinks = [[{
     label: 'Domains',
     icon: 'i-lucide-globe',
     to: '/domains',
+    onSelect: () => { open.value = false }
+  }, {
+    label: 'Web Installer',
+    icon: 'i-lucide-package-plus',
+    to: '/installer',
     onSelect: () => { open.value = false }
   }, {
     label: 'SSL Manager',
