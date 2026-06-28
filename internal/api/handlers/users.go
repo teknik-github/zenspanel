@@ -213,6 +213,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 	provisionWarnings := []string{}
 	if err := agentClient.Call("filebrowser.user_create", map[string]interface{}{
 		"username": user.Username,
+		"is_admin": user.Role == "admin",
 	}, nil); err != nil {
 		provisionWarnings = append(provisionWarnings, "filebrowser: "+err.Error())
 	}

@@ -29,13 +29,17 @@ func suPath() string {
 	return "su" // fallback to PATH
 }
 
-func SpawnSession(username, homeBase string) (*Session, error) {
+// SpawnSession starts a PTY. isAdmin=true spawns an unrestricted root bash
+// (WHM-style server terminal); isAdmin=false spawns a sandboxed rbash
+// jailed to the panel user's ~/bin.
+func SpawnSession(username, homeBase string, isAdmin bool) (*Session, error) {
+	if isAdmin {
+		return spawnAdminSession()
+	}
 	if err := safe.Username(username); err != nil {
 		return nil, err
 	}
 	homeDir := homeBase + "/" + username
-	// Ensure home dir exists — the zenspanel system user and freshly
-	// created panel users may not have their home dir yet.
 	if _, err := os.Stat(homeDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(homeDir, 0711); err != nil {
 			return nil, fmt.Errorf("mkdir home: %w", err)
@@ -46,14 +50,31 @@ func SpawnSession(username, homeBase string) (*Session, error) {
 		"HOME=" + homeDir,
 		"USER=" + username,
 		"LOGNAME=" + username,
-		// Restricted to ~/bin only — rbash enforces this, and .bash_profile
-		// sets it readonly so the user cannot override it via export.
 		"PATH=" + homeDir + "/bin",
 		"TERM=xterm-256color",
 		"SHELL=/bin/rbash",
 	}
 	cmd.Dir = homeDir
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("pty start: %w", err)
+	}
+	return &Session{PTY: ptmx, Cmd: cmd}, nil
+}
 
+// spawnAdminSession spawns an unrestricted root bash shell. The agent runs
+// as root so no su(1) wrapper is needed — mirrors cPanel WHM Terminal.
+func spawnAdminSession() (*Session, error) {
+	cmd := exec.Command("/bin/bash", "--login")
+	cmd.Env = []string{
+		"HOME=/root",
+		"USER=root",
+		"LOGNAME=root",
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"TERM=xterm-256color",
+		"SHELL=/bin/bash",
+	}
+	cmd.Dir = "/root"
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("pty start: %w", err)
@@ -76,8 +97,8 @@ func (s *Session) Close() error {
 //
 // The socket accepts exactly one connection then unlinks itself —
 // short-lived, per-session, no shared state.
-func Stream(username, homeBase string) (string, error) {
-	sess, err := SpawnSession(username, homeBase)
+func Stream(username, homeBase string, isAdmin bool) (string, error) {
+	sess, err := SpawnSession(username, homeBase, isAdmin)
 	if err != nil {
 		return "", err
 	}

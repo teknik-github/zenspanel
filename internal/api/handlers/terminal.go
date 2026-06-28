@@ -27,6 +27,7 @@ import (
 type tokenEntry struct {
 	username  string
 	expiresAt time.Time
+	isAdmin   bool
 }
 
 var (
@@ -126,6 +127,7 @@ func (h *TerminalHandler) AdminGetToken(c *gin.Context) {
 	tokenStore.Store(token, tokenEntry{
 		username:  targetUsername,
 		expiresAt: time.Now().Add(60 * time.Second),
+		isAdmin:   true,
 	})
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
@@ -185,6 +187,7 @@ func (h *TerminalHandler) Connect(c *gin.Context) {
 	}
 	if err := agent.NewClient(h.agentSock).Call("terminal.stream", map[string]interface{}{
 		"username": entry.username,
+		"is_admin": entry.isAdmin,
 	}, &spawnRes); err != nil {
 		log.Printf("terminal.stream failed for user %s: %v", entry.username, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "spawn pty: " + err.Error()})

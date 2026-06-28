@@ -355,30 +355,30 @@ func main() {
 	srv.Register("terminal.spawn", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
 			Username string `json:"username"`
+			IsAdmin  bool   `json:"is_admin"`
 		}
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		session, err := agentterminal.SpawnSession(p.Username, cfg.Paths.HomeBase)
+		session, err := agentterminal.SpawnSession(p.Username, cfg.Paths.HomeBase, p.IsAdmin)
 		if err != nil {
 			return nil, err
 		}
 		return map[string]interface{}{"pid": session.Cmd.Process.Pid}, nil
 	})
 
-	// terminal.stream — spawn a PTY and expose it on a one-shot Unix
-	// socket. The API process dials the returned path and bridges it to
-	// the browser WebSocket. Spawning happens here (root) because the
-	// API runs as a non-root user and can't fork a shell as the panel
-	// user directly.
+	// terminal.stream — spawn a PTY and expose it on a one-shot Unix socket.
+	// is_admin=true spawns an unrestricted root bash (WHM-style server
+	// terminal); is_admin=false spawns a sandboxed rbash for the panel user.
 	srv.Register("terminal.stream", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
 			Username string `json:"username"`
+			IsAdmin  bool   `json:"is_admin"`
 		}
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		sockPath, err := agentterminal.Stream(p.Username, cfg.Paths.HomeBase)
+		sockPath, err := agentterminal.Stream(p.Username, cfg.Paths.HomeBase, p.IsAdmin)
 		if err != nil {
 			return nil, err
 		}
@@ -752,11 +752,12 @@ func main() {
 	srv.Register("filebrowser.user_create", func(params json.RawMessage) (interface{}, error) {
 		var p struct {
 			Username string `json:"username"`
+			IsAdmin  bool   `json:"is_admin"`
 		}
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
 		}
-		return nil, agentfilebrowser.CreateUser(p.Username, cfg.Paths.HomeBase)
+		return nil, agentfilebrowser.CreateUser(p.Username, cfg.Paths.HomeBase, p.IsAdmin)
 	})
 
 	srv.Register("filebrowser.user_delete", func(params json.RawMessage) (interface{}, error) {
