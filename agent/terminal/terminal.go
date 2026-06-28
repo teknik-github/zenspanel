@@ -30,8 +30,8 @@ func suPath() string {
 }
 
 // SpawnSession starts a PTY. isAdmin=true spawns an unrestricted root bash
-// (WHM-style server terminal); isAdmin=false spawns a sandboxed rbash
-// jailed to the panel user's ~/bin.
+// (WHM-style server terminal); isAdmin=false spawns a bash session scoped
+// to the panel user's home via PATH=~/bin and a cd() wrapper in ~/.bash_profile.
 func SpawnSession(username, homeBase string, isAdmin bool) (*Session, error) {
 	if isAdmin {
 		return spawnAdminSession()
@@ -45,14 +45,14 @@ func SpawnSession(username, homeBase string, isAdmin bool) (*Session, error) {
 			return nil, fmt.Errorf("mkdir home: %w", err)
 		}
 	}
-	cmd := exec.Command(suPath(), "-s", "/bin/rbash", "-", username)
+	cmd := exec.Command(suPath(), "-s", "/bin/bash", "-", username)
 	cmd.Env = []string{
 		"HOME=" + homeDir,
 		"USER=" + username,
 		"LOGNAME=" + username,
 		"PATH=" + homeDir + "/bin",
 		"TERM=xterm-256color",
-		"SHELL=/bin/rbash",
+		"SHELL=/bin/bash",
 	}
 	cmd.Dir = homeDir
 	ptmx, err := pty.Start(cmd)

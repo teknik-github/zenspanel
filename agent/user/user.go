@@ -92,33 +92,21 @@ func Create(username string, uid int, homeBase, phpVersion string) (int, error) 
 	if err := os.Chmod(homeDir, 0711); err != nil {
 		return 0, fmt.Errorf("chmod home: %w", err)
 	}
-	// Lock .bash_profile and .bashrc so the user cannot override PATH
-	// and escape the rbash restriction.
 	if err := lockShellProfile(homeDir); err != nil {
 		return 0, fmt.Errorf("lock shell profile: %w", err)
 	}
-	if phpVersion != "" {
-		if err := SetupBin(username, homeBase, phpVersion); err != nil {
-			return 0, fmt.Errorf("setup bin: %w", err)
-		}
+	if err := SetupBin(username, homeBase, phpVersion); err != nil {
+		return 0, fmt.Errorf("setup bin: %w", err)
 	}
 	return chosen, nil
 }
 
-// SetupBin populates ~/bin with a php symlink and a composer wrapper
-// pinned to the user's chosen PHP version. The terminal shell's PATH
-// starts with ~/bin (set by useradd's default profile + rbash), so
-// `php` and `composer` invocations resolve to the version set here
-// regardless of which PHP is the system default.
-//
-// Idempotent — safe to call on every php_version change. Removes any
-// existing php symlink before recreating; rewrites the composer
-// wrapper unconditionally.
+// SetupBin populates ~/bin with shell tools and optionally a php/composer pair.
+// PATH=~/bin is the only path available in the panel terminal, so every command
+// a user can run must have a symlink here. Idempotent — safe to call on every
+// php_version change.
 func SetupBin(username, homeBase, phpVersion string) error {
 	if err := safe.Username(username); err != nil {
-		return err
-	}
-	if err := safe.PHPVersion(phpVersion); err != nil {
 		return err
 	}
 	binDir := filepath.Join(homeBase, username, "bin")
@@ -136,6 +124,42 @@ func SetupBin(username, homeBase, phpVersion string) error {
 		_ = os.Chown(binDir, uid, gid)
 	}
 
+	// ls — list directory contents
+	lsBin := "/bin/ls"
+	if _, err := os.Stat(lsBin); os.IsNotExist(err) {
+		lsBin = "/usr/bin/ls"
+	}
+	lsLink := filepath.Join(binDir, "ls")
+	_ = os.Remove(lsLink)
+	if err := os.Symlink(lsBin, lsLink); err != nil {
+		return fmt.Errorf("symlink ls: %w", err)
+	}
+	if uid >= 0 {
+		_ = os.Lchown(lsLink, uid, gid)
+	}
+
+	// nano — terminal text editor
+	nanoBin := "/usr/bin/nano"
+	if _, err := os.Stat(nanoBin); os.IsNotExist(err) {
+		nanoBin = "/bin/nano"
+	}
+	nanoLink := filepath.Join(binDir, "nano")
+	_ = os.Remove(nanoLink)
+	if err := os.Symlink(nanoBin, nanoLink); err != nil {
+		return fmt.Errorf("symlink nano: %w", err)
+	}
+	if uid >= 0 {
+		_ = os.Lchown(nanoLink, uid, gid)
+	}
+
+	if phpVersion == "" {
+		return nil
+	}
+
+	if err := safe.PHPVersion(phpVersion); err != nil {
+		return err
+	}
+
 	phpBin := fmt.Sprintf("/usr/bin/php%s", phpVersion)
 	phpLink := filepath.Join(binDir, "php")
 	_ = os.Remove(phpLink)
@@ -151,7 +175,6 @@ func SetupBin(username, homeBase, phpVersion string) error {
 	if err := os.WriteFile(composerPath, []byte(composerWrapper), 0755); err != nil {
 		return fmt.Errorf("write composer wrapper: %w", err)
 	}
-	// WriteFile honors umask — re-chmod to ensure executable bit survives.
 	if err := os.Chmod(composerPath, 0755); err != nil {
 		return fmt.Errorf("chmod composer: %w", err)
 	}
@@ -161,27 +184,41 @@ func SetupBin(username, homeBase, phpVersion string) error {
 	return nil
 }
 
-// lockShellProfile writes root-owned, read-only .bash_profile and .bashrc
-// that export a locked PATH pointing only at ~/bin. Without this, a panel
-// user can edit their own dotfiles and set PATH=/usr/bin to bypass rbash.
+// lockShellProfile writes root-owned, read-only .bash_profile and .bashrc.
+// PATH is locked to ~/bin so only explicitly symlinked commands are available.
+// A cd() wrapper prevents navigating outside $HOME — without this, a plain
+// bash session would allow arbitrary directory traversal.
 func lockShellProfile(homeDir string) error {
-	profileContent := "export PATH=$HOME/bin\nexport HOME=" + homeDir + "\n"
-	bashrcContent := "export PATH=$HOME/bin\n"
+	cdFunc := `
+cd() {
+    local target="${1:-$HOME}"
+    case "$target" in
+        -*) printf 'cd: invalid option\n' >&2; return 1 ;;
+    esac
+    builtin cd -- "$target" 2>/dev/null || { printf 'cd: %s: No such file or directory\n' "$target" >&2; return 1; }
+    case "$PWD" in
+        "$HOME"|"$HOME/"*) return 0 ;;
+        *)
+            builtin cd "$OLDPWD"
+            printf 'cd: restricted to home directory\n' >&2
+            return 1 ;;
+    esac
+}
+`
+	profileContent := "export PATH=$HOME/bin\nexport HOME=" + homeDir + "\n" + cdFunc + "export PS1='\\u@panel:\\w\\$ '\n"
+	bashrcContent := "export PATH=$HOME/bin\n" + cdFunc + "export PS1='\\u@panel:\\w\\$ '\n"
 
 	files := map[string]string{
 		filepath.Join(homeDir, ".bash_profile"): profileContent,
 		filepath.Join(homeDir, ".bashrc"):        bashrcContent,
 	}
 	for path, content := range files {
-		// Write as root (agent runs as root), then lock permissions.
 		if err := os.WriteFile(path, []byte(content), 0444); err != nil {
 			return fmt.Errorf("write %s: %w", path, err)
 		}
-		// Ensure root owns the file regardless of any prior state.
 		if err := os.Chown(path, 0, 0); err != nil {
 			return fmt.Errorf("chown %s: %w", path, err)
 		}
-		// 0444 — world-readable, nobody-writable (not even root without chmod).
 		if err := os.Chmod(path, 0444); err != nil {
 			return fmt.Errorf("chmod %s: %w", path, err)
 		}
