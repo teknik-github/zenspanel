@@ -6,238 +6,267 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
+	"os"
+	"os/exec"
+	osuser "os/user"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/zenspanel/zenspanel/agent/safe"
 )
 
-// fileBrowserURL is where the locally-running FileBrowser service is
-// reachable. We talk to its HTTP API instead of running the CLI because
-// the CLI takes an exclusive lock on the SQLite DB that the live service
-// already holds — every CLI invocation while the service is running
-// times out on the lock.
-const fileBrowserURL = "http://127.0.0.1:8081/filebrowser"
+const (
+	// nginxMapConf is placed in conf.d/ so nginx includes it in the http
+	// context — the only context where map{} directives are valid.
+	nginxMapConf = "/etc/nginx/conf.d/zenspanel-fb-ports.conf"
 
-// adminUser is the FileBrowser user we authenticate as for management
-// calls. Created by install.sh's `users add admin --perm.admin=true`.
-const adminUser = "admin"
+	// portMapJSON is the JSON source of truth for port assignments.
+	// We derive the Nginx map file from it on every change instead of
+	// parsing Nginx syntax.
+	portMapJSON = "/etc/nginx/zenspanel/fb-ports.json"
 
-// FileBrowser proxy auth doesn't make every endpoint trust the
-// X-Auth-User header — only /api/login does. To call /api/users we
-// must first POST /api/login with X-Auth-User to receive a JWT, then
-// pass that JWT in Authorization: Bearer for the actual request.
+	fbBin = "/usr/local/bin/filebrowser"
+)
+
+// unitPath returns the systemd service unit file path for a panel user's
+// dedicated FileBrowser instance.
+func unitPath(username string) string {
+	return "/etc/systemd/system/zenspanel-fb-" + username + ".service"
+}
+
+// userPort derives the FileBrowser TCP listen port from the Linux UID.
+// UIDs are assigned in range 10 000–60 000 by the agent; adding 100
+// gives ports 10 100–60 100. Ports below 32 768 (the Linux ephemeral
+// range floor on most systems) are guaranteed not to collide with
+// ephemeral connections. Panels with more than ~22 000 users should
+// raise net.ipv4.ip_local_port_range to start above 60 100.
+func userPort(uid int) int {
+	return uid + 100
+}
+
+// mu serialises concurrent writes to the Nginx map files.
+var mu sync.Mutex
+
+// CreateUser provisions a dedicated FileBrowser process for a panel user.
 //
-// We cache the JWT for ~1h since FileBrowser's default token TTL is 2h
-// and renewing once an hour avoids per-call latency without risking
-// expiry races. Cache is process-local — agent restart wipes it, which
-// is fine.
-type tokenCache struct {
-	mu        sync.Mutex
-	token     string
-	expiresAt time.Time
-}
-
-var fbToken tokenCache
-
-func getAdminJWT() (string, error) {
-	fbToken.mu.Lock()
-	defer fbToken.mu.Unlock()
-
-	if fbToken.token != "" && time.Now().Before(fbToken.expiresAt) {
-		return fbToken.token, nil
-	}
-
-	// /api/login under proxy auth: the body can be empty; the
-	// X-Auth-User header IS the credential. Response body is the raw
-	// JWT string (not JSON-wrapped).
-	req, err := http.NewRequest("POST", fileBrowserURL+"/api/login", nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("X-Auth-User", adminUser)
-
-	cli := &http.Client{Timeout: 5 * time.Second}
-	resp, err := cli.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("filebrowser login: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("filebrowser login HTTP %d: %s", resp.StatusCode, string(body))
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	tok := string(bytes.TrimSpace(body))
-	if tok == "" {
-		return "", fmt.Errorf("filebrowser login returned empty token")
-	}
-	fbToken.token = tok
-	fbToken.expiresAt = time.Now().Add(1 * time.Hour)
-	return tok, nil
-}
-
-// authReq builds an *http.Request with the cached admin JWT attached.
-// Used by all management calls below.
-func authReq(method, url string, body io.Reader) (*http.Request, error) {
-	tok, err := getAdminJWT()
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("X-Auth", tok)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	return req, nil
-}
-
-type fbUser struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Scope    string `json:"scope"`
-	LockPass bool   `json:"lockPassword"`
-	Perm     fbPerm `json:"perm"`
-}
-
-type fbPerm struct {
-	Admin    bool `json:"admin"`
-	Execute  bool `json:"execute"`
-	Create   bool `json:"create"`
-	Rename   bool `json:"rename"`
-	Modify   bool `json:"modify"`
-	Delete   bool `json:"delete"`
-	Share    bool `json:"share"`
-	Download bool `json:"download"`
-}
-
-type modifyUserReq struct {
-	What string  `json:"what"`
-	Data *fbUser `json:"data"`
-}
-
-// CreateUser provisions a FileBrowser user record scoped to the
-// username's directory under FileBrowser's configured Root. The scope
-// is the username itself (relative), not the absolute path: FileBrowser
-// joins Root + scope internally, and an absolute scope would
-// double-prefix into a path that doesn't exist on disk.
+// Each instance runs as the panel user (User=<username> in the systemd
+// unit), so every file FileBrowser creates is owned by that user from
+// the moment of creation — no chown timer, no root-owned files, no race
+// window where PHP cannot write to uploaded content.
+//
+// The FileBrowser SQLite DB is initialised via the CLI *before* the
+// service starts. CLI and service both hold an exclusive write lock on
+// the DB; initialising beforehand avoids the deadlock documented in the
+// previous single-instance design.
 func CreateUser(username, homeBase string) error {
 	if err := safe.Username(username); err != nil {
 		return err
 	}
-	_ = homeBase // kept in signature for symmetry with the other agent.* calls
 
-	// FileBrowser enforces a 12-char minimum on the password column
-	// even under proxy auth where the password is never used. We
-	// generate a 32-char random hex string so any username length is
-	// safe without leaking a guessable pattern.
+	u, err := osuser.Lookup(username)
+	if err != nil {
+		return fmt.Errorf("lookup %s: %w", username, err)
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return fmt.Errorf("parse uid: %w", err)
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return fmt.Errorf("parse gid: %w", err)
+	}
+
+	port := userPort(uid)
+	homeDir := filepath.Join(homeBase, username)
+	dbPath := filepath.Join(homeDir, ".zenspanel-fb.db")
+
+	// Idempotent: only initialise the DB when it doesn't already exist.
+	// CreateUser may be called again on reinstall without user deletion.
+	if _, statErr := os.Stat(dbPath); os.IsNotExist(statErr) {
+		if err := initDB(dbPath, homeDir, port, username); err != nil {
+			return err
+		}
+		// The service runs as the panel user — DB must be user-owned.
+		if err := os.Chown(dbPath, uid, gid); err != nil {
+			return fmt.Errorf("chown db: %w", err)
+		}
+	}
+
+	// Write the per-user systemd unit. Because User=<username>, every
+	// file FileBrowser creates has the correct owner immediately.
+	unit := "# Auto-generated by ZensPanel agent — do not edit.\n" +
+		"[Unit]\n" +
+		"Description=ZensPanel FileBrowser — " + username + "\n" +
+		"After=network.target\n\n" +
+		"[Service]\n" +
+		"Type=simple\n" +
+		"User=" + username + "\n" +
+		"ExecStart=" + fbBin + " --database " + dbPath + "\n" +
+		"Restart=on-failure\n" +
+		"RestartSec=5\n\n" +
+		"[Install]\n" +
+		"WantedBy=multi-user.target\n"
+
+	if err := os.WriteFile(unitPath(username), []byte(unit), 0644); err != nil {
+		return fmt.Errorf("write unit: %w", err)
+	}
+
+	svc := "zenspanel-fb-" + username + ".service"
+	for _, args := range [][]string{
+		{"systemctl", "daemon-reload"},
+		{"systemctl", "enable", "--quiet", svc},
+		{"systemctl", "start", svc},
+	} {
+		if out, cmdErr := exec.Command(args[0], args[1:]...).CombinedOutput(); cmdErr != nil {
+			return fmt.Errorf("%v: %w: %s", args, cmdErr, out)
+		}
+	}
+
+	if err := addToPortMap(username, port); err != nil {
+		return fmt.Errorf("update port map: %w", err)
+	}
+	return reloadNginx()
+}
+
+// DeleteUser stops and removes the per-user FileBrowser service and
+// removes its entry from the Nginx port map. The DB file lives inside
+// the user's home directory (~/.zenspanel-fb.db) and is removed as
+// part of the home directory deletion — no explicit DB cleanup here.
+func DeleteUser(username string) error {
+	if err := safe.Username(username); err != nil {
+		return err
+	}
+	svc := "zenspanel-fb-" + username + ".service"
+	// Best-effort: non-fatal if the unit never existed.
+	exec.Command("systemctl", "stop", svc).Run()    //nolint:errcheck
+	exec.Command("systemctl", "disable", svc).Run() //nolint:errcheck
+	os.Remove(unitPath(username))
+	exec.Command("systemctl", "daemon-reload").Run() //nolint:errcheck
+
+	if err := removeFromPortMap(username); err != nil {
+		return fmt.Errorf("update port map: %w", err)
+	}
+	return reloadNginx()
+}
+
+// initDB runs the FileBrowser CLI to create a fresh per-user DB with
+// proxy auth, the correct home root, and the user's listen port baked in.
+func initDB(dbPath, homeDir string, port int, username string) error {
+	// FileBrowser requires a password in the user record even under proxy
+	// auth (where the password is never checked). Generate a random one.
 	pw := make([]byte, 16)
 	if _, err := rand.Read(pw); err != nil {
 		return fmt.Errorf("rand: %w", err)
 	}
 	password := hex.EncodeToString(pw)
 
-	body, _ := json.Marshal(modifyUserReq{
-		What: "user",
-		Data: &fbUser{
-			Username: username,
-			Password: password, // unused under proxy auth, just satisfies the column
-			Scope:    username, // relative to Root
-			LockPass: false,
-			Perm: fbPerm{
-				Create: true, Rename: true, Modify: true,
-				Delete: true, Share: true, Download: true,
-			},
+	cmds := [][]string{
+		{fbBin, "--database=" + dbPath, "config", "init"},
+		{fbBin, "--database=" + dbPath, "config", "set",
+			"--address", "127.0.0.1",
+			"--port", strconv.Itoa(port),
+			"--root", homeDir,
+			"--baseurl", "/filebrowser",
+			"--auth.method=proxy",
+			"--auth.header=X-Auth-User",
 		},
-	})
-
-	req, err := authReq("POST", fileBrowserURL+"/api/users", bytes.NewReader(body))
-	if err != nil {
-		return err
+		// Scope "/" is relative to --root (already jailed to homeDir).
+		// Admin=true gives the user full create/rename/modify/delete access.
+		{fbBin, "--database=" + dbPath, "users", "add",
+			username, password,
+			"--perm.admin=true",
+			"--scope", "/",
+		},
 	}
-
-	cli := &http.Client{Timeout: 5 * time.Second}
-	resp, err := cli.Do(req)
-	if err != nil {
-		return fmt.Errorf("filebrowser POST /api/users: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
-		return nil
-	}
-	if resp.StatusCode == http.StatusConflict {
-		return nil // user already exists — exactly what we want
-	}
-	respBody, _ := io.ReadAll(resp.Body)
-	return fmt.Errorf("filebrowser create user: HTTP %d: %s", resp.StatusCode, string(respBody))
-}
-
-// DeleteUser removes the FileBrowser user record. Looks the user up
-// first because the API expects an integer ID, not a username.
-func DeleteUser(username string) error {
-	if err := safe.Username(username); err != nil {
-		return err
-	}
-	id, err := userID(username)
-	if err != nil {
-		return err
-	}
-	if id == 0 {
-		return nil // nothing to delete
-	}
-	req, err := authReq("DELETE", fileBrowserURL+"/api/users/"+strconv.Itoa(id), nil)
-	if err != nil {
-		return err
-	}
-	cli := &http.Client{Timeout: 5 * time.Second}
-	resp, err := cli.Do(req)
-	if err != nil {
-		return fmt.Errorf("filebrowser DELETE /api/users/%d: %w", id, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent {
-		return nil
-	}
-	respBody, _ := io.ReadAll(resp.Body)
-	return fmt.Errorf("filebrowser delete user: HTTP %d: %s", resp.StatusCode, string(respBody))
-}
-
-// userID asks FileBrowser for the numeric ID matching a username so we
-// can hit the /api/users/<id> DELETE endpoint.
-func userID(username string) (int, error) {
-	req, err := authReq("GET", fileBrowserURL+"/api/users", nil)
-	if err != nil {
-		return 0, err
-	}
-	cli := &http.Client{Timeout: 5 * time.Second}
-	resp, err := cli.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("list users: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("list users: HTTP %d", resp.StatusCode)
-	}
-	var users []struct {
-		ID       int    `json:"id"`
-		Username string `json:"username"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
-		return 0, err
-	}
-	for _, u := range users {
-		if u.Username == username {
-			return u.ID, nil
+	for _, args := range cmds {
+		if out, err := exec.Command(args[0], args[1:]...).CombinedOutput(); err != nil {
+			return fmt.Errorf("filebrowser %s: %w: %s", args[2], err, out)
 		}
 	}
-	return 0, nil
+	return nil
+}
+
+// ── Nginx port map ────────────────────────────────────────────────────
+
+type portMap map[string]int
+
+func readPortMap() (portMap, error) {
+	pm := make(portMap)
+	data, err := os.ReadFile(portMapJSON)
+	if os.IsNotExist(err) {
+		return pm, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(data, &pm); err != nil {
+		return nil, fmt.Errorf("parse port map: %w", err)
+	}
+	return pm, nil
+}
+
+func writePortMap(pm portMap) error {
+	if err := os.MkdirAll(filepath.Dir(portMapJSON), 0755); err != nil {
+		return err
+	}
+	data, _ := json.Marshal(pm)
+	if err := os.WriteFile(portMapJSON, data, 0644); err != nil {
+		return err
+	}
+	return writeNginxMapConf(pm)
+}
+
+// writeNginxMapConf renders the Nginx map block from the current port
+// assignments. The map{} directive must be in the http context; placing
+// this file in conf.d/ satisfies that — nginx.conf includes conf.d/*.conf
+// inside the http block on all standard Ubuntu installs.
+func writeNginxMapConf(pm portMap) error {
+	if err := os.MkdirAll(filepath.Dir(nginxMapConf), 0755); err != nil {
+		return err
+	}
+	var buf bytes.Buffer
+	buf.WriteString("# Auto-generated by ZensPanel agent — do not edit.\n")
+	buf.WriteString("map $fb_user $fb_port {\n")
+	buf.WriteString("    default 0;\n")
+	users := make([]string, 0, len(pm))
+	for u := range pm {
+		users = append(users, u)
+	}
+	sort.Strings(users)
+	for _, u := range users {
+		fmt.Fprintf(&buf, "    %-30s %d;\n", u, pm[u])
+	}
+	buf.WriteString("}\n")
+	return os.WriteFile(nginxMapConf, buf.Bytes(), 0644)
+}
+
+func addToPortMap(username string, port int) error {
+	mu.Lock()
+	defer mu.Unlock()
+	pm, err := readPortMap()
+	if err != nil {
+		pm = make(portMap)
+	}
+	pm[username] = port
+	return writePortMap(pm)
+}
+
+func removeFromPortMap(username string) error {
+	mu.Lock()
+	defer mu.Unlock()
+	pm, err := readPortMap()
+	if err != nil {
+		return err
+	}
+	delete(pm, username)
+	return writePortMap(pm)
+}
+
+func reloadNginx() error {
+	if out, err := exec.Command("nginx", "-s", "reload").CombinedOutput(); err != nil {
+		return fmt.Errorf("nginx reload: %w: %s", err, out)
+	}
+	return nil
 }
