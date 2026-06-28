@@ -1215,15 +1215,15 @@ EOF
 setup_firewall() {
     log_section "Configuring firewall"
 
-    ufw --force reset > /dev/null 2>&1
-    ufw default deny incoming > /dev/null 2>&1
-    ufw default allow outgoing > /dev/null 2>&1
-    ufw allow ssh > /dev/null 2>&1
-    ufw allow 80/tcp > /dev/null 2>&1
-    ufw allow 443/tcp > /dev/null 2>&1
-    ufw allow "${PANEL_PORT}/tcp" > /dev/null 2>&1
-    ufw allow 21/tcp > /dev/null 2>&1           # FTP
-    ufw --force enable > /dev/null 2>&1
+    ufw --force reset           > /dev/null 2>&1 || true
+    ufw default deny incoming   > /dev/null 2>&1 || true
+    ufw default allow outgoing  > /dev/null 2>&1 || true
+    ufw allow ssh               > /dev/null 2>&1 || true
+    ufw allow 80/tcp            > /dev/null 2>&1 || true
+    ufw allow 443/tcp           > /dev/null 2>&1 || true
+    ufw allow "${PANEL_PORT}/tcp" > /dev/null 2>&1 || true
+    ufw allow 21/tcp            > /dev/null 2>&1 || true
+    ufw --force enable          > /dev/null 2>&1 || log_warn "ufw enable failed — configure firewall manually"
 
     log_info "Firewall configured ✓ (SSH, HTTP, HTTPS, panel, FTP)"
 }
