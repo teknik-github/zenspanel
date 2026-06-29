@@ -81,6 +81,11 @@ const adminLinks = [[{
     icon: 'i-lucide-shield-check',
     to: '/admin/ip-allowlist',
     onSelect: () => { open.value = false }
+  }, {
+    label: 'Two-Factor Auth',
+    icon: 'i-lucide-fingerprint',
+    to: '/admin/two-factor',
+    onSelect: () => { open.value = false }
   }]
 }, {
   label: 'Backups',

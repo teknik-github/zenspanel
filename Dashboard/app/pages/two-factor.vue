@@ -16,6 +16,8 @@ function getErrorMessage(error: unknown) {
   return apiError.data?.error || 'Request failed.'
 }
 
+definePageMeta({ alias: '/admin/two-factor' })
+
 const toast = useToast()
 const setupData = ref<Setup2FAResponse | null>(null)
 const code = ref('')

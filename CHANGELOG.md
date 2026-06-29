@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Two-Factor Auth for admin account**: added "Two-Factor Auth" to admin Security sidebar linking to `/admin/two-factor`; `two-factor.vue` now exposes alias `/admin/two-factor` so the existing TOTP setup/enable/disable flow is accessible to admins. Admin login already supported the 2FA challenge step.
 - **Admin dashboard CPU/disk/load showing 0.0% and "//"**: `GET /api/v1/system/stats` returned `cpu_percent` (frontend expected `cpu_pct`), and did not include `disk_used`/`disk_total` or `load_1`/`load_5`/`load_15` at all. Fixed: renamed key to `cpu_pct`, added `readDiskUsage()` via `syscall.Statfs("/")`, and `readLoadAvg()` from `/proc/loadavg`.
 - **Admin create/edit user: Package ID field replaced with package name dropdown** — fetches `GET /api/v1/packages` and renders a `USelect` with package names; includes a "No package" option. Also added Antivirus toggle alongside Terminal and Backups in the feature-flags row.
 - **Feature flags not reflected in user panel sidebar**: sidebar items (Terminal, Backups, Antivirus) were always shown regardless of package settings. `userLinks` is now a `computed` that conditionally includes each item based on `auth.user.terminal_enabled`, `backup_enabled`, and `antivirus_enabled`. Added `antivirus_enabled` field to `User` struct, DB migration 000026, INSERT query, `allowedUserUpdate` allowlist, all auth and user handler responses, and `AuthUser` frontend type.
