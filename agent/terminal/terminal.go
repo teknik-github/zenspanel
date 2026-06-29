@@ -125,6 +125,7 @@ func SpawnSession(username, homeBase string, isAdmin bool) (*Session, error) {
 		"--uid", uidStr,
 		"--gid", gidStr,
 		// Namespace isolation
+		"--unshare-user",         // new user namespace (required by --disable-userns)
 		"--unshare-pid",          // new PID namespace: can't signal or ptrace host processes
 		"--unshare-ipc",          // new IPC namespace: SysV shm/sem/msg not shared with host
 		"--unshare-uts",          // new UTS namespace: hostname changes stay in jail
