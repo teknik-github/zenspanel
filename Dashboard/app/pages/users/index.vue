@@ -25,6 +25,15 @@ const { data, status, refresh } = await useFetch('/api/v1/users', {
   query: { limit: 100 }
 })
 
+// ── Fetch packages for dropdown ──
+const { data: packagesData } = await useFetch('/api/v1/packages', { query: { limit: 100 } })
+const packageItems = computed(() => {
+  const r = packagesData.value as any
+  const list = Array.isArray(r?.data) ? r.data : []
+  const items = list.map((p: any) => ({ label: p.name, value: p.id }))
+  return [{ label: 'No package', value: null }, ...items]
+})
+
 const users = computed(() => {
   const raw = data.value as any
   if (!raw) return []
@@ -100,9 +109,10 @@ const editState = reactive<any>({
   username: '',
   email: '',
   password: '',
-  package_id: undefined,
+  package_id: null,
   terminal_enabled: true,
   backup_enabled: false,
+  antivirus_enabled: false,
   php_version: '8.3'
 })
 
@@ -114,16 +124,17 @@ function showEditModal(user?: any) {
       username: user.username,
       email: user.email,
       password: '',
-      package_id: user.package_id?.Int64 || user.package_id || undefined,
+      package_id: user.package_id?.Int64 || user.package_id || null,
       terminal_enabled: user.terminal_enabled,
       backup_enabled: user.backup_enabled,
+      antivirus_enabled: user.antivirus_enabled ?? false,
       php_version: user.php_version || '8.3'
     })
   } else {
     Object.assign(editState, {
       username: '', email: '', password: '',
-      package_id: undefined, terminal_enabled: true,
-      backup_enabled: false, php_version: '8.3'
+      package_id: null, terminal_enabled: true,
+      backup_enabled: false, antivirus_enabled: false, php_version: '8.3'
     })
   }
   editOpen.value = true
@@ -293,8 +304,16 @@ const pagination = ref({ pageIndex: 0, pageSize: 20 })
               <UInput v-model="editState.password" type="password" :disabled="editLoading" placeholder="••••••••" />
             </UFormField>
             <div class="grid grid-cols-2 gap-4">
-              <UFormField label="Package ID">
-                <UInput v-model.number="editState.package_id" type="number" :disabled="editLoading" placeholder="1" />
+              <UFormField label="Package">
+                <USelect
+                  v-model="editState.package_id"
+                  :items="packageItems"
+                  value-key="value"
+                  label-key="label"
+                  placeholder="Select package..."
+                  :disabled="editLoading"
+                  class="w-full"
+                />
               </UFormField>
               <UFormField label="PHP Version">
                 <USelect
@@ -304,7 +323,7 @@ const pagination = ref({ pageIndex: 0, pageSize: 20 })
                 />
               </UFormField>
             </div>
-            <div class="flex gap-4">
+            <div class="flex flex-wrap gap-4">
               <label class="flex items-center gap-2 text-sm">
                 <USwitch v-model="editState.terminal_enabled" :disabled="editLoading" />
                 Terminal
@@ -312,6 +331,10 @@ const pagination = ref({ pageIndex: 0, pageSize: 20 })
               <label class="flex items-center gap-2 text-sm">
                 <USwitch v-model="editState.backup_enabled" :disabled="editLoading" />
                 Backups
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <USwitch v-model="editState.antivirus_enabled" :disabled="editLoading" />
+                Antivirus
               </label>
             </div>
             <div class="flex justify-end gap-2 pt-2">
