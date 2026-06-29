@@ -5,6 +5,7 @@ export interface AuthUser {
   role: 'admin' | 'user'
   terminal_enabled: boolean
   backup_enabled: boolean
+  antivirus_enabled: boolean
   package_id: number | null
   php_version: string
   totp_enabled: boolean

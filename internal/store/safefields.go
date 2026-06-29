@@ -11,8 +11,9 @@ var allowedUserUpdate = map[string]struct{}{
 	"role":             {},
 	"package_id":       {},
 	"status":           {},
-	"terminal_enabled": {},
-	"backup_enabled":   {},
+	"terminal_enabled":  {},
+	"backup_enabled":    {},
+	"antivirus_enabled": {},
 	"php_version":      {},
 }
 

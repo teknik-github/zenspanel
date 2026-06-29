@@ -97,12 +97,13 @@ func userAdminResponse(u *store.User) map[string]interface{} {
 		"linux_uid":        u.LinuxUID,
 		"package_id":       u.PackageID,
 		"status":           u.Status,
-		"terminal_enabled": u.TerminalEnabled,
-		"backup_enabled":   u.BackupEnabled,
-		"php_version":      u.PHPVersion,
-		"totp_enabled":     u.TOTPEnabled,
-		"created_at":       u.CreatedAt,
-		"updated_at":       u.UpdatedAt,
+		"terminal_enabled":  u.TerminalEnabled,
+		"backup_enabled":    u.BackupEnabled,
+		"antivirus_enabled": u.AntivirusEnabled,
+		"php_version":       u.PHPVersion,
+		"totp_enabled":      u.TOTPEnabled,
+		"created_at":        u.CreatedAt,
+		"updated_at":        u.UpdatedAt,
 	}
 }
 
@@ -111,12 +112,13 @@ func userAdminResponse(u *store.User) map[string]interface{} {
 // — they are implementation details or admin-only state.
 func userSelfResponse(u *store.User) map[string]interface{} {
 	return map[string]interface{}{
-		"id":               u.ID,
-		"username":         u.Username,
-		"email":            u.Email,
-		"package_id":       u.PackageID,
-		"terminal_enabled": u.TerminalEnabled,
-		"backup_enabled":   u.BackupEnabled,
+		"id":                u.ID,
+		"username":          u.Username,
+		"email":             u.Email,
+		"package_id":        u.PackageID,
+		"terminal_enabled":  u.TerminalEnabled,
+		"backup_enabled":    u.BackupEnabled,
+		"antivirus_enabled": u.AntivirusEnabled,
 		"php_version":      u.PHPVersion,
 		"totp_enabled":     u.TOTPEnabled,
 		"created_at":       u.CreatedAt,
@@ -129,9 +131,10 @@ func (h *UserHandler) Create(c *gin.Context) {
 		Username        string `json:"username" binding:"required"`
 		Email           string `json:"email" binding:"required"`
 		Password        string `json:"password" binding:"required"`
-		PackageID       uint64 `json:"package_id"`
-		TerminalEnabled bool   `json:"terminal_enabled"`
-		BackupEnabled   bool   `json:"backup_enabled"`
+		PackageID        uint64 `json:"package_id"`
+		TerminalEnabled  bool   `json:"terminal_enabled"`
+		BackupEnabled    bool   `json:"backup_enabled"`
+		AntivirusEnabled bool   `json:"antivirus_enabled"`
 		PHPVersion      string `json:"php_version"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -167,8 +170,9 @@ func (h *UserHandler) Create(c *gin.Context) {
 		Role:            "user",
 		LinuxUID:        newUID,
 		Status:          "active",
-		TerminalEnabled: req.TerminalEnabled,
-		BackupEnabled:   req.BackupEnabled,
+		TerminalEnabled:  req.TerminalEnabled,
+		BackupEnabled:    req.BackupEnabled,
+		AntivirusEnabled: req.AntivirusEnabled,
 		PHPVersion:      req.PHPVersion,
 	}
 	if req.PackageID > 0 {
@@ -270,10 +274,11 @@ func (h *UserHandler) Create(c *gin.Context) {
 		"linux_uid":        user.LinuxUID,
 		"package_id":       user.PackageID,
 		"status":           user.Status,
-		"terminal_enabled": user.TerminalEnabled,
-		"backup_enabled":   user.BackupEnabled,
-		"php_version":      user.PHPVersion,
-		"created_at":       user.CreatedAt,
+		"terminal_enabled":  user.TerminalEnabled,
+		"backup_enabled":    user.BackupEnabled,
+		"antivirus_enabled": user.AntivirusEnabled,
+		"php_version":       user.PHPVersion,
+		"created_at":        user.CreatedAt,
 	}
 	if len(provisionWarnings) > 0 {
 		resp["warnings"] = provisionWarnings

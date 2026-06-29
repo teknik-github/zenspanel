@@ -16,6 +16,7 @@ type User struct {
 	Status            string         `db:"status" json:"status"`
 	TerminalEnabled   bool           `db:"terminal_enabled" json:"terminal_enabled"`
 	BackupEnabled     bool           `db:"backup_enabled" json:"backup_enabled"`
+	AntivirusEnabled  bool           `db:"antivirus_enabled" json:"antivirus_enabled"`
 	PHPVersion        string         `db:"php_version" json:"php_version"`
 	TOTPSecretEnc     sql.NullString `db:"totp_secret_enc" json:"-"`
 	TOTPEnabled       bool           `db:"totp_enabled" json:"totp_enabled"`

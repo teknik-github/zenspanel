@@ -129,103 +129,115 @@ const adminLinks = [[{
   onSelect: () => { open.value = false }
 }]] satisfies NavigationMenuItem[][]
 
-const userLinks = [[{
-  label: 'Dashboard',
-  icon: 'i-lucide-house',
-  to: '/dashboard',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Website Management',
-  icon: 'i-lucide-globe',
-  type: 'trigger',
-  defaultOpen: true,
-  children: [{
-    label: 'Domains',
+const userLinks = computed<NavigationMenuItem[][]>(() => {
+  const u = auth.user.value
+  return [[{
+    label: 'Dashboard',
+    icon: 'i-lucide-house',
+    to: '/dashboard',
+    onSelect: () => { open.value = false }
+  }, {
+    label: 'Website Management',
     icon: 'i-lucide-globe',
-    to: '/domains',
+    type: 'trigger',
+    defaultOpen: true,
+    children: [{
+      label: 'Domains',
+      icon: 'i-lucide-globe',
+      to: '/domains',
+      onSelect: () => { open.value = false }
+    }, {
+      label: 'Web Installer',
+      icon: 'i-lucide-package-plus',
+      to: '/installer',
+      onSelect: () => { open.value = false }
+    }, {
+      label: 'SSL Manager',
+      icon: 'i-lucide-lock',
+      to: '/ssl',
+      onSelect: () => { open.value = false }
+    }, {
+      label: 'PHP Settings',
+      icon: 'i-lucide-code',
+      to: '/php-settings',
+      onSelect: () => { open.value = false }
+    }]
+  }, {
+    label: 'Files & FTP',
+    icon: 'i-lucide-folder',
+    type: 'trigger',
+    children: [{
+      label: 'File Manager',
+      icon: 'i-lucide-folder-open',
+      to: '/file-manager',
+      onSelect: () => { open.value = false }
+    }, {
+      label: 'FTP Accounts',
+      icon: 'i-lucide-upload',
+      to: '/ftp',
+      onSelect: () => { open.value = false }
+    }]
+  }, {
+    label: 'Databases',
+    icon: 'i-lucide-database',
+    to: '/databases',
     onSelect: () => { open.value = false }
   }, {
-    label: 'Web Installer',
-    icon: 'i-lucide-package-plus',
-    to: '/installer',
-    onSelect: () => { open.value = false }
+    label: 'Security & Backups',
+    icon: 'i-lucide-shield',
+    type: 'trigger',
+    children: [
+      ...(u?.antivirus_enabled ? [{
+        label: 'Antivirus',
+        icon: 'i-lucide-shield-alert',
+        to: '/antivirus',
+        onSelect: () => { open.value = false }
+      }] : []),
+      {
+        label: 'Two-Factor Auth',
+        icon: 'i-lucide-fingerprint',
+        to: '/two-factor',
+        onSelect: () => { open.value = false }
+      },
+      ...(u?.backup_enabled ? [{
+        label: 'Backups',
+        icon: 'i-lucide-archive',
+        to: '/backups',
+        onSelect: () => { open.value = false }
+      }] : [])
+    ]
   }, {
-    label: 'SSL Manager',
-    icon: 'i-lucide-lock',
-    to: '/ssl',
-    onSelect: () => { open.value = false }
-  }, {
-    label: 'PHP Settings',
-    icon: 'i-lucide-code',
-    to: '/php-settings',
-    onSelect: () => { open.value = false }
-  }]
-}, {
-  label: 'Files & FTP',
-  icon: 'i-lucide-folder',
-  type: 'trigger',
-  children: [{
-    label: 'File Manager',
-    icon: 'i-lucide-folder-open',
-    to: '/file-manager',
-    onSelect: () => { open.value = false }
-  }, {
-    label: 'FTP Accounts',
-    icon: 'i-lucide-upload',
-    to: '/ftp',
-    onSelect: () => { open.value = false }
-  }]
-}, {
-  label: 'Databases',
-  icon: 'i-lucide-database',
-  to: '/databases',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Security & Backups',
-  icon: 'i-lucide-shield',
-  type: 'trigger',
-  children: [{
-    label: 'Antivirus',
-    icon: 'i-lucide-shield-alert',
-    to: '/antivirus',
-    onSelect: () => { open.value = false }
-  }, {
-    label: 'Two-Factor Auth',
-    icon: 'i-lucide-fingerprint',
-    to: '/two-factor',
-    onSelect: () => { open.value = false }
-  }, {
-    label: 'Backups',
-    icon: 'i-lucide-archive',
-    to: '/backups',
-    onSelect: () => { open.value = false }
-  }]
-}, {
-  label: 'Advanced Tools',
-  icon: 'i-lucide-wrench',
-  type: 'trigger',
-  children: [{
-    label: 'Redirects',
-    icon: 'i-lucide-arrow-left-right',
-    to: '/redirects',
-    onSelect: () => { open.value = false }
-  }, {
-    label: 'Terminal',
-    icon: 'i-lucide-terminal',
-    to: '/terminal',
-    onSelect: () => { open.value = false }
-  }, {
-    label: 'Cron Jobs',
-    icon: 'i-lucide-clock',
-    to: '/cron-jobs',
-    onSelect: () => { open.value = false }
-  }, {
-    label: 'Error Logs',
-    icon: 'i-lucide-file-warning',
-    to: '/logs',
-    onSelect: () => { open.value = false }
-  }]
-}]] satisfies NavigationMenuItem[][]
+    label: 'Advanced Tools',
+    icon: 'i-lucide-wrench',
+    type: 'trigger',
+    children: [
+      {
+        label: 'Redirects',
+        icon: 'i-lucide-arrow-left-right',
+        to: '/redirects',
+        onSelect: () => { open.value = false }
+      },
+      ...(u?.terminal_enabled ? [{
+        label: 'Terminal',
+        icon: 'i-lucide-terminal',
+        to: '/terminal',
+        onSelect: () => { open.value = false }
+      }] : []),
+      {
+        label: 'Cron Jobs',
+        icon: 'i-lucide-clock',
+        to: '/cron-jobs',
+        onSelect: () => { open.value = false }
+      },
+      {
+        label: 'Error Logs',
+        icon: 'i-lucide-file-warning',
+        to: '/logs',
+        onSelect: () => { open.value = false }
+      }
+    ]
+  }]]
+})
 </script>
 
 <template>

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Feature flags not reflected in user panel sidebar**: sidebar items (Terminal, Backups, Antivirus) were always shown regardless of package settings. `userLinks` is now a `computed` that conditionally includes each item based on `auth.user.terminal_enabled`, `backup_enabled`, and `antivirus_enabled`. Added `antivirus_enabled` field to `User` struct, DB migration 000026, INSERT query, `allowedUserUpdate` allowlist, all auth and user handler responses, and `AuthUser` frontend type.
 - **Terminal session fails to connect**: bwrap exited immediately with `--disable-userns requires --unshare-user` because the user namespace flag was missing. Added `--unshare-user` to the namespace isolation args so bwrap can set up its own user namespace before disabling nested creation.
 - **Web Installer domain selector empty**: domain list did not appear in the Install modal because `USelect` received raw API objects (`{ id, domain }`) with Nuxt UI v2 props (`option-attribute`/`value-attribute`) that are not recognised in Nuxt UI v3. Items are now mapped to `{ label, value }` format and the obsolete props removed.
 - **Backup download abort on some browsers**: `URL.revokeObjectURL` was called synchronously after `link.click()`, which could revoke the blob URL before the browser began reading it, silently aborting the download. Revocation is now deferred by 60 seconds.

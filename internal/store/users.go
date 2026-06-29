@@ -33,8 +33,8 @@ type UserFilter struct {
 }
 
 func (s *UserStore) Create(u *User) error {
-	q := `INSERT INTO users (username, email, password_hash, role, linux_uid, package_id, status, terminal_enabled, backup_enabled, php_version)
-		  VALUES (:username, :email, :password_hash, :role, :linux_uid, :package_id, :status, :terminal_enabled, :backup_enabled, :php_version)`
+	q := `INSERT INTO users (username, email, password_hash, role, linux_uid, package_id, status, terminal_enabled, backup_enabled, antivirus_enabled, php_version)
+		  VALUES (:username, :email, :password_hash, :role, :linux_uid, :package_id, :status, :terminal_enabled, :backup_enabled, :antivirus_enabled, :php_version)`
 	res, err := s.db.NamedExec(q, u)
 	if err != nil {
 		return fmt.Errorf("insert user: %w", err)
