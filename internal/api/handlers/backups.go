@@ -146,6 +146,10 @@ func (h *BackupHandler) Download(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "backup not ready"})
 		return
 	}
+	if _, err := os.Stat(row.FilePath.String); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "backup file not found on disk"})
+		return
+	}
 	c.FileAttachment(row.FilePath.String, filepath.Base(row.FilePath.String))
 }
 

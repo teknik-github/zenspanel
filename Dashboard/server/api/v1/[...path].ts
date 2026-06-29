@@ -163,22 +163,29 @@ export default defineEventHandler(async (event) => {
     }
 
     if (isBackupDownload) {
+      setResponseStatus(event, response.status)
+
+      // Error from backend: decode ArrayBuffer → JSON so browser reads error.data.error
+      if (response.status >= 400) {
+        try {
+          const text = new TextDecoder().decode(response._data as ArrayBuffer)
+          return JSON.parse(text)
+        } catch {
+          return { error: 'Backup download failed' }
+        }
+      }
+
       const contentDisposition = response.headers.get('content-disposition')
-      const contentType = response.headers.get('content-type')
+      const backupContentType = response.headers.get('content-type') || 'application/octet-stream'
       const contentLength = response.headers.get('content-length')
 
-      if (contentDisposition) {
-        setResponseHeader(event, 'content-disposition', contentDisposition)
-      }
-      if (contentType) {
-        setResponseHeader(event, 'content-type', contentType)
-      }
-      if (contentLength) {
-        setResponseHeader(event, 'content-length', Number(contentLength))
-      }
-
+      if (contentDisposition) setResponseHeader(event, 'content-disposition', contentDisposition)
+      if (contentLength) setResponseHeader(event, 'content-length', Number(contentLength))
       setResponseHeader(event, 'cache-control', 'no-store')
       setResponseHeader(event, 'x-content-type-options', 'nosniff')
+
+      // Use send() so h3 transmits raw bytes instead of JSON-serialising the ArrayBuffer as {}
+      return send(event, new Uint8Array(response._data as ArrayBuffer), backupContentType)
     }
 
     setResponseStatus(event, response.status)
