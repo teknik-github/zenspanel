@@ -46,7 +46,23 @@ const table = useTemplateRef('table')
 const createOpen = ref(false)
 const createLoading = ref(false)
 const backupType = ref<'db' | 'files'>('files')
+const selectedDomainIds = ref<number[]>([])
+const selectedDbIds = ref<number[]>([])
 const downloadingBackupId = ref<number | null>(null)
+
+const { data: domainsData } = await useFetch('/api/v1/domains', { query: { limit: 100 } })
+const domainItems = computed(() => {
+  const r = domainsData.value as any
+  const list = Array.isArray(r?.data) ? r.data : []
+  return list.map((d: any) => ({ label: d.domain, value: d.id }))
+})
+
+const { data: dbsData } = await useFetch('/api/v1/databases', { query: { limit: 100 } })
+const dbItems = computed(() => {
+  const r = dbsData.value as any
+  const list = Array.isArray(r?.data) ? r.data : []
+  return list.map((d: any) => ({ label: d.db_name, value: d.id }))
+})
 
 const deleteTarget = ref<Backup | null>(null)
 const deleteOpen = ref(false)
@@ -244,6 +260,8 @@ function getRowItems(row: Row<Backup>) {
 
 function showCreate() {
   backupType.value = 'files'
+  selectedDomainIds.value = []
+  selectedDbIds.value = []
   createOpen.value = true
 }
 
@@ -251,10 +269,12 @@ async function handleCreate() {
   createLoading.value = true
 
   try {
-    await $fetch('/api/v1/backups', {
-      method: 'POST',
-      body: { type: backupType.value }
-    })
+    const body: Record<string, unknown> = { type: backupType.value }
+    if (backupType.value === 'files' && selectedDomainIds.value.length > 0)
+      body.domain_ids = selectedDomainIds.value
+    if (backupType.value === 'db' && selectedDbIds.value.length > 0)
+      body.db_ids = selectedDbIds.value
+    await $fetch('/api/v1/backups', { method: 'POST', body })
 
     toast.add({
       title: 'Backup started',
@@ -431,6 +451,38 @@ const pagination = ref({ pageIndex: 0, pageSize: 20 })
                 description-key="description"
                 :disabled="createLoading"
               />
+
+              <UFormField v-if="backupType === 'files'" label="Domains to backup">
+                <USelectMenu
+                  v-model="selectedDomainIds"
+                  :items="domainItems"
+                  value-key="value"
+                  label-key="label"
+                  multiple
+                  placeholder="Leave empty to backup all domains"
+                  :disabled="createLoading"
+                  class="w-full"
+                />
+                <template #hint>
+                  <span class="text-xs text-dimmed">Leave empty to backup the entire home directory</span>
+                </template>
+              </UFormField>
+
+              <UFormField v-if="backupType === 'db'" label="Databases to backup">
+                <USelectMenu
+                  v-model="selectedDbIds"
+                  :items="dbItems"
+                  value-key="value"
+                  label-key="label"
+                  multiple
+                  placeholder="Leave empty to backup all databases"
+                  :disabled="createLoading"
+                  class="w-full"
+                />
+                <template #hint>
+                  <span class="text-xs text-dimmed">Leave empty to backup all databases</span>
+                </template>
+              </UFormField>
 
               <div class="flex justify-end gap-2 pt-2">
                 <UButton

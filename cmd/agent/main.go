@@ -837,6 +837,7 @@ func main() {
 			Username string   `json:"username"`
 			Kind     string   `json:"kind"`
 			DBNames  []string `json:"db_names"`
+			DocRoots []string `json:"doc_roots"`
 		}
 		if err := json.Unmarshal(params, &p); err != nil {
 			return nil, err
@@ -845,7 +846,7 @@ func main() {
 		if dsn == "" {
 			dsn = cfg.Database.DSN
 		}
-		archivePath, size, err := agentbackup.Run(p.Username, cfg.Paths.HomeBase, p.Kind, p.DBNames, dsn)
+		archivePath, size, err := agentbackup.Run(p.Username, cfg.Paths.HomeBase, p.Kind, p.DBNames, p.DocRoots, dsn)
 		if err != nil {
 			return nil, err
 		}

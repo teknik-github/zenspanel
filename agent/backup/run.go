@@ -14,15 +14,17 @@ import (
 // Archives land at <homeBase>/<username>/backups/ so they count toward the
 // user's own disk quota rather than a separate backup volume.
 //
-// kind: "full", "files", or "db"
-// dbNames: MySQL database names to dump (unused when kind="files")
+// kind:         "full", "files", or "db"
+// dbNames:      databases to dump; nil/empty = all databases (for kind=db/full)
+// docRoots:     absolute doc-root paths to archive; nil/empty = entire home (for kind=files/full)
 // mysqlAdminDSN: Go-driver DSN used to authenticate mysqldump
-func Run(username, homeBase, kind string, dbNames []string, mysqlAdminDSN string) (archivePath string, size int64, err error) {
+func Run(username, homeBase, kind string, dbNames, docRoots []string, mysqlAdminDSN string) (archivePath string, size int64, err error) {
 	if err := safe.Username(username); err != nil {
 		return "", 0, err
 	}
 
-	backupDir := filepath.Join(homeBase, username, "backups")
+	homeDir := filepath.Join(homeBase, username)
+	backupDir := filepath.Join(homeDir, "backups")
 	if err := os.MkdirAll(backupDir, 0750); err != nil {
 		return "", 0, fmt.Errorf("mkdir backups: %w", err)
 	}
@@ -68,11 +70,28 @@ func Run(username, homeBase, kind string, dbNames []string, mysqlAdminDSN string
 	}
 
 	if kind == "files" || kind == "full" {
-		homeDir := filepath.Join(homeBase, username)
-		// Exclude the backups subdir to prevent archiving old backups inside the new one.
-		tarArgs = append(tarArgs,
-			"--exclude="+filepath.Join(homeDir, "backups"),
-			"-C", homeBase, username)
+		if len(docRoots) > 0 {
+			// Selective backup: only the specified document roots.
+			// Convert each absolute path to a path relative to homeBase,
+			// then archive with -C homeBase so the layout is username/subdir/...
+			tarArgs = append(tarArgs, "-C", homeBase)
+			for _, docRoot := range docRoots {
+				abs, absErr := filepath.Abs(docRoot)
+				if absErr != nil {
+					return "", 0, fmt.Errorf("invalid doc_root %q: %w", docRoot, absErr)
+				}
+				rel, relErr := filepath.Rel(homeBase, abs)
+				if relErr != nil || rel == ".." || (len(rel) >= 3 && rel[:3] == "../") {
+					return "", 0, fmt.Errorf("doc_root %q is outside user home", docRoot)
+				}
+				tarArgs = append(tarArgs, rel)
+			}
+		} else {
+			// Full home backup — exclude the backups subdir to avoid recursion.
+			tarArgs = append(tarArgs,
+				"--exclude="+backupDir,
+				"-C", homeBase, username)
+		}
 	}
 
 	if out, runErr := exec.Command("tar", tarArgs...).CombinedOutput(); runErr != nil {

@@ -63,7 +63,9 @@ func (h *BackupHandler) List(c *gin.Context) {
 
 func (h *BackupHandler) Create(c *gin.Context) {
 	var req struct {
-		Type string `json:"type" binding:"required"`
+		Type      string   `json:"type" binding:"required"`
+		DomainIDs []uint64 `json:"domain_ids"` // empty = backup entire home
+		DBIDs     []uint64 `json:"db_ids"`      // empty = backup all databases
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -84,6 +86,32 @@ func (h *BackupHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// Resolve domain_ids → document roots (ownership verified).
+	var docRoots []string
+	if (req.Type == "files" || req.Type == "full") && len(req.DomainIDs) > 0 {
+		for _, did := range req.DomainIDs {
+			domain, err := h.Domains.GetByID(did)
+			if err != nil || domain.UserID != uid {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "domain " + strconv.FormatUint(did, 10) + " not found or not owned by you"})
+				return
+			}
+			docRoots = append(docRoots, domain.DocumentRoot)
+		}
+	}
+
+	// Resolve db_ids → database names (ownership verified).
+	var selectedDBNames []string
+	if (req.Type == "db" || req.Type == "full") && len(req.DBIDs) > 0 {
+		for _, dbid := range req.DBIDs {
+			db, err := h.databases.GetByID(dbid)
+			if err != nil || db.UserID != uid {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "database " + strconv.FormatUint(dbid, 10) + " not found or not owned by you"})
+				return
+			}
+			selectedDBNames = append(selectedDBNames, db.DBName)
+		}
+	}
+
 	row := &store.Backup{
 		UserID: uid,
 		Type:   req.Type,
@@ -98,11 +126,7 @@ func (h *BackupHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Spawn the actual archival in a goroutine so the API returns
-	// immediately. The frontend polls List() every 5s while a row is
-	// pending or running, so progress lands in the UI without an open
-	// connection.
-	go h.runBackup(row.ID, uid, user.Username, req.Type)
+	go h.runBackup(row.ID, uid, user.Username, req.Type, docRoots, selectedDBNames)
 
 	c.JSON(http.StatusAccepted, row)
 }
@@ -238,18 +262,26 @@ func (h *BackupHandler) Delete(c *gin.Context) {
 // relies on a `[mysqldump]` block in /etc/mysql/conf.d that authenticates
 // as a backup-only MySQL user with read access to all schemas. That
 // setup is documented in CONTRIBUTING.md.
-func (h *BackupHandler) runBackup(id, userID uint64, username, kind string) {
+// runBackup drives the background archival. docRoots and selectedDBNames are
+// optional: empty slice = backup everything (all home files / all databases).
+func (h *BackupHandler) runBackup(id, userID uint64, username, kind string, docRoots, selectedDBNames []string) {
 	_ = h.backups.UpdateStatus(id, "running", "", 0, "")
 
+	// When no specific databases were requested, fall back to all databases
+	// owned by this user.
 	var dbNames []string
 	if kind == "db" || kind == "full" {
-		dbs, err := h.databases.ListByUserID(userID)
-		if err != nil {
-			_ = h.backups.UpdateStatus(id, "failed", "", 0, "list dbs: "+err.Error())
-			return
-		}
-		for _, db := range dbs {
-			dbNames = append(dbNames, db.DBName)
+		if len(selectedDBNames) > 0 {
+			dbNames = selectedDBNames
+		} else {
+			dbs, err := h.databases.ListByUserID(userID)
+			if err != nil {
+				_ = h.backups.UpdateStatus(id, "failed", "", 0, "list dbs: "+err.Error())
+				return
+			}
+			for _, db := range dbs {
+				dbNames = append(dbNames, db.DBName)
+			}
 		}
 	}
 
@@ -258,9 +290,10 @@ func (h *BackupHandler) runBackup(id, userID uint64, username, kind string) {
 		Size        int64  `json:"size"`
 	}
 	if err := agent.NewClient(h.agentSock).Call("backup.run", map[string]interface{}{
-		"username": username,
-		"kind":     kind,
-		"db_names": dbNames,
+		"username":  username,
+		"kind":      kind,
+		"db_names":  dbNames,
+		"doc_roots": docRoots,
 	}, &result); err != nil {
 		_ = h.backups.UpdateStatus(id, "failed", "", 0, err.Error())
 		return
