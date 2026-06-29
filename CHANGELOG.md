@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Backup download abort on some browsers**: `URL.revokeObjectURL` was called synchronously after `link.click()`, which could revoke the blob URL before the browser began reading it, silently aborting the download. Revocation is now deferred by 60 seconds.
+
 ### Changed
 - Release workflow: point frontend build steps to `Dashboard/` (Nuxt 4 SSR) replacing the old `frontend/` pnpm monorepo; bundle now copies `Dashboard/.output` instead of per-app `dist/` folders.
 - Install script: upgrade Node.js 20 → 22; build Dashboard with `pnpm build` (nuxt build); add `zenspanel-dashboard` systemd service (Nuxt SSR on `127.0.0.1:3000`); replace static Nginx admin/user serving with proxy blocks to port 3000; remove Nginx `/api/` direct proxy (Nuxt has its own server-side proxy at `server/api/v1/[...path].ts`); stop `zenspanel-dashboard` before reinstall; `rm -rf` old dashboard dir before copy to prevent nested-directory bug on reinstall.

@@ -218,7 +218,9 @@ async function downloadBackup(backup: Backup) {
     document.body.appendChild(link)
     link.click()
     link.remove()
-    URL.revokeObjectURL(url)
+    // Defer revocation so the browser has time to begin reading the blob URL.
+    // Revoking synchronously can abort the download before it starts.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
   } catch (error: unknown) {
     toast.add({
       title: 'Download failed',
