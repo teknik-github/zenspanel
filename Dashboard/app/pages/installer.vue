@@ -97,7 +97,7 @@ const phaseColor = computed(() => {
       </UCard>
     </div>
 
-    <UModal v-model:open="installOpen" :title="`Install ${selectedApp?.name}`" :ui="{ width: 'max-w-lg' }">
+    <UModal v-model:open="installOpen" :title="`Install ${selectedApp?.name}`" class="max-w-lg">
       <template #body>
         <div class="space-y-4">
           <!-- Form — hidden once job starts -->

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
+import { VisXYContainer, VisArea, VisLine } from '@unovis/vue'
 
 definePageMeta({ alias: '/admin/dashboard' })
 
@@ -18,6 +19,29 @@ const users = computed(() => {
   return Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw) ? raw : [])
 })
 
+// ── Sparkline history (last 30 readings @ 5s = ~2.5 min window) ──
+interface HistoryPoint { t: number; cpu: number; ramPct: number; diskPct: number; load1: number; load5: number; load15: number }
+const history = ref<HistoryPoint[]>([])
+
+watch(() => stats.value, (s: any) => {
+  if (!s) return
+  const ramPct  = s.ram_total  ? (s.ram_used  / s.ram_total)  * 100 : 0
+  const diskPct = s.disk_total ? (s.disk_used / s.disk_total) * 100 : 0
+  history.value = [
+    ...history.value.slice(-29),
+    { t: Date.now(), cpu: s.cpu_pct ?? 0, ramPct, diskPct, load1: s.load_1 ?? 0, load5: s.load_5 ?? 0, load15: s.load_15 ?? 0 }
+  ]
+})
+
+// Stable accessor references (avoids Unovis re-render thrash)
+const xAcc      = (d: HistoryPoint) => d.t
+const cpuAcc    = (d: HistoryPoint) => d.cpu
+const ramAcc    = (d: HistoryPoint) => d.ramPct
+const diskAcc   = (d: HistoryPoint) => d.diskPct
+const load1Acc  = (d: HistoryPoint) => d.load1
+const load5Acc  = (d: HistoryPoint) => d.load5
+const load15Acc = (d: HistoryPoint) => d.load15
+
 // ── User data ──
 const usageUrl = computed(() => `/api/v1/users/${userId.value || 0}/usage`)
 const { data: usageData, refresh: rfUsage } = await useFetch(usageUrl, { lazy: true, immediate: false, watch: false })
@@ -27,26 +51,17 @@ const usage = computed(() => {
 })
 
 function refreshUsage() {
-  if (userId.value) {
-    rfUsage()
-  }
+  if (userId.value) rfUsage()
 }
 
 // Poll every 5 seconds
 useIntervalFn(() => {
-  if (isAdmin.value) {
-    rfStats()
-    rfMetrics()
-    return
-  }
-
+  if (isAdmin.value) { rfStats(); rfMetrics(); return }
   refreshUsage()
 }, 5000)
 
 watch(userId, () => {
-  if (!isAdmin.value) {
-    refreshUsage()
-  }
+  if (!isAdmin.value) refreshUsage()
 }, { immediate: true })
 
 // ── Helpers ──
@@ -56,6 +71,7 @@ function fmtBytes(b: number) {
   return (b / 1048576).toFixed(0) + ' MB'
 }
 function pct(val: number) { return (val || 0).toFixed(1) + '%' }
+function sysPct(used: number, total: number) { return total ? pct((used / total) * 100) : '0.0%' }
 
 const adminColumns: TableColumn<any>[] = [
   { accessorKey: 'id', header: 'ID' },
@@ -76,22 +92,71 @@ const adminColumns: TableColumn<any>[] = [
     </template>
     <template #body>
       <div class="space-y-6">
+
+        <!-- Metric cards with sparkline charts -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <UCard>
-            <p class="text-xs text-dimmed uppercase tracking-wider">CPU Usage</p>
+
+          <!-- CPU -->
+          <UCard class="overflow-hidden">
+            <p class="text-xs text-dimmed uppercase tracking-wider font-semibold">CPU Usage</p>
             <p class="text-2xl font-bold mt-1">{{ pct(system?.cpu_pct) }}</p>
+            <ClientOnly>
+              <div class="mt-3 -mx-4 -mb-4">
+                <VisXYContainer :data="history" :height="64" :y-domain="[0, 100]" :padding="{ top: 4, bottom: 0, left: 0, right: 0 }">
+                  <VisArea :x="xAcc" :y="cpuAcc" color="#60a5fa" :opacity="0.2" />
+                  <VisLine :x="xAcc" :y="cpuAcc" color="#60a5fa" :line-width="2" />
+                </VisXYContainer>
+              </div>
+            </ClientOnly>
           </UCard>
-          <UCard>
-            <p class="text-xs text-dimmed uppercase tracking-wider">RAM</p>
-            <p class="text-2xl font-bold mt-1">{{ fmtBytes(system?.ram_used) }} / {{ fmtBytes(system?.ram_total) }}</p>
+
+          <!-- RAM -->
+          <UCard class="overflow-hidden">
+            <p class="text-xs text-dimmed uppercase tracking-wider font-semibold">RAM</p>
+            <p class="text-2xl font-bold mt-1">{{ sysPct(system?.ram_used, system?.ram_total) }}</p>
+            <p class="text-xs text-dimmed">{{ fmtBytes(system?.ram_used) }} / {{ fmtBytes(system?.ram_total) }}</p>
+            <ClientOnly>
+              <div class="mt-3 -mx-4 -mb-4">
+                <VisXYContainer :data="history" :height="64" :y-domain="[0, 100]" :padding="{ top: 4, bottom: 0, left: 0, right: 0 }">
+                  <VisArea :x="xAcc" :y="ramAcc" color="#a78bfa" :opacity="0.2" />
+                  <VisLine :x="xAcc" :y="ramAcc" color="#a78bfa" :line-width="2" />
+                </VisXYContainer>
+              </div>
+            </ClientOnly>
           </UCard>
-          <UCard>
-            <p class="text-xs text-dimmed uppercase tracking-wider">Disk</p>
-            <p class="text-2xl font-bold mt-1">{{ fmtBytes(system?.disk_used) }} / {{ fmtBytes(system?.disk_total) }}</p>
+
+          <!-- Disk -->
+          <UCard class="overflow-hidden">
+            <p class="text-xs text-dimmed uppercase tracking-wider font-semibold">Disk</p>
+            <p class="text-2xl font-bold mt-1">{{ sysPct(system?.disk_used, system?.disk_total) }}</p>
+            <p class="text-xs text-dimmed">{{ fmtBytes(system?.disk_used) }} / {{ fmtBytes(system?.disk_total) }}</p>
+            <ClientOnly>
+              <div class="mt-3 -mx-4 -mb-4">
+                <VisXYContainer :data="history" :height="64" :y-domain="[0, 100]" :padding="{ top: 4, bottom: 0, left: 0, right: 0 }">
+                  <VisArea :x="xAcc" :y="diskAcc" color="#fb923c" :opacity="0.2" />
+                  <VisLine :x="xAcc" :y="diskAcc" color="#fb923c" :line-width="2" />
+                </VisXYContainer>
+              </div>
+            </ClientOnly>
           </UCard>
-          <UCard>
-            <p class="text-xs text-dimmed uppercase tracking-wider">Load</p>
-            <p class="text-2xl font-bold mt-1">{{ system?.load_1?.toFixed(1) }} / {{ system?.load_5?.toFixed(1) }} / {{ system?.load_15?.toFixed(1) }}</p>
+
+          <!-- Load Average -->
+          <UCard class="overflow-hidden">
+            <p class="text-xs text-dimmed uppercase tracking-wider font-semibold">Load Average</p>
+            <p class="text-2xl font-bold mt-1">{{ system?.load_1?.toFixed(2) ?? '—' }}</p>
+            <p class="text-xs text-dimmed">5m {{ system?.load_5?.toFixed(2) ?? '—' }} · 15m {{ system?.load_15?.toFixed(2) ?? '—' }}</p>
+            <ClientOnly>
+              <div class="mt-3 -mx-4 -mb-4">
+                <VisXYContainer :data="history" :height="64" :padding="{ top: 4, bottom: 0, left: 0, right: 0 }">
+                  <VisArea :x="xAcc" :y="load15Acc" color="#34d399" :opacity="0.08" />
+                  <VisLine :x="xAcc" :y="load15Acc" color="#34d399" :line-width="1" />
+                  <VisArea :x="xAcc" :y="load5Acc" color="#34d399" :opacity="0.12" />
+                  <VisLine :x="xAcc" :y="load5Acc" color="#34d399" :line-width="1.5" />
+                  <VisArea :x="xAcc" :y="load1Acc" color="#4ade80" :opacity="0.2" />
+                  <VisLine :x="xAcc" :y="load1Acc" color="#4ade80" :line-width="2" />
+                </VisXYContainer>
+              </div>
+            </ClientOnly>
           </UCard>
         </div>
 

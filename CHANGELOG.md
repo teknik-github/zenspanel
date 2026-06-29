@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Admin dashboard sparkline charts**: each metric card (CPU, RAM, Disk, Load Average) now shows a live area+line chart built with `@unovis/vue`. A rolling 30-point history (~2.5 min at 5 s poll interval) is maintained client-side; Load card overlays 1m/5m/15m series. Charts render client-only via `<ClientOnly>` to avoid SSR mismatches.
+
 ### Fixed
 - **Two-Factor Auth for admin account**: added "Two-Factor Auth" to admin Security sidebar linking to `/admin/two-factor`; `two-factor.vue` now exposes alias `/admin/two-factor` so the existing TOTP setup/enable/disable flow is accessible to admins. Admin login already supported the 2FA challenge step.
 - **Admin dashboard CPU/disk/load showing 0.0% and "//"**: `GET /api/v1/system/stats` returned `cpu_percent` (frontend expected `cpu_pct`), and did not include `disk_used`/`disk_total` or `load_1`/`load_5`/`load_15` at all. Fixed: renamed key to `cpu_pct`, added `readDiskUsage()` via `syscall.Statfs("/")`, and `readLoadAvg()` from `/proc/loadavg`.
