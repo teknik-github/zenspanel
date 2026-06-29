@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -90,14 +91,21 @@ func (h *SystemHandler) Stats(c *gin.Context) {
 
 	cpuPct, _ := readCPUPercent()
 	ramUsed, ramTotal, _ := readMemInfo()
+	diskUsed, diskTotal := readDiskUsage()
+	load1, load5, load15 := readLoadAvg()
 
 	c.JSON(http.StatusOK, gin.H{
-		"users":       users,
-		"domains":     domainsStats,
-		"databases":   gin.H{"total": dbCount},
-		"cpu_percent": cpuPct,
-		"ram_used":    ramUsed,
-		"ram_total":   ramTotal,
+		"users":      users,
+		"domains":    domainsStats,
+		"databases":  gin.H{"total": dbCount},
+		"cpu_pct":    cpuPct,
+		"ram_used":   ramUsed,
+		"ram_total":  ramTotal,
+		"disk_used":  diskUsed,
+		"disk_total": diskTotal,
+		"load_1":     load1,
+		"load_5":     load5,
+		"load_15":    load15,
 		"services": gin.H{
 			"nginx": serviceActive("nginx"),
 			"mysql": serviceActive("mysql"),
@@ -254,6 +262,33 @@ func readUptime() int64 {
 	}
 	secs, _ := strconv.ParseFloat(fields[0], 64)
 	return int64(secs)
+}
+
+// readDiskUsage returns (used, total) bytes for the root filesystem via statfs.
+func readDiskUsage() (used, total int64) {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs("/", &stat); err != nil {
+		return 0, 0
+	}
+	total = int64(stat.Blocks) * int64(stat.Bsize)
+	avail := int64(stat.Bavail) * int64(stat.Bsize)
+	return total - avail, total
+}
+
+// readLoadAvg returns 1, 5, and 15-minute load averages from /proc/loadavg.
+func readLoadAvg() (l1, l5, l15 float64) {
+	data, err := os.ReadFile("/proc/loadavg")
+	if err != nil {
+		return 0, 0, 0
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 3 {
+		return 0, 0, 0
+	}
+	l1, _ = strconv.ParseFloat(fields[0], 64)
+	l5, _ = strconv.ParseFloat(fields[1], 64)
+	l15, _ = strconv.ParseFloat(fields[2], 64)
+	return l1, l5, l15
 }
 
 func serviceActive(name string) string {
