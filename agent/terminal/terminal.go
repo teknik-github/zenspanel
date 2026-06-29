@@ -124,9 +124,14 @@ func SpawnSession(username, homeBase string, isAdmin bool) (*Session, error) {
 		"--chdir", "/home/" + username,
 		"--uid", uidStr,
 		"--gid", gidStr,
-		// Isolation
-		"--unshare-pid",
-		"--unshare-uts",
+		// Namespace isolation
+		"--unshare-pid",          // new PID namespace: can't signal or ptrace host processes
+		"--unshare-ipc",          // new IPC namespace: SysV shm/sem/msg not shared with host
+		"--unshare-uts",          // new UTS namespace: hostname changes stay in jail
+		"--unshare-cgroup-try",   // new cgroup namespace if kernel supports it (hides host hierarchy)
+		"--disable-userns",       // block nested user-namespace creation — the primary escape vector:
+		// without this a user could unshare(CLONE_NEWUSER) inside the jail,
+		// appear as uid 0 in the child namespace, and potentially escape.
 		"--hostname", "panel",
 		"--die-with-parent",
 		// Start with a clean environment; ~/.bash_profile sets PATH=$HOME/bin
