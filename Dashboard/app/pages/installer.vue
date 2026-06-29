@@ -7,7 +7,8 @@ const apps = computed(() => (appsData.value as any)?.data ?? [])
 const { data: domainsData } = await useFetch('/api/v1/domains', { query: { limit: 100 } })
 const domainList = computed(() => {
   const r = domainsData.value as any
-  return Array.isArray(r?.data) ? r.data : []
+  const list = Array.isArray(r?.data) ? r.data : []
+  return list.map((d: any) => ({ label: d.domain, value: d.id }))
 })
 
 // Install modal state
@@ -102,7 +103,7 @@ const phaseColor = computed(() => {
           <!-- Form — hidden once job starts -->
           <template v-if="!jobID">
             <UFormField label="Domain" required>
-              <USelect v-model="form.domain_id" :items="domainList" option-attribute="domain" value-attribute="id" placeholder="Select a domain..." />
+              <USelect v-model="form.domain_id" :items="domainList" placeholder="Select a domain..." />
             </UFormField>
             <template v-if="selectedApp?.requires_db">
               <UFormField label="Database Name" required>

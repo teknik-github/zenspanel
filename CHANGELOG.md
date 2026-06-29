@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Web Installer domain selector empty**: domain list did not appear in the Install modal because `USelect` received raw API objects (`{ id, domain }`) with Nuxt UI v2 props (`option-attribute`/`value-attribute`) that are not recognised in Nuxt UI v3. Items are now mapped to `{ label, value }` format and the obsolete props removed.
 - **Backup download abort on some browsers**: `URL.revokeObjectURL` was called synchronously after `link.click()`, which could revoke the blob URL before the browser began reading it, silently aborting the download. Revocation is now deferred by 60 seconds.
 
 ### Changed
